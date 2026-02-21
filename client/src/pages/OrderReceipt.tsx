@@ -7,6 +7,7 @@
  */
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
+import { API_BASE } from "@/const";
 import { motion } from "framer-motion";
 import { CheckCircle, Clock, ChevronRight, AlertCircle } from "lucide-react";
 
@@ -57,7 +58,7 @@ export default function OrderReceipt() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`/api/orders/${orderId}/receipt`, {
+        const res = await fetch(`${API_BASE}/api/orders/${orderId}/receipt`, {
           credentials: "include",
         });
 

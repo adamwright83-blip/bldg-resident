@@ -1,5 +1,8 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
+/** Backend API base for cross-origin requests (app.bldg.chat → api.bldg.chat). Required for cookies to be set/read. */
+export const API_BASE = "https://api.bldg.chat";
+
 // Generate login URL at runtime so redirect URI reflects the current origin.
 export const getLoginUrl = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;

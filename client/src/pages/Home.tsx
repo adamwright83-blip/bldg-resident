@@ -16,6 +16,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Phone, MessageSquare, Loader2, LayoutGrid } from "lucide-react";
+import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
 // ActiveBookingsBar removed — all order actions now go through CONFIRMED card
@@ -320,7 +321,7 @@ function ConfirmationCard({
 
 async function ensureSession(): Promise<boolean> {
   try {
-    const res = await fetch("/api/guest-session", {
+    const res = await fetch(`${API_BASE}/api/guest-session`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

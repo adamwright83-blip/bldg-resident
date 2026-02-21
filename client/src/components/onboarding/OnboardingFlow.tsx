@@ -9,6 +9,7 @@
  * This prevents the flash of the home screen between screens.
  */
 import { useState, useCallback, useEffect, useRef } from "react";
+import { API_BASE } from "@/const";
 import SplashScreen from "./SplashScreen";
 import BuildingSelector from "./BuildingSelector";
 import TutorialScreen from "./TutorialScreen";
@@ -58,7 +59,7 @@ const BUILDING_NAMES: Record<string, string> = {
  */
 async function ensureGuestSession(): Promise<boolean> {
   try {
-    const res = await fetch("/api/guest-session", {
+    const res = await fetch(`${API_BASE}/api/guest-session`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -105,7 +106,7 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
 
       // Send building + unit to backend — cookie now exists
       try {
-        const res = await fetch("/api/set-building", {
+        const res = await fetch(`${API_BASE}/api/set-building`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
