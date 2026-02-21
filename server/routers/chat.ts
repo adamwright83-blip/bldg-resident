@@ -1050,7 +1050,9 @@ export const chatRouter = router({
               ctx.res.cookie("bldg_session", newToken, {
                 httpOnly: true,
                 path: "/",
-                sameSite: "lax",
+                sameSite: "none",
+                secure: true,
+                domain: ".bldg.chat",
                 maxAge: 365 * 24 * 60 * 60 * 1000,
               });
               console.log(`[Onboarding] Reissued session cookie for merged user ${collectResult.mergedUserId}`);

@@ -213,8 +213,9 @@ export function registerWelcomeRoutes(app: Router): void {
       res.cookie(BLDG_COOKIE_NAME, sessionToken, {
         httpOnly: true,
         path: "/",
-        sameSite: "lax",
-        secure: isSecureRequest(req),
+        sameSite: "none",
+        secure: true,
+        domain: ".bldg.chat",
         maxAge: ONE_YEAR_SECONDS * 1000,
       });
 
@@ -291,8 +292,9 @@ export function registerWelcomeRoutes(app: Router): void {
       res.cookie(BLDG_COOKIE_NAME, sessionToken, {
         httpOnly: true,
         path: "/",
-        sameSite: "lax",
-        secure: isSecureRequest(req),
+        sameSite: "none",
+        secure: true,
+        domain: ".bldg.chat",
         maxAge: ONE_YEAR_SECONDS * 1000,
       });
 

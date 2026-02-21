@@ -43,6 +43,7 @@ export function getSessionCookieOptions(
     httpOnly: true,
     path: "/",
     sameSite: "none",
-    secure: isSecureRequest(req),
+    secure: true,
+    domain: ".bldg.chat",
   };
 }
