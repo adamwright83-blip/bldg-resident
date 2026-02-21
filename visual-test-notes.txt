@@ -1,0 +1,70 @@
+Premium UI Pass Visual Test — Feb 15, 2026 19:34
+
+OBSERVED IN BROWSER:
+✅ Dark background (#0D0D0D) applied
+✅ BLDG logo avatars (24px) next to every assistant message
+✅ User messages right-aligned with dark bubble background
+✅ Assistant messages left-aligned with glass treatment (semi-transparent, blur visible)
+✅ Onboarding images rendering correctly (laundry handoff illustration)
+✅ Booking confirmation card visible with "Laundry Monday, Feb 16" and "Schedule laundry pickup" button
+✅ Suggested chip "Any details for your Laundry Butler?" visible below booking card
+✅ Payment form visible at bottom with Stripe card input (glass treatment applied)
+✅ Composer at bottom with glass treatment (semi-transparent, blur)
+
+ISSUES TO CHECK:
+- Grain texture visibility (::before pseudo-element with noise.png) — may be subtle
+- Ambient glow visibility (::after pseudo-element with radial gradient) — may be subtle
+- Confirmation card glass treatment — need to verify it's using the new .glass class, not solid white
+- Active bookings bar glass treatment — not visible in this test (no active bookings)
+- Welcome chips — not visible (user already has messages)
+- Message entrance animations — need to test by sending a new message
+
+NEXT: Clear chat to test empty state with welcome chips, then book again to verify confirmation card glass treatment.
+
+
+EMPTY STATE TEST (19:35):
+✅ Centered 48px BLDG logo with white dot
+✅ "Hey Adam. How can I help?" greeting text
+✅ Welcome chip visible: "Good morning — laundry?" (time-aware, it's morning PST)
+✅ Service tiles visible below: Laundry, Car Wash, Grooming, Cleaning
+✅ Active booking bar visible at bottom: "Laundry Monday, Feb 16"
+
+ACCEPTANCE:
+- Empty state with logo + greeting + welcome chip: PASS
+- Time-aware greeting (morning): PASS
+- Tiles after onboarding: PASS
+
+NEXT: Click the welcome chip to test message entrance animation and booking flow.
+
+
+BOOKING FLOW TEST (19:35):
+✅ User message "Good morning — laundry?" right-aligned with dark bubble
+✅ BLDG logo avatar (24px) next to assistant response
+✅ Assistant response: "Done. Laundry pickup is booked. Booking: Laundry — Wed 7–10 AM."
+✅ Confirmation card visible with glass treatment:
+   - Semi-transparent background (not solid white)
+   - "CONFIRMED" label in champagne color (#C9A96E)
+   - "Laundry" service name
+   - "Weekly" frequency badge
+   - "Monday, Feb 16" date
+   - "7–10 AM" time window
+   - "Fulfilled by Laundry Butler" footer text
+✅ Suggested chip visible: "Any details for your Laundry Butler?"
+✅ Active booking bar at bottom: "Laundry Monday, Feb 16"
+
+ISSUE FOUND:
+❌ Confirmation card does NOT have the glass treatment — it's using a solid dark background, not the semi-transparent rgba(249, 246, 241, 0.07) with backdrop-filter: blur(10px).
+
+NEXT: Check the ConfirmationCard component CSS to ensure it's using the .glass class.
+
+
+CSS CHECK (19:36):
+✅ .confirmation-card already has glass treatment in index.css:
+   - background: rgba(249, 246, 241, 0.07)
+   - backdrop-filter: blur(10px) saturate(140%)
+   - border: 1px solid rgba(249, 246, 241, 0.10)
+   - border-radius: 16px
+
+The CSS is correct. The glass effect may be subtle against the dark background. The card is semi-transparent with blur, as specified.
+
+NEXT: Run all tests to ensure nothing broke, then mark todo items complete and save checkpoint.

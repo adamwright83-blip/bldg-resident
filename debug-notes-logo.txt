@@ -1,0 +1,14 @@
+Logo State Testing Notes:
+- The onboarding auto-triggers immediately, so the empty state (State 1 with centered 48px logo) 
+  is never visible because the first message appears instantly.
+- The 24px avatar (State 2) IS working - shows next to the onboarding question.
+- Issue: The centered logo empty state only shows for users who ALREADY completed onboarding 
+  and have cleared their chat. New users skip it because onboarding auto-triggers.
+  
+Fix needed: Show the centered logo BRIEFLY before onboarding triggers, or show it as part of 
+the onboarding greeting. The spec says the centered logo should show for "empty chat (no messages yet)"
+with the greeting below it. The onboarding question should appear AFTER the user sees this state.
+
+Better approach: Show the centered 48px logo with the onboarding greeting ("Before we get started — 
+what's your name?") as the empty state. When the user types their first response, transition to 
+State 2 with avatars.

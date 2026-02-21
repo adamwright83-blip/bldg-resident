@@ -1,0 +1,64 @@
+Phase 1.7 "Feels Alive" Visual Test Results
+===========================================
+
+Screenshot: /home/ubuntu/screenshots/webdev-preview-1771207121.png
+
+Empty State (State 1):
+✓ Centered 48px BLDG logo with white dot visible
+✓ "Before we get started — what's your name?" greeting below logo
+✓ Dark background (#0D0D0D) rendering correctly
+✓ Glass composer at bottom with semi-transparent background
+✓ Grain texture: NEEDS VERIFICATION (not clearly visible in screenshot, may need higher opacity for testing)
+✓ Ambient glow: NEEDS VERIFICATION (champagne glow at top should be visible)
+
+Next: Test the full interaction flow:
+1. Type name → verify shimmer typing indicator appears
+2. Complete onboarding → verify three contextual welcome chips appear
+3. Click a chip → verify press feedback (scale 0.97)
+4. Book laundry → verify streaming text with blinking cursor
+5. Verify confirmation card entrance animation
+6. Check if grain texture is visible (may need to temporarily increase opacity to 0.15 for testing)
+
+
+Test 1: Name Entry
+✓ User message "Russell" appears right-aligned (no avatar)
+✓ BLDG logo avatar (24px) appears next to assistant response
+✓ Streaming text: "Hey Russell. Which building are you in?" rendered (cursor not visible in screenshot, likely already completed)
+✓ State transition from centered logo (State 1) to active chat (State 2) working correctly
+
+Continuing onboarding to test welcome chips...
+
+
+Test 2: Onboarding Completion
+✓ Onboarding complete message: "You're all set. Just say the word — laundry, car wash, grooming, cleaning."
+✗ Welcome chips NOT visible (should show 3 contextual chips based on time of day)
+✓ Conversation persists (all 8 messages visible)
+
+Issue: Welcome chips are not appearing after onboarding. Need to check the logic — chips should only show when messages.length === 0, but we have 8 messages now. The spec says chips appear "in empty state", which conflicts with showing them after onboarding.
+
+Clarification needed: Should welcome chips appear:
+A) Only in true empty state (no messages at all), OR
+B) After onboarding completes (even with 8 onboarding messages)?
+
+For now, continuing to test laundry booking to verify streaming, confirmation card, and press feedback...
+
+
+Test 3: Laundry Booking - Shimmer Typing Indicator
+✓ User message "laundry" sent
+✓ Shimmer typing indicator visible (dark rounded rectangle with animated gradient)
+✓ BLDG logo avatar next to shimmer indicator
+
+Waiting for AI response to test streaming text and confirmation card...
+
+
+Test 4: Laundry Booking Complete
+✓ Streaming text: "Done. Laundry pickup is booked. Booking: Laundry — Mon 7–10 AM." (text rendered, cursor not visible in screenshot)
+✓ Confirmation card visible with glass treatment (semi-transparent background with blur)
+✓ "CONFIRMED" label in champagne color (#C9A96E)
+✓ Booking details: "Laundry / Weekly / Monday, Feb 16 / 7–10 AM / Fulfilled by Laundry Butler"
+✓ Suggested chips visible at bottom: "Laundry Monday, Feb 16", "Laundry Tuesday, Feb 17", "Any details for your Laundry Butler?"
+✓ Conversation persists (no return to empty state)
+
+Press feedback test: Need to click one of the suggested chips to verify the tappable class scale effect.
+
+Grain texture test: Still need to verify visibility (may need to temporarily increase opacity to 0.15).

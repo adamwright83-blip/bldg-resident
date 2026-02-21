@@ -1,0 +1,2444 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================
+   BLDG.chat — Premium Dark Theme
+   Champagne accents, glass morphism, grain texture
+   ============================================ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Arial, sans-serif;
+}
+
+:root {
+  --radius: 20px;
+
+  /* Warm brown palette — NOT a dark cave */
+  --bg: #2C2824;
+  --bg-elevated: #3D3630;
+  --bg-elevated-2: #4A4540;
+  --text-primary: #F5F0E8;
+  --text-secondary: rgba(245, 240, 232, 0.78);
+  --text-tertiary: rgba(245, 240, 232, 0.55);
+  --border: rgba(245, 240, 232, 0.14);
+  --border-subtle: rgba(245, 240, 232, 0.08);
+  --accent: #C9A96E;
+  --accent-muted: rgba(201, 169, 110, 0.15);
+  --bone-white: #F5F0E8;
+  --bone-white-muted: rgba(245, 240, 232, 0.12);
+
+  /* Tailwind compat */
+  --background: var(--bg);
+  --foreground: var(--text-primary);
+  --card: var(--bg-elevated);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--text-primary);
+  --primary-foreground: var(--bg);
+  --secondary: var(--bg-elevated);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-elevated);
+  --muted-foreground: var(--text-secondary);
+  --destructive: #dc2626;
+  --destructive-foreground: var(--text-primary);
+  --input: var(--border);
+  --ring: var(--accent);
+
+  /* Spacing */
+  --screen-pad: 20px;
+  --bubble-pad: 12px 16px;
+  --bubble-max: 78%;
+  --gap-same-sender: 4px;
+  --gap-diff-sender: 16px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: var(--bg);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+
+  button,
+  [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+/* ─── Typography Scale ─── */
+.text-display {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.text-h1 {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+}
+
+.text-body {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
+.text-small {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+.text-caption {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.text-overline {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* ─── App Shell with Grain + Glow ─── */
+  .app-shell {
+    position: relative;
+    min-height: 100vh;
+    background: var(--bg);
+  }
+
+  .app-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    mix-blend-mode: overlay;
+    opacity: 0.12;
+  }
+
+  .app-shell::after {
+    content: "";
+    position: fixed;
+    top: -90px;
+    left: 50%;
+    width: 520px;
+    height: 520px;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgba(201, 169, 110, 0.09), transparent 60%);
+    filter: blur(40px);
+    opacity: 1;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app-shell > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── Chat Container ─── */
+  .chat-container {
+    max-width: 430px;
+    margin: 0 auto;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: transparent; /* Allow grain/glow to show through */
+    position: relative;
+  }
+
+  @media (min-width: 481px) {
+    .chat-container {
+      box-shadow: 0 0 0 1px var(--border);
+    }
+  }
+
+  /* ─── Header ─── */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px var(--screen-pad);
+    border-bottom: 1px solid var(--accent);
+    background: transparent; /* Allow grain/glow to show through */
+    flex-shrink: 0;
+    z-index: 10;
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+
+  .chat-logo-img {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .chat-logo-bounce {
+    animation: logo-bounce 0.6s ease-in-out infinite;
+  }
+
+  @keyframes logo-bounce {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+
+  .chat-logo-pulse {
+    animation: logo-pulse 0.4s ease-out;
+  }
+
+  @keyframes logo-pulse {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.15);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .chat-logo-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .chat-logo-dot {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-left: -2px;
+    margin-right: -2px;
+  }
+
+  .chat-logo-suffix {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    letter-spacing: -0.01em;
+  }
+
+  .chat-header-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: background 0.15s, color 0.15s;
+    text-decoration: none;
+  }
+
+  .chat-header-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  .chat-header-btn:active {
+    background: var(--bg-elevated-2);
+  }
+
+  /* ─── Messages Area ─── */
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-message-list {
+    padding: var(--screen-pad);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Bubbles ─── */
+  .chat-bubble-row {
+    display: flex;
+    width: 100%;
+  }
+
+  .chat-bubble-row + .chat-bubble-row {
+    margin-top: var(--gap-diff-sender);
+  }
+
+  .chat-bubble-row.same-sender {
+    margin-top: var(--gap-same-sender) !important;
+  }
+
+  .chat-bubble-row-user {
+    justify-content: flex-end;
+  }
+
+  .chat-bubble {
+    max-width: var(--bubble-max);
+    padding: var(--bubble-pad);
+    font-size: 16px;
+    line-height: 1.5;
+    border-radius: var(--radius);
+    word-break: break-word;
+  }
+
+  .chat-bubble-user {
+    background: rgba(245, 240, 232, 0.14);
+    border: 1px solid rgba(245, 240, 232, 0.14);
+    color: var(--text-primary);
+    border-radius: 20px 20px 6px 20px;
+  }
+
+  .chat-bubble-assistant {
+    background: var(--bg-elevated);
+    border: 1px solid #5A4F45;
+    color: var(--text-primary);
+    border-radius: 20px 20px 20px 6px;
+  }
+
+  .chat-bubble-text {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  .chat-bubble-md {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .chat-bubble-md p {
+    margin: 0 0 8px 0;
+  }
+
+  .chat-bubble-md p:last-child {
+    margin-bottom: 0;
+  }
+
+  .chat-bubble-md strong {
+    font-weight: 600;
+  }
+
+  .chat-bubble-md ul,
+  .chat-bubble-md ol {
+    margin: 4px 0;
+    padding-left: 20px;
+  }
+
+  .chat-bubble-md li {
+    margin: 2px 0;
+  }
+
+  .chat-bubble-md code {
+    background: var(--bg-elevated);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+
+  .chat-bubble-md img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 8px 0;
+  }
+
+  /* ─── Shimmer Typing Indicator ─── */
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .typing-shimmer {
+    width: 88px;
+    height: 40px;
+    border-radius: 20px;
+    background: linear-gradient(
+      90deg,
+      rgba(245,240,232,0.08) 25%,
+      rgba(245,240,232,0.18) 50%,
+      rgba(245,240,232,0.08) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* ─── Confirmation Card Entrance Animation ─── */
+  @keyframes confirm-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .confirmation-enter {
+    animation: confirm-in 300ms ease-out both;
+  }
+
+  /* ─── Press Feedback for Tappable Elements ─── */
+  .tappable {
+    transition: transform 100ms ease-out;
+  }
+
+  .tappable:active {
+    transform: scale(0.97);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tappable:active {
+      transform: none;
+    }
+  }
+
+  /* ─── Streaming Text Cursor ─── */
+  .streaming-text {
+    display: inline;
+  }
+
+  .streaming-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--text-primary);
+    margin-left: 1px;
+    animation: cursor-blink 530ms steps(1) infinite;
+  }
+
+  @keyframes cursor-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .streaming-cursor {
+      display: none;
+    }
+  }
+
+  /* ─── Message Entrance Animation ─── */
+  @keyframes msg-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .message-enter {
+    animation: msg-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .message-enter {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ─── Typing Indicator ─── */
+  .chat-typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+  }
+
+  .chat-typing-indicator span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    opacity: 0.4;
+    animation: typing-dot 1.4s infinite ease-in-out;
+  }
+
+  .chat-typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .chat-typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes typing-dot {
+    0%,
+    60%,
+    100% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    30% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+  }
+
+  /* ─── Bottom Area (Tiles + Composer) ─── */
+  .chat-bottom {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(201, 169, 110, 0.2);
+    background: var(--bone-white);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ─── Service Tiles ─── */
+  .chat-tiles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 12px var(--screen-pad) 4px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .chat-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 4px;
+    border-radius: 8px;
+    border: 1px solid rgba(201, 169, 110, 0.25);
+    background: var(--bone-white);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 44px;
+    color: #4A4540;
+  }
+
+  .chat-tile:hover {
+    background: #EDE8DF;
+    border-color: var(--accent);
+  }
+
+  .chat-tile:active {
+    background: #E5DFD5;
+  }
+
+  .chat-tile:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .chat-tile-icon {
+    color: #4A4540;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chat-tile-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #4A4540;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  /* ─── Composer with Glass Treatment ─── */
+  .chat-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 8px 12px 12px;
+  }
+
+  .chat-input {
+    flex: 1;
+    resize: none;
+    border: 1px solid rgba(201, 169, 110, 0.2);
+    border-radius: 16px;
+    padding: 10px 14px;
+    font-size: 16px;
+    font-family: var(--font);
+    line-height: 1.4;
+    color: #4A4540;
+    background: var(--bone-white);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    outline: none;
+    max-height: 120px;
+    min-height: 42px;
+    transition: border-color 0.15s;
+  }
+
+  .chat-input::placeholder {
+    color: #9B9488;
+  }
+
+  .chat-input:focus {
+    border-color: var(--border);
+  }
+
+  .chat-input:disabled {
+    opacity: 0.5;
+  }
+
+  .chat-send-btn {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: #4A4540;
+    color: var(--bone-white);
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+
+  .chat-send-btn:disabled {
+    opacity: 0.35;
+  }
+
+  .chat-send-btn:not(:disabled):hover {
+    opacity: 0.85;
+  }
+
+  .chat-send-btn:not(:disabled):active {
+    opacity: 0.7;
+  }
+
+  /* ─── Mic Button ─── */
+  .mic-btn {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: #8A7D6B;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+    cursor: pointer;
+  }
+
+  .mic-btn:hover {
+    color: #4A4540;
+    background: rgba(74, 69, 64, 0.08);
+  }
+
+  .mic-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .mic-btn-active {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+    animation: mic-pulse 1.5s ease-in-out infinite;
+  }
+
+  .mic-btn-active:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.18);
+  }
+
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  }
+
+  /* ─── Confirmation Card with Glass Treatment ─── */
+  .confirmation-card {
+    max-width: 320px;
+    border: 2px solid var(--accent);
+    border-radius: 16px;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, rgba(201, 169, 110, 0.08) 100%);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    margin-top: 8px;
+    box-shadow: 0 0 12px rgba(201, 169, 110, 0.12);
+  }
+
+  .confirmation-card-status {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .confirmation-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .confirmation-card-service {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: capitalize;
+  }
+
+  .confirmation-card-recurrence-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .confirmation-card-recurrence {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: capitalize;
+  }
+
+  .confirmation-card-btn-cancel-weekly {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .confirmation-card-btn-cancel-weekly:hover {
+    color: var(--text-secondary);
+    border-color: var(--border);
+    background: var(--bg-elevated);
+  }
+
+  .confirmation-card-btn-cancel-weekly:active {
+    opacity: 0.8;
+  }
+
+  .confirmation-card-details {
+    margin-bottom: 8px;
+  }
+
+  .confirmation-card-footer {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .confirmation-card-date {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0 0 2px;
+  }
+
+  .confirmation-card-window {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .confirmation-card-delivery {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 4px 0 0;
+    font-style: italic;
+  }
+
+  /* Item 7: Upgrade button — clearly optional upsell, NOT pre-applied */
+  .confirmation-card-upgrade-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    margin-top: 8px;
+    background: transparent;
+    border: 1px dashed rgba(201, 169, 110, 0.35);
+    border-radius: 6px;
+    color: var(--text-tertiary);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+  }
+  .confirmation-card-upgrade-btn:hover {
+    opacity: 1;
+    color: var(--accent);
+    border-color: rgba(201, 169, 110, 0.5);
+  }
+  .confirmation-card-upgrade-btn:active {
+    transform: scale(0.97);
+  }
+  .confirmation-card-upgrade-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .confirmation-card-upgrade-applied {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    margin-top: 8px;
+    background: rgba(201, 169, 110, 0.08);
+    border-radius: 6px;
+    color: var(--accent);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .confirmation-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .confirmation-card-btn-modify-ghost {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: var(--font);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 44px;
+  }
+
+  .confirmation-card-btn-modify-ghost:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-primary);
+  }
+
+  .confirmation-card-btn-modify-ghost:active {
+    background: var(--bg-elevated-2);
+  }
+
+  .confirmation-card-modify-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .confirmation-card-time-option {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: var(--font);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 44px;
+    text-align: left;
+  }
+
+  .confirmation-card-time-option:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-primary);
+  }
+
+  .confirmation-card-time-option:active {
+    background: var(--bg-elevated-2);
+  }
+
+  .confirmation-card-btn-cancel-buried {
+    width: 100%;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 400;
+    font-family: var(--font);
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    transition: color 0.15s;
+    min-height: 38px;
+    margin-top: 4px;
+  }
+
+  .confirmation-card-btn-cancel-buried:hover {
+    color: var(--text-secondary);
+  }
+
+  .confirmation-card-btn-cancel-buried:active {
+    color: var(--text-primary);
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+
+  .confirmation-card-btn-modify:hover {
+    opacity: 0.85;
+  }
+
+  .confirmation-card-btn-modify:active {
+    opacity: 0.7;
+  }
+
+  .confirmation-card-btn-cancel {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+  }
+
+  .confirmation-card-btn-cancel:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-secondary);
+  }
+
+  .confirmation-card-btn-cancel:active {
+    background: var(--bg-elevated-2);
+  }
+
+  /* ═══════════════════════════════════════════
+     TRUST CARD — Post-booking collection cards
+     Elevated card with subtle border, wordmark,
+     and optional Stripe badge for payment step.
+     ═══════════════════════════════════════════ */
+  .trust-card {
+    position: relative;
+    background: var(--bg-elevated);
+    border: 1px solid var(--champagne-20);
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin: 4px 0;
+    max-width: 85%;
+    overflow: hidden;
+  }
+
+  /* Gold-accented variant for account setup (non-payment) */
+  .trust-card-action {
+    border: 1.5px solid #C9A96E;
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, rgba(201, 169, 110, 0.06) 100%);
+    padding: 16px 18px;
+    animation: card-attention 3s ease-in-out 1s 3;
+  }
+
+  @keyframes card-attention {
+    0%, 100% { transform: translateX(0); }
+    2% { transform: translateX(-3px); }
+    4% { transform: translateX(3px); }
+    6% { transform: translateX(-2px); }
+    8% { transform: translateX(2px); }
+    10% { transform: translateX(0); }
+  }
+
+  /* Subtle left accent bar */
+  .trust-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2.5px;
+    border-radius: 2px;
+    background: linear-gradient(
+      to bottom,
+      var(--champagne-40),
+      var(--champagne-20)
+    );
+  }
+
+  /* Gold accent bar for action cards */
+  .trust-card-action::before {
+    width: 3px;
+    background: #C9A96E;
+    top: 6px;
+    bottom: 6px;
+  }
+
+  .trust-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  .trust-card-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--champagne);
+    opacity: 0.8;
+  }
+
+  .trust-card-wordmark {
+    font-family: "Playfair Display", Georgia, serif;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+  }
+
+  .trust-card-content {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    padding-left: 4px;
+    margin: 0;
+  }
+
+  .trust-card-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    padding-left: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: #C9A96E;
+    opacity: 0.85;
+    animation: hint-bounce 2s ease-in-out 2s 3;
+  }
+
+  @keyframes hint-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(3px); }
+  }
+
+  .trust-card-body {
+    margin-top: 12px;
+    padding-left: 4px;
+  }
+
+  .trust-card-stripe-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    padding-left: 4px;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    opacity: 0.7;
+  }
+
+  /* ─── BLDG Logo ─── */
+  .bldg-logo {
+    flex-shrink: 0;
+    display: block;
+  }
+
+  /* Avatar next to assistant messages */
+  .bldg-avatar {
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  /* Dot bounce — 3-beat rhythm while AI is processing */
+  .bldg-dot-bounce {
+    animation: bldg-dot-bounce 1.4s ease-in-out infinite;
+  }
+
+  @keyframes bldg-dot-bounce {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    15% {
+      transform: translateY(-2px);
+      opacity: 1;
+    }
+    30% {
+      transform: translateY(0);
+      opacity: 0.7;
+    }
+    45% {
+      transform: translateY(-2px);
+      opacity: 1;
+    }
+    60% {
+      transform: translateY(0);
+      opacity: 0.7;
+    }
+    75% {
+      transform: translateY(-1.5px);
+      opacity: 1;
+    }
+    90% {
+      transform: translateY(0);
+      opacity: 0.8;
+    }
+  }
+
+  /* Dot pulse — single scale-up on booking confirmed */
+  .bldg-dot-pulse {
+    animation: bldg-dot-pulse 0.4s ease-out forwards;
+  }
+
+  @keyframes bldg-dot-pulse {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.3);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* Empty state with centered logo */
+  .chat-empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 35%;
+  }
+
+  .chat-empty-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* Assistant bubble row with avatar */
+  .chat-bubble-row-assistant {
+    justify-content: flex-start;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  /* ─── Active Bookings Bar with Glass Treatment ─── */
+  .active-bookings-bar {
+    display: flex;
+    gap: 8px;
+    padding: 8px var(--screen-pad);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: rgba(245, 240, 232, 0.06);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: 1px solid rgba(245, 240, 232, 0.12);
+  }
+
+  .active-bookings-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .active-booking-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+    min-width: 120px;
+  }
+
+  .active-booking-chip:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-secondary);
+  }
+
+  .active-booking-chip:active {
+    background: var(--bg-elevated-2);
+  }
+
+  .active-booking-chip-service {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: capitalize;
+  }
+
+  .active-booking-chip-date {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  /* ─── Overlay Card ─── */
+  .overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+
+  .overlay-card {
+    position: fixed;
+    inset: 0;
+    z-index: 101;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .overlay-card > * {
+    pointer-events: auto;
+  }
+
+  .overlay-card-inner {
+    width: calc(100% - 32px);
+    max-width: 360px;
+    background: var(--bg-elevated);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid #5A4F45;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    position: relative;
+  }
+
+  .overlay-card-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .overlay-card-close:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  .overlay-card-close:active {
+    background: var(--bg-elevated-2);
+  }
+
+  .overlay-card-status {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .overlay-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .overlay-card-service {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: capitalize;
+  }
+
+  .overlay-card-recurrence {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    padding: 3px 10px;
+    border-radius: 4px;
+    text-transform: capitalize;
+  }
+
+  .overlay-card-details {
+    margin-bottom: 16px;
+  }
+
+  .overlay-card-date {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0 0 4px;
+  }
+
+  .overlay-card-window {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .overlay-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .overlay-card-btn-modify {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: var(--font);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 48px;
+  }
+
+  .overlay-card-btn-modify:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-primary);
+  }
+
+  .overlay-card-btn-modify:active {
+    background: var(--bg-elevated-2);
+  }
+
+  .overlay-card-modify-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .overlay-card-time-option {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: var(--font);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 48px;
+    text-align: left;
+  }
+
+  .overlay-card-time-option:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-primary);
+  }
+
+  .overlay-card-time-option:active {
+    background: var(--bg-elevated-2);
+  }
+
+  .overlay-card-btn-cancel {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 400;
+    font-family: var(--font);
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    transition: color 0.15s;
+    min-height: 42px;
+    margin-top: 4px;
+  }
+
+  .overlay-card-btn-cancel:hover {
+    color: #dc2626;
+  }
+
+  .overlay-card-btn-cancel:active {
+    color: #b91c1c;
+  }
+
+  /* ─── Suggested Chip ─── */
+  .suggested-chip-container {
+    padding: 0 var(--screen-pad) 8px;
+  }
+
+  .suggested-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .suggested-chip:hover {
+    background: var(--bg-elevated);
+    border-color: var(--text-secondary);
+  }
+
+  .suggested-chip:active {
+    background: var(--bg-elevated-2);
+  }
+
+  /* ─── Welcome Chips (Time-Aware) ─── */
+  .welcome-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 16px;
+  }
+
+  .welcome-chip {
+    border: 1px solid rgba(201, 169, 110, 0.25);
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    color: #4A4540;
+    background: var(--bone-white);
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .welcome-chip:hover {
+    background: #EDE8DF;
+    border-color: var(--accent);
+  }
+
+  .welcome-chip:active {
+    background: #E5DFD5;
+  }
+
+  /* ═══════════════════════════════════════════════
+     PHASE 2.0 — "Breathe Life" Micro-Interactions
+     ═══════════════════════════════════════════════ */
+
+  /* ─── 1. Send Animation: Bubble launches from composer ─── */
+  @keyframes bubble-launch {
+    0% {
+      opacity: 0;
+      transform: translateY(24px) scale(0.92);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(-4px) scale(1.02);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .bubble-launch {
+    animation: bubble-launch 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  @keyframes send-btn-compress {
+    0% { transform: scale(1); }
+    40% { transform: scale(0.82); }
+    100% { transform: scale(1); }
+  }
+
+  .send-btn-compress {
+    animation: send-btn-compress 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes composer-exhale {
+    0% { transform: scaleX(1); }
+    30% { transform: scaleX(0.985); }
+    60% { transform: scaleX(1.008); }
+    100% { transform: scaleX(1); }
+  }
+
+  .composer-exhale {
+    animation: composer-exhale 500ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform-origin: center;
+  }
+
+  /* ─── 2. Composer Breathing Pulse (while AI thinks) ─── */
+  @keyframes composer-breathe {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.85; }
+  }
+
+  .composer-breathing {
+    animation: composer-breathe 3s ease-in-out infinite;
+  }
+
+  .composer-breathing .chat-input {
+    border-color: rgba(201, 169, 110, 0.15);
+    transition: border-color 1.5s ease;
+  }
+
+  /* ─── 3. Confirmation Card Ceremony ─── */
+  @keyframes confirm-glow {
+    0% {
+      box-shadow: 0 0 0 0 rgba(201, 169, 110, 0.5),
+                  inset 0 0 0 0 rgba(201, 169, 110, 0.1);
+      border-color: rgba(201, 169, 110, 0.6);
+    }
+    30% {
+      box-shadow: 0 0 20px 4px rgba(201, 169, 110, 0.25),
+                  inset 0 0 12px 0 rgba(201, 169, 110, 0.06);
+      border-color: rgba(201, 169, 110, 0.4);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(201, 169, 110, 0),
+                  inset 0 0 0 0 rgba(201, 169, 110, 0);
+      border-color: rgba(249, 246, 241, 0.10);
+    }
+  }
+
+  .confirmation-ceremony {
+    animation: confirm-in 300ms ease-out both,
+               confirm-glow 1.8s ease-out 200ms both;
+  }
+
+  /* CONFIRMED ticker: letter-by-letter reveal */
+  @keyframes ticker-reveal {
+    from { max-width: 0; }
+    to { max-width: 120px; }
+  }
+
+  .confirmation-ticker {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    animation: ticker-reveal 600ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
+    letter-spacing: 1.4px;
+  }
+
+  /* ─── 4. Overscroll Glow ─── */
+  .chat-messages-wrapper {
+    position: relative;
+  }
+
+  .overscroll-glow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 300ms ease;
+    background: radial-gradient(
+      ellipse 80% 100% at 50% 0%,
+      rgba(201, 169, 110, 0.12),
+      transparent 70%
+    );
+  }
+
+  .overscroll-glow.visible {
+    opacity: 1;
+  }
+
+  /* ─── 5. Breathing Logo (empty state) ─── */
+  @keyframes logo-breathe {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.9; }
+  }
+
+  .bldg-dot-breathe {
+    animation: logo-breathe 4s ease-in-out infinite;
+  }
+
+  /* ─── 6. Night Ambient Shift ─── */
+  .app-shell.night-mode::after {
+    background: radial-gradient(circle, rgba(140, 160, 200, 0.10), transparent 60%);
+  }
+
+  .app-shell.night-mode::before {
+    opacity: 0.16;
+  }
+
+  .app-shell.night-mode {
+    --accent: #8CA0C8;
+    --accent-muted: rgba(140, 160, 200, 0.12);
+  }
+
+  /* Smooth transition between day and night */
+  .app-shell::after {
+    transition: background 2s ease;
+  }
+
+  .app-shell::before {
+    transition: opacity 2s ease;
+  }
+
+  /* ─── 7. Tile Tap Ripple ─── */
+  .chat-tile {
+    position: relative;
+    overflow: hidden;
+  }
+
+  @keyframes tile-ripple {
+    0% {
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0.35;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  .tile-ripple {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(201, 169, 110, 0.3), transparent 70%);
+    pointer-events: none;
+    animation: tile-ripple 600ms cubic-bezier(0, 0, 0.2, 1) forwards;
+  }
+
+  /* ─── 8. Welcome Chip Stagger — handled via inline transition-delay ─── */
+  @keyframes chip-cascade {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .chip-stagger {
+    opacity: 0;
+    animation: chip-cascade 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .chip-stagger:nth-child(1) { animation-delay: 0ms; }
+  .chip-stagger:nth-child(2) { animation-delay: 80ms; }
+  .chip-stagger:nth-child(3) { animation-delay: 160ms; }
+  .chip-stagger:nth-child(4) { animation-delay: 240ms; }
+
+  /* ─── 9. Booking Chip Pulse (soonest booking) ─── */
+  @keyframes chip-border-pulse {
+    0%, 85%, 100% {
+      border-color: var(--border);
+      box-shadow: none;
+    }
+    92% {
+      border-color: rgba(201, 169, 110, 0.4);
+      box-shadow: 0 0 8px 0 rgba(201, 169, 110, 0.15);
+    }
+  }
+
+  .booking-chip-pulse {
+    animation: chip-border-pulse 8s ease-in-out infinite;
+  }
+
+  /* ─── 10. Avatar Presence Glow (typing indicator) ─── */
+  @keyframes avatar-glow {
+    0%, 100% {
+      filter: drop-shadow(0 0 0 rgba(201, 169, 110, 0));
+    }
+    50% {
+      filter: drop-shadow(0 0 6px rgba(201, 169, 110, 0.4));
+    }
+  }
+
+  .avatar-presence-glow {
+    animation: avatar-glow 2s ease-in-out infinite;
+  }
+
+  /* ─── Reduced Motion: Disable all Phase 2.0 animations ─── */
+  @media (prefers-reduced-motion: reduce) {
+    .bubble-launch,
+    .send-btn-compress,
+    .composer-exhale,
+    .composer-breathing,
+    .confirmation-ceremony,
+    .confirmation-ticker,
+    .bldg-dot-breathe,
+    .tile-ripple,
+    .chip-stagger,
+    .booking-chip-pulse,
+    .avatar-presence-glow {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+
+    .overscroll-glow {
+      display: none;
+    }
+  }
+}
+
+/* ============================================
+   Confirmation Ceremony — Full-screen flash
+   Dark → white → dark with text at peak
+   ============================================ */
+
+.ceremony-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  will-change: opacity, background-color;
+}
+
+/* Phase: enter — fade from transparent to warm cream (0 → 800ms) */
+.ceremony-overlay--enter {
+  background-color: rgba(250, 247, 242, 0);
+  animation: ceremony-fade-in 800ms ease-in forwards;
+}
+
+/* Phase: peak — hold at warm cream (800ms → 2000ms) */
+.ceremony-overlay--peak {
+  background-color: rgba(250, 247, 242, 0.97);
+}
+
+/* Phase: exit — fade from warm cream back to transparent (2000ms → 2800ms) */
+.ceremony-overlay--exit {
+  background-color: rgba(250, 247, 242, 0.97);
+  animation: ceremony-fade-out 800ms ease-out forwards;
+}
+
+@keyframes ceremony-fade-in {
+  0% {
+    background-color: rgba(250, 247, 242, 0);
+  }
+  100% {
+    background-color: rgba(250, 247, 242, 0.97);
+  }
+}
+
+@keyframes ceremony-fade-out {
+  0% {
+    background-color: rgba(250, 247, 242, 0.97);
+  }
+  100% {
+    background-color: rgba(250, 247, 242, 0);
+  }
+}
+
+/* ─── Ceremony text ─── */
+
+.ceremony-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 0 32px;
+  will-change: opacity;
+}
+
+/* Text hidden during enter phase */
+.ceremony-text--enter {
+  opacity: 0;
+}
+
+/* Text visible at peak */
+.ceremony-text--peak {
+  opacity: 0;
+  animation: ceremony-text-in 400ms ease-out 100ms forwards;
+}
+
+/* Text fades out during exit */
+.ceremony-text--exit {
+  opacity: 1;
+  animation: ceremony-text-out 300ms ease-in forwards;
+}
+
+@keyframes ceremony-text-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ceremony-text-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.ceremony-service {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  color: #2C2824;
+  text-transform: capitalize;
+}
+
+.ceremony-detail {
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: #4A4540;
+}
+
+.ceremony-handled {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a7d6b;
+  margin-top: 4px;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .ceremony-overlay--enter,
+  .ceremony-overlay--exit,
+  .ceremony-text--peak,
+  .ceremony-text--exit {
+    animation: none !important;
+  }
+  .ceremony-overlay--enter {
+    background-color: rgba(250, 247, 242, 0.97);
+  }
+  .ceremony-overlay--exit {
+    background-color: rgba(250, 247, 242, 0);
+  }
+  .ceremony-text--peak {
+    opacity: 1;
+  }
+  .ceremony-text--exit {
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   Onboarding Screens — Splash, Selector, Tutorial
+   ============================================ */
+
+@keyframes splash-logo-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes splash-tagline-in {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes onboard-fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes arrow-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-fade-in,
+  .splash-fade-out {
+    transition: none !important;
+  }
+}
+
+  /* ─── Services Drawer (iOS Bottom Sheet) ─── */
+
+  .services-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 900;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .services-drawer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 901;
+    background: #2C2824;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+    max-height: 70vh;
+    overflow-y: auto;
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  .services-drawer-handle {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0 4px;
+    cursor: pointer;
+  }
+
+  .services-drawer-handle-pill {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(245, 240, 232, 0.25);
+  }
+
+  .services-drawer-title {
+    font-family: "DM Serif Display", Georgia, serif;
+    font-size: 18px;
+    font-weight: 400;
+    color: #F5F0E8;
+    padding: 8px 24px 12px;
+    letter-spacing: 0.02em;
+  }
+
+  .services-drawer-list {
+    display: flex;
+    flex-direction: column;
+    padding: 0 12px 12px;
+  }
+
+  .services-drawer-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    width: 100%;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .services-drawer-row:hover {
+    background: rgba(245, 240, 232, 0.06);
+  }
+
+  .services-drawer-row:active {
+    background: rgba(245, 240, 232, 0.1);
+    transform: scale(0.98);
+  }
+
+  .services-drawer-row-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(245, 240, 232, 0.08);
+    color: #C9A96E;
+    flex-shrink: 0;
+  }
+
+  .services-drawer-row-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .services-drawer-row-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: #F5F0E8;
+    letter-spacing: 0.01em;
+  }
+
+  .services-drawer-row-subtitle {
+    font-size: 12px;
+    color: rgba(245, 240, 232, 0.5);
+    margin-top: 2px;
+  }
+
+  .services-drawer-row-chevron {
+    color: rgba(245, 240, 232, 0.3);
+    flex-shrink: 0;
+  }
+
+  /* Trigger button — small grid icon that appears when tiles are hidden */
+  .services-drawer-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    margin: 8px auto 8px;
+    border-radius: 20px;
+    border: 1px solid rgba(74, 69, 64, 0.4);
+    background: rgba(44, 40, 36, 0.6);
+    color: rgba(245, 240, 232, 0.6);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .services-drawer-trigger:hover {
+    background: rgba(44, 40, 36, 0.8);
+    color: rgba(245, 240, 232, 0.8);
+    border-color: rgba(74, 69, 64, 0.6);
+  }
+
+  .services-drawer-trigger:active {
+    transform: scale(0.96);
+  }
+
+  .services-drawer-trigger svg {
+    opacity: 0.7;
+  }
+
+  /* ─── The Vault ─── */
+
+  .vault-container {
+    position: fixed;
+    inset: 0;
+    z-index: 800;
+    background: #1E1B18;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .vault-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #1E1B18;
+    border-bottom: 1px solid rgba(245, 240, 232, 0.06);
+  }
+
+  .vault-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: none;
+    background: rgba(245, 240, 232, 0.06);
+    color: #F5F0E8;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .vault-back:hover {
+    background: rgba(245, 240, 232, 0.1);
+  }
+
+  .vault-title {
+    font-family: "DM Serif Display", Georgia, serif;
+    font-size: 18px;
+    color: #F5F0E8;
+    letter-spacing: 0.02em;
+  }
+
+  /* Resident ID Card */
+  .vault-id-card {
+    margin: 20px 16px;
+    padding: 24px 20px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #2C2824 0%, #352F2A 100%);
+    border: 1px solid rgba(201, 169, 110, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .vault-id-card::before {
+    content: "";
+    position: absolute;
+    top: -40%;
+    right: -20%;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(201, 169, 110, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .vault-id-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: #C9A96E;
+    margin-bottom: 12px;
+  }
+
+  .vault-id-name {
+    font-family: "DM Serif Display", Georgia, serif;
+    font-size: 24px;
+    color: #F5F0E8;
+    margin-bottom: 16px;
+    letter-spacing: 0.01em;
+  }
+
+  .vault-id-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .vault-id-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .vault-id-label {
+    font-size: 12px;
+    color: rgba(245, 240, 232, 0.45);
+    letter-spacing: 0.02em;
+  }
+
+  .vault-id-value {
+    font-size: 13px;
+    color: rgba(245, 240, 232, 0.85);
+    font-weight: 500;
+  }
+
+  .vault-id-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(245, 240, 232, 0.06);
+    font-size: 11px;
+    color: rgba(245, 240, 232, 0.3);
+    letter-spacing: 0.04em;
+  }
+
+  /* Sections */
+  .vault-section {
+    margin: 0 16px 20px;
+  }
+
+  .vault-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: rgba(245, 240, 232, 0.5);
+    text-transform: uppercase;
+    padding: 0 4px 10px;
+  }
+
+  .vault-section-count {
+    background: rgba(245, 240, 232, 0.08);
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(245, 240, 232, 0.5);
+  }
+
+  /* Booking Rows */
+  .vault-booking-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 12px;
+    border-radius: 12px;
+    background: rgba(245, 240, 232, 0.03);
+    border: 1px solid rgba(245, 240, 232, 0.04);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    width: 100%;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .vault-booking-row:hover {
+    background: rgba(245, 240, 232, 0.06);
+  }
+
+  .vault-booking-row:active {
+    transform: scale(0.99);
+  }
+
+  .vault-booking-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(201, 169, 110, 0.1);
+    color: #C9A96E;
+    flex-shrink: 0;
+  }
+
+  .vault-booking-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .vault-booking-service {
+    font-size: 14px;
+    font-weight: 500;
+    color: #F5F0E8;
+  }
+
+  .vault-booking-date {
+    font-size: 12px;
+    color: rgba(245, 240, 232, 0.45);
+    margin-top: 2px;
+  }
+
+  .vault-booking-status {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: capitalize;
+    flex-shrink: 0;
+  }
+
+  .vault-booking-chevron {
+    color: rgba(245, 240, 232, 0.2);
+    flex-shrink: 0;
+  }
+
+  .vault-empty {
+    padding: 24px 12px;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(245, 240, 232, 0.35);
+  }
+
+  /* Detail Modal */
+  .vault-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 850;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .vault-detail-card {
+    width: 100%;
+    max-width: 480px;
+    background: #2C2824;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    padding: 24px 20px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .vault-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .vault-detail-title {
+    font-family: "DM Serif Display", Georgia, serif;
+    font-size: 20px;
+    color: #F5F0E8;
+  }
+
+  .vault-detail-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(245, 240, 232, 0.06);
+    color: rgba(245, 240, 232, 0.6);
+    cursor: pointer;
+  }
+
+  .vault-detail-close:hover {
+    background: rgba(245, 240, 232, 0.1);
+  }
+
+  .vault-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .vault-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .vault-detail-label {
+    font-size: 13px;
+    color: rgba(245, 240, 232, 0.45);
+    flex-shrink: 0;
+    margin-right: 12px;
+  }
+
+  .vault-detail-value {
+    font-size: 13px;
+    color: #F5F0E8;
+    font-weight: 500;
+    text-align: right;
+  }
+
+  .vault-detail-footer {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(245, 240, 232, 0.06);
+    font-size: 11px;
+    color: rgba(245, 240, 232, 0.3);
+    text-align: center;
+    letter-spacing: 0.04em;
+  }

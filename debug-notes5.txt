@@ -1,0 +1,27 @@
+ALL THREE FIXES VERIFIED WORKING:
+
+1. ONBOARDING FLOW ✅
+   - "Before we get started — what's your name?" → Adam
+   - "Hey Adam. Which building are you in?" → Opus LA
+   - "What's your unit number?" → 1234
+   - "Best phone number to reach you?" → 3235551234
+   - "You're all set. Just say the word — laundry, car wash, grooming, cleaning."
+   - After clearing chat, tiles appear with greeting
+
+2. ONBOARDING IMAGES ✅
+   - After first laundry booking, the onboarding message appears:
+   - "How laundry pickup works:"
+   - Image 1: Man hanging bag on door
+   - Image 2: Man picking up bag
+   - "1. Leave your bag outside your door before the pickup window."
+   - "2. We'll text you 10 min before arrival. You don't need to be home."
+   - "That's it. We'll return your laundry within 24 hours."
+
+3. STRIPE PAYMENT COLLECTION ✅
+   - After the onboarding message, the payment form appears:
+   - "One last step to activate your account — add a payment method."
+   - Credit card input field visible with "Card number" placeholder
+   - Save button visible
+   - This confirms paymentMethodSaved=0 triggers the payment form
+
+All three items from the user's request are working correctly!

@@ -1,0 +1,13 @@
+{
+  "query": "SELECT id FROM bldg_users WHERE phoneE164 = '+13235559999';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute SELECT id FROM bldg_users WHERE phoneE164 = '+13235559999';",
+  "rows": [
+    {
+      "id": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\n1\n",
+  "stderr": "",
+  "execution_time_ms": 346
+}

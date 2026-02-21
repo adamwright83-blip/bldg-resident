@@ -1,0 +1,60 @@
+{
+  "query": "SELECT id, phoneE164, onboardingStep FROM bldg_users WHERE phoneE164 LIKE '+1323%' OR phoneE164 LIKE '+1guest%' ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute SELECT id, phoneE164, onboardingStep FROM bldg_users WHERE phoneE164 LIKE '+1323%' OR phoneE164 LIKE '+1guest%' ORDER BY id;",
+  "rows": [
+    {
+      "id": "1",
+      "phoneE164": "+13235551234",
+      "onboardingStep": "5"
+    },
+    {
+      "id": "30001",
+      "phoneE164": "+1guest1771181316524",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30002",
+      "phoneE164": "+1guest1771181666826",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30003",
+      "phoneE164": "+1guest1771181715407",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30004",
+      "phoneE164": "+1guest1771181872777",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30005",
+      "phoneE164": "+1guest1771181906077",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30006",
+      "phoneE164": "+1guest1771181906244",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30007",
+      "phoneE164": "+13238074661",
+      "onboardingStep": "5"
+    },
+    {
+      "id": "30008",
+      "phoneE164": "+1guest1771184390435",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30009",
+      "phoneE164": "+1guest1771184436670",
+      "onboardingStep": "4"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tphoneE164\tonboardingStep\n1\t+13235551234\t5\n30001\t+1guest1771181316524\t0\n30002\t+1guest1771181666826\t0\n30003\t+1guest1771181715407\t0\n30004\t+1guest1771181872777\t0\n30005\t+1guest1771181906077\t0\n30006\t+1guest1771181906244\t0\n30007\t+13238074661\t5\n30008\t+1guest1771184390435\t0\n30009\t+1guest1771184436670\t4\n",
+  "stderr": "",
+  "execution_time_ms": 347
+}

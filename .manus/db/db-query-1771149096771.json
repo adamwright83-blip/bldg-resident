@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO bldg_users (phoneE164, firstName, lastName, unit, buildingSlug) VALUES ('+13235559999', 'Test', 'Resident', '2401', 'opus-la') ON DUPLICATE KEY UPDATE firstName='Test', lastName='Resident', unit='2401', buildingSlug='opus-la';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute INSERT INTO bldg_users (phoneE164, firstName, lastName, unit, buildingSlug) VALUES ('+13235559999', 'Test', 'Resident', '2401', 'opus-la') ON DUPLICATE KEY UPDATE firstName='Test', lastName='Resident', unit='2401', buildingSlug='opus-la';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 379
+}

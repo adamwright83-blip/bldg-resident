@@ -1,0 +1,1 @@
+ALTER TABLE `bldg_users` ADD `onboardingStep` int DEFAULT 0 NOT NULL;

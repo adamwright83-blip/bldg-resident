@@ -1,0 +1,14 @@
+SUCCESS: The onboarding flow is working!
+Screenshot shows: "Before we get started — what's your name?"
+No "hi" user message visible - clean onboarding experience.
+
+The guest session endpoint creates a new user with onboardingStep=0,
+then the auto-trigger sends "hi" which the backend intercepts at step 0
+and returns the first onboarding question. The "hi" message is hidden
+from the UI.
+
+Now need to test the full flow by simulating answers to all 4 questions.
+Also need to verify:
+1. After onboarding completes, tiles appear
+2. After first booking, onboarding images appear
+3. After first booking, payment collection form appears

@@ -1,0 +1,1 @@
+ALTER TABLE `bldg_users` ADD `stripePaymentMethodId` varchar(100);

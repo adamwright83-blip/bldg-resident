@@ -1,0 +1,57 @@
+Screenshot 1: Building Selector screen is showing correctly
+- Cream background (#FAF7F2) ✓
+- BLDG.chat wordmark with gold dot ✓
+- "Which building are you in?" subtitle ✓
+- BUILDING dropdown with "Select your building" placeholder ✓
+- UNIT input with "e.g. 1204" placeholder ✓
+- Dark "Continue" button ✓
+- "Powered by BLDG.chat" footer ✓
+- Splash screen auto-advanced (1.5s) correctly ✓
+
+Need to verify:
+- Chat UI color overhaul (warm brown bg) after completing onboarding
+- Tutorial screen appearance
+- Upgrade button styling
+
+Screenshot 2: Building Selector live in browser
+- Building selector is showing on top of the chat (correct z-index layering)
+- Chat content visible behind (header icons, bookings, etc.) - this is expected since OnboardingFlow renders children underneath
+- The selector form is clean: BUILDING dropdown, UNIT input, Continue button
+- "Powered by BLDG.chat" footer visible at bottom
+- Splash screen already auto-advanced (good - it's 1.5s)
+- Need to test: complete the selector, see tutorial, then see chat with new warm brown colors
+
+Screenshot 3: Tutorial Screen
+- Cream background (#FAF7F2) ✓
+- BLDG.chat header with "The Opus, Los Angeles" subtitle ✓
+- Mini BLDG avatar (black square with white dot) next to first bubble ✓
+- Three chat-style tutorial bubbles with staggered entrance ✓
+- Bubble 1: "I handle everything in your building..." ✓
+- Bubble 2: "No menus. No forms. No waiting..." ✓
+- Bubble 3: "Try it — tap Laundry below..." ✓
+- Arrow pointing down to mockup tiles ✓
+- 4 mockup tiles: Laundry (highlighted gold border), Car Wash, Grooming, Cleaning ✓
+- "Got it — let's go" button at bottom ✓
+- Now need to click through to see the chat with new warm brown colors
+
+Screenshot 4: Chat UI with new warm brown color scheme
+- Background is warm brown (#2C2824) ✓ — NOT black cave anymore
+- BLDG.chat header with gold accent border ✓
+- Phone/text icons visible in header ✓
+- Assistant bubbles: dark elevated bg with taupe border ✓
+- User bubbles: semi-transparent light ✓
+- Laundry onboarding images rendering correctly ✓
+- Chat content is readable against the warm brown bg ✓
+- Bottom area (tiles/composer) should be bone-white — need to scroll down to verify
+
+Screenshot 5: Chat scrolled to bottom - confirmation card + upgrade button + bottom area
+- Confirmation card: dark elevated bg with taupe border ✓
+- CONFIRMED header in gold accent ✓
+- "Laundry Weekly" badge ✓
+- "Add Hang dry +$5.00" button: dashed border, small, clearly optional ✓ — much better than before
+- "Fulfilled by Laundry Butler." footer ✓
+- Bottom area visible with bone-white/cream background ✓
+- Booking chip bar visible ✓
+- Suggested chip visible ✓
+- Composer area with bone-white input visible at very bottom ✓
+- Overall warm brown (#2C2824) background throughout ✓ — NOT the old black cave

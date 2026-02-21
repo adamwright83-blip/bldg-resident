@@ -1,0 +1,28 @@
+{
+  "query": "SELECT id, phoneE164, firstName, onboardingStep FROM bldg_users WHERE phoneE164 LIKE '%3235551234%' OR id = 30009 OR id = 2;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute SELECT id, phoneE164, firstName, onboardingStep FROM bldg_users WHERE phoneE164 LIKE '%3235551234%' OR id = 30009 OR id = 2;",
+  "rows": [
+    {
+      "id": "1",
+      "phoneE164": "+13235551234",
+      "firstName": "Adam",
+      "onboardingStep": "5"
+    },
+    {
+      "id": "2",
+      "phoneE164": "3238074661",
+      "firstName": "NULL",
+      "onboardingStep": "0"
+    },
+    {
+      "id": "30009",
+      "phoneE164": "+1guest1771184436670",
+      "firstName": "Adam",
+      "onboardingStep": "4"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tphoneE164\tfirstName\tonboardingStep\n1\t+13235551234\tAdam\t5\n2\t3238074661\tNULL\t0\n30009\t+1guest1771184436670\tAdam\t4\n",
+  "stderr": "",
+  "execution_time_ms": 355
+}

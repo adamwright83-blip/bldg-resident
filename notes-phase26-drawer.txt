@@ -1,0 +1,46 @@
+Phase 2.6 Services Drawer Progress Notes
+==========================================
+
+COMPLETED:
+- Bug 1: Flash between splash/selector - FIXED in OnboardingFlow.tsx
+- Bug 3: Tutorial tiles non-clickable - FIXED in TutorialScreen.tsx
+- Bug 4: White flash/dock color - FIXED in index.css (ceremony overlay + mic button color)
+- Bug 5: Account setup card LAST + gold border + arrow - FIXED in TrustCard.tsx + index.css
+- Bug 7: Name validation - FIXED in chat.ts (rejects non-names, stays on COLLECTING_NAME)
+
+IN PROGRESS:
+- Bug 6: Services Drawer (iOS bottom sheet)
+
+DESIGN DECISIONS FOR SERVICES DRAWER:
+- After booking, tiles collapse (showTiles = messages.length === 0)
+- Need a small pill/handle button that appears when tiles are hidden
+- Tapping it slides up a dark drawer (#2C2824 warm brown) with:
+  - Horizontal row of recent bookings at top
+  - Full-width rows: icon + label + chevron for each service
+  - Laundry, Dry Cleaning, Car Wash, Grooming, Cleaning, The Vault
+- Tapping a row triggers that service
+- Tapping outside or swiping down dismisses
+- Spring animation on open/close
+
+KEY CODE LOCATIONS:
+- showTiles = !isSending && messages.length === 0 (line ~488)
+- SERVICE_TILES array at line ~120-127
+- Tile rendering at line ~831-854 in chat-bottom div
+- handleTileTap at line ~570-579
+- Composer at line ~857-879
+- State vars at line ~302-320
+
+APPROACH:
+1. Add new state: drawerOpen
+2. Add a small grid/pill button that appears when showTiles is false (i.e., after messages exist)
+3. The drawer component slides up from bottom with AnimatePresence
+4. Drawer contains the 6 service rows in list format
+5. Clicking a row calls handleTileTap equivalent
+6. Clicking outside or a close handle dismisses
+
+CSS NEEDED:
+- .services-drawer-trigger (pill button)
+- .services-drawer-overlay (backdrop)
+- .services-drawer (the sheet itself)
+- .services-drawer-handle (drag handle pill)
+- .services-drawer-row (each service row)

@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM service_requests; DELETE FROM chat_messages;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute DELETE FROM service_requests; DELETE FROM chat_messages;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 420
+}

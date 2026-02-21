@@ -1,0 +1,22 @@
+Phase 1.6 QA + Finishing Passes — Test Results
+==============================================
+
+Visual Inspection from Screenshot:
+1. ✅ Dark background (#0D0D0D) rendering correctly
+2. ✅ Centered 48px BLDG logo (black square with white dot) visible in empty state
+3. ✅ Onboarding greeting "Before we get started — what's your name?" displayed
+4. ✅ Glass-treated composer visible at bottom (semi-transparent with blur)
+5. ✅ No clear chat button in header (trash icon removed — chat history preserved)
+6. ✅ Text/Phone icons remain in header for building management contact
+
+Acceptance Checklist:
+1. ✅ Remove test data: All service_requests deleted from database
+2. ✅ Fix tiles behavior: Tiles only show when messages.length === 0 (not during active conversation)
+3. ✅ Ambient glow visibility: opacity 1, alpha 0.09, top -90px (glow should be more visible now)
+4. ✅ Glass treatment applied to:
+   - Service tiles (.chat-tile)
+   - Booking chips bar (.active-bookings-bar) — already had glass from previous pass
+   - Composer container (.chat-input) — already had glass from previous pass
+5. ✅ Chat history preserved: Clear button removed, no automatic wipe after booking/payment
+
+Next: Run vitest to ensure no regressions, then save checkpoint.

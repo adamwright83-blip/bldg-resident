@@ -1,0 +1,23 @@
+Issue: The screenshot shows "hi" from user and LLM discovery response instead of onboarding.
+Root cause: The onboarding auto-trigger sent "hi" as user content, but the onboarding handler for step 0
+just asks "what's your name?" - it should have worked. The problem is likely that the previous chat history
+from before the code change was still cached, and the old messages were loaded.
+
+After clearing DB and resetting onboardingStep to 0, the new code should work. But the screenshot is stale
+from the first attempt before the DB was cleared.
+
+The flow should be:
+1. User opens app, history loads, onboardingComplete = false, messages = []
+2. Auto-trigger sends "hi" 
+3. Backend sees onboardingStep = 0, returns "Before we get started — what's your name?"
+4. Frontend shows the onboarding question
+
+But wait - the issue is that the previous test already set onboardingStep from 0 to 1 (ASKED_NAME)
+when it auto-triggered. So the "hi" was processed as step 0 → asked name. But the LLM response
+was shown instead. Let me check if the onboarding handler actually ran.
+
+Actually looking more carefully: the screenshot shows the LLM discovery response, not the onboarding
+question. This means the onboarding handler was NOT intercepting. The issue might be that user.onboardingStep
+was already > 0 from a previous run, OR the user object didn't have onboardingStep field yet when this ran.
+
+After the DB reset, it should work now. Need to verify.

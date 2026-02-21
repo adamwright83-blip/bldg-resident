@@ -1,0 +1,1 @@
+ALTER TABLE `service_requests` MODIFY COLUMN `serviceType` enum('laundry','dry-cleaning','car-wash','cleaning','grooming','amenity','maintenance','other') NOT NULL;

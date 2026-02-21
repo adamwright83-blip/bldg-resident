@@ -1,0 +1,68 @@
+KEY OBSERVATIONS FROM USER ATTACHMENTS (Feb 17 2026)
+
+=== Screenshot 1 (3.56.00PM) — Current chat after booking ===
+- Shows warm brown bg, BLDG.chat header, laundry booking flow
+- "PICKUP DETAILS — Where should the driver come? Building and unit." bubble appears
+- But user already entered building+unit during onboarding — should skip this
+- "Done. Laundry pickup is booked for tomorrow." + CONFIRMED card shows Feb 24 (7 days away)
+- User wants: if before 11:30am → same day 12:30-1:30pm; if 11:31am-5pm → next morning 7-10am
+- Bottom has white rectangle covering the order tile area
+
+=== Screenshot 2 (4.02.47PM) — AI rejection ===
+- User asked "how much is it to dry clean five long sleeve dress shirts"
+- Lloyd responded: "I'm having a moment — try again in a few seconds."
+- This is the fallback error message, not a real answer
+- User wants dry cleaning prices to be in the system prompt
+- Service chips visible at bottom: "Schedule laundry", "Book grooming", "Request cleaning"
+
+=== Screenshot 3 (4.25.37PM) — Gemini mockup ===
+- Dark glass "Liquid Glass" UI concept
+- Ambient Whisper: "Three weeks. The building missed you."
+- Emotional chat: user shares promotion news, Lloyd responds with restaurant suggestion
+- Bento grid: LAUNDRY BUTLER (hero tile, "Next Route: Thursday AM"), GROOMING, HOUSEKEEPING
+- THE VAULT tile at bottom (Resident ID / History / Receipts)
+- "One-Tap Upgrade Me" floating button
+- Fingerprint icon in header
+- Very dark (#0D0D0D) background with glass blur effects
+
+=== pasted_content_2.txt — Gemini's design proposal ===
+- "Liquid Glass Material System" with 40% translucency, GPU specular highlights, concentric geometry
+- Weighted Bento Grid 2.0 replacing pill buttons
+- Hero Tile for Laundry Butler with live status
+- "Identity Vault" replacing hamburger menu
+- "Phantom Thread" emotional lines after bookings
+- "Return Recognition Ritual" for returning users
+- Predictive Tiles based on habits
+- "One-Tap Upgrade Me" floating dock
+
+=== pasted_content_3.txt — User's direct feedback ===
+BUGS/ISSUES:
+1. Building dropdown should say "For Opus LA" not "The Opus" (litigation concern)
+2. Flash of strange mobile view between splash and building selector
+3. Tutorial messages need to be MUCH slower — unfold just faster than reading speed
+4. Logo (black square white circle) should animate on tutorial screen
+5. Arrow should hover ABOVE Laundry tile pointing DOWN (not current position)
+6. After clicking Laundry on tutorial → transition to home but Laundry not toggled, must click again
+7. After onboarding, first Laundry booking still asks "where should driver come?" — should skip since already provided
+8. Should ask name, phone, push notifications instead
+9. Booking date wrong: books 7 days out instead of same-day/next-morning rules
+10. White rectangle covering order tile at bottom
+
+GEMINI CRITIQUE:
+- Current pill buttons are "2018 functionality"
+- Wants "Command Center" not chatbot
+- Proposes 4-tile Bento Grid: Hero (Laundry), Split (Grooming | Housekeeping), Anchor (The Vault)
+- Kill off-white, go Charred Ebony (#0D0D0D)
+- Liquid Glass translucent tiles with backdrop blur
+
+USER'S QUESTION: "I don't know if I like anything Gemini did... what are your honest thoughts?"
+
+=== iPhoneUIDesignforBldg.chat.doc — Full research paper ===
+- 10-page strategic synthesis of Emotional Architecture + Liquid Glass
+- Brand naming analysis (Aura Highrise, Vellum Living, etc.)
+- Detailed UI specs for "Command Center" home screen
+- Parasocial bonding mechanics (Phantom Thread, Variable Depth Charge)
+- Luxury hospitality scripts (Aman omotenashi model)
+- Financial analysis showing Feb 2026 deficit (-$1,381.13)
+- Implementation priority roadmap
+- Future outlook: Spatial UX, Ambient AI

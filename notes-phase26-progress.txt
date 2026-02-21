@@ -1,0 +1,33 @@
+Phase 2.6 Progress Notes
+========================
+
+COMPLETED:
+- Bug 1: Flash between splash/building selector - FIXED in OnboardingFlow.tsx
+- Bug 3: Tutorial tiles non-clickable + text updated - FIXED in TutorialScreen.tsx
+- Bug 4: White flash/dock color bug - FIXED ceremony overlay colors + mic button color
+
+IN PROGRESS:
+- Bug 5: Account setup card ordering + gold accent + arrow to composer
+  - Current state: The trust card renders in DB message order. The issue is that
+    the account setup card (ACCOUNT SETUP / Name for the order?) appears BEFORE
+    the booking confirmation in the screenshot. Need to:
+    1. Make the trust card more visually prominent with gold border
+    2. Add arrow pointing to composer
+    3. Ensure it renders AFTER the booking confirmation card
+    4. Add a gentle pulse/bounce animation to draw attention
+  - TrustCard component is at: client/src/components/TrustCard.tsx
+  - Trust card CSS is at: client/src/index.css lines 970-1047
+  - The left accent bar uses champagne gradient - change to solid gold
+  - The card uses var(--bg-elevated) background
+
+TODO:
+- Bug 7: Name validation - reject non-names in handlePostBookingCollection
+- Bug 6: Services drawer (iOS bottom sheet) with slide animation
+- Build The Vault: booking history, receipts, resident ID
+
+KEY FILES:
+- server/routers/chat.ts - message ordering, post-booking collection trigger (line ~1177)
+- client/src/pages/Home.tsx - message rendering (line ~702), trust card rendering (line ~736)
+- client/src/components/TrustCard.tsx - trust card component
+- client/src/index.css - all CSS styling
+- server/bookingLogic.ts - booking defaults and scheduling

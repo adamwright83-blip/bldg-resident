@@ -1,0 +1,16 @@
+ONBOARDING FLOW TEST - SUCCESS!
+
+Full conversation:
+1. "Before we get started — what's your name?" → "Adam"
+2. "Hey Adam. Which building are you in?" → "Opus LA"  
+3. "What's your unit number?" → "1234"
+4. "Best phone number to reach you?" → "3235551234"
+5. "You're all set. Just say the word — laundry, car wash, grooming, cleaning."
+
+All 4 questions asked one at a time, conversationally. 
+Onboarding complete message matches the spec exactly.
+
+Next: Need to verify tiles appear after clearing chat, and test booking + payment flow.
+Also need to check that the service tiles appear. Currently they should show when
+onboardingComplete=true and messages.length===0. But right now messages are still showing.
+Need to clear chat to see tiles.

@@ -1,0 +1,32 @@
+{
+  "query": "SELECT id, phoneE164, firstName, lastName, unit, buildingSlug, onboardingStep, paymentMethodSaved, stripeCustomerId FROM bldg_users;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute SELECT id, phoneE164, firstName, lastName, unit, buildingSlug, onboardingStep, paymentMethodSaved, stripeCustomerId FROM bldg_users;",
+  "rows": [
+    {
+      "id": "1",
+      "phoneE164": "+13235559999",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "unit": "2401",
+      "buildingSlug": "opus-la",
+      "onboardingStep": "0",
+      "paymentMethodSaved": "0",
+      "stripeCustomerId": "NULL"
+    },
+    {
+      "id": "2",
+      "phoneE164": "3238074661",
+      "firstName": "Adam",
+      "lastName": "NULL",
+      "unit": "NULL",
+      "buildingSlug": "opusla",
+      "onboardingStep": "0",
+      "paymentMethodSaved": "0",
+      "stripeCustomerId": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tphoneE164\tfirstName\tlastName\tunit\tbuildingSlug\tonboardingStep\tpaymentMethodSaved\tstripeCustomerId\n1\t+13235559999\tTest\tResident\t2401\topus-la\t0\t0\tNULL\n2\t3238074661\tAdam\tNULL\tNULL\topusla\t0\t0\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 357
+}

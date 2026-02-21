@@ -1,0 +1,24 @@
+BOOKING PERSISTENCE TEST — SUCCESS
+
+Root cause identified:
+- Line 216-237 in Home.tsx: useEffect was blindly replacing `messages` state with `historyQuery.data` on every refetch (every 30 seconds)
+- After booking, if the server returned stale/empty data (or the DB write hadn't completed), `setMessages([])` would trigger the empty state
+- Empty state condition: `messages.length === 0` → shows centered logo + onboarding greeting
+
+Fix applied:
+- Only sync from server if local messages are empty OR server has more messages than local
+- This preserves optimistic updates (booking confirmations) before they're persisted to DB
+- Prevents wiping out the conversation after booking
+
+Test verification (end-to-end):
+1. Fresh user → onboarding (4 questions) → "You're all set" → 8 messages in conversation
+2. Type "laundry" → AI responds with booking confirmation card + onboarding images + payment form
+3. **CRITICAL**: Conversation persists — all previous messages still visible, no return to empty state
+4. Booking card appears inline with "Laundry Monday, Feb 16" chip
+5. Payment form appears at bottom ("One last step to activate your account")
+
+Result: ✅ PASS
+- Conversation preserved after booking
+- No onboarding screen reappearance
+- Booking card stays in-thread
+- App behaves like a persistent concierge conversation, not a form flow

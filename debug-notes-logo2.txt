@@ -1,0 +1,8 @@
+State 1 is working perfectly:
+- 48px black square with white dot, centered horizontally
+- Positioned at ~35% from top (padding-top: 35% in CSS)
+- "Before we get started — what's your name?" text below
+- No trash/clear button (correct - no messages yet)
+- Composer at bottom
+
+Now testing: type a name to trigger State 2 transition.

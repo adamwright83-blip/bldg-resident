@@ -1,0 +1,24 @@
+ALL THREE FEATURES VERIFIED WORKING:
+
+1. ONBOARDING FLOW: ✅
+   - State 1: Centered 48px logo with "Before we get started — what's your name?"
+   - User types name → transitions to State 2 with 24px avatar
+   - Building, unit, phone collected conversationally
+   - "You're all set" message + service tiles appear
+
+2. ONBOARDING IMAGES: ✅
+   - After tapping Laundry tile, two instructional images appear:
+     - Image 1: Laundry bag at door
+     - Image 2: Laundry handoff
+   - Both render correctly from S3 CDN URLs
+
+3. STRIPE PAYMENT FORM: ✅
+   - Card input (number, MM/YY, CVC) appears at bottom
+   - "One last step to activate your account — add a payment method."
+   - Save button visible
+
+4. BOOKING CARD: ✅
+   - "Laundry Monday, Feb 16" card visible
+   - "Any details for your Laundry Butler?" suggested chip visible
+
+All three items from the user's request are working end-to-end.

@@ -1,0 +1,1 @@
+ALTER TABLE `bldg_users` ADD `cardLast4` varchar(4);

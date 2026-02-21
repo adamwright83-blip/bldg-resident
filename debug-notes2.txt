@@ -1,0 +1,30 @@
+KEY FINDING from network logs:
+
+1. getHistory returned: user: null, onboardingComplete: false
+   - This means getBldgUserIdFromRequest returned null (no bldg_session cookie)
+   
+2. sendMessage with "hi" returned LLM discovery response, NOT onboarding question
+   - This confirms getBldgUserIdFromRequest returned null for the sendMessage too
+   - When bldgUserId is null, the onboarding flow is skipped entirely
+
+ROOT CAUSE: The user doesn't have a bldg_session cookie. The onboarding flow only works 
+for authenticated users (those with a JWT cookie). The preview browser doesn't have the cookie.
+
+SOLUTION: The onboarding flow needs to work even without authentication. Or we need to 
+handle the case where there's no cookie by either:
+a) Creating a guest session automatically
+b) Making onboarding the mechanism that creates the user + sets the cookie
+
+The current flow requires the user to come from Laundry Butler (which sets the JWT cookie).
+For a "first-time user" experience, we need to handle the case where there's no cookie.
+
+APPROACH: When getHistory returns user: null, the frontend should NOT auto-trigger onboarding.
+Instead, it should show the greeting. When the user types anything, if there's no session,
+we should create a guest user and set a cookie, THEN start onboarding.
+
+Actually, looking at the existing flow: users come from Laundry Butler which sets the JWT.
+So the real test scenario is: user has JWT cookie (from LB) but hasn't completed onboarding.
+The preview browser just doesn't have the cookie.
+
+For the user's testing: they need to access via their phone where the LB JWT is set.
+But we should also make the onboarding work for the preview case.

@@ -1,0 +1,82 @@
+{
+  "query": "SELECT id, bldgUserId, serviceType, scheduledDate, scheduledWindow, status, createdAt FROM service_requests ORDER BY createdAt DESC LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute SELECT id, bldgUserId, serviceType, scheduledDate, scheduledWindow, status, createdAt FROM service_requests ORDER BY createdAt DESC LIMIT 20;",
+  "rows": [
+    {
+      "id": "150001",
+      "bldgUserId": "-1",
+      "serviceType": "car-wash",
+      "scheduledDate": "Tuesday, Feb 17",
+      "scheduledWindow": "9–11 AM",
+      "status": "pending",
+      "createdAt": "2026-02-16 00:41:16"
+    },
+    {
+      "id": "120001",
+      "bldgUserId": "-1",
+      "serviceType": "laundry",
+      "scheduledDate": "Monday, Feb 16",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 23:25:22"
+    },
+    {
+      "id": "90008",
+      "bldgUserId": "-1",
+      "serviceType": "laundry",
+      "scheduledDate": "Thursday, Feb 19",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 21:05:47"
+    },
+    {
+      "id": "90007",
+      "bldgUserId": "-1",
+      "serviceType": "laundry",
+      "scheduledDate": "Monday, Feb 16",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 21:05:29"
+    },
+    {
+      "id": "90006",
+      "bldgUserId": "-1",
+      "serviceType": "laundry",
+      "scheduledDate": "Monday, Feb 16",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 19:57:38"
+    },
+    {
+      "id": "90005",
+      "bldgUserId": "30013",
+      "serviceType": "laundry",
+      "scheduledDate": "Monday, Feb 16",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 19:53:26"
+    },
+    {
+      "id": "90004",
+      "bldgUserId": "30007",
+      "serviceType": "laundry",
+      "scheduledDate": "Monday, Feb 16",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 19:01:18"
+    },
+    {
+      "id": "90003",
+      "bldgUserId": "1",
+      "serviceType": "laundry",
+      "scheduledDate": "Monday, Feb 16",
+      "scheduledWindow": "7–10 AM",
+      "status": "pending",
+      "createdAt": "2026-02-15 18:50:32"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tbldgUserId\tserviceType\tscheduledDate\tscheduledWindow\tstatus\tcreatedAt\n150001\t-1\tcar-wash\tTuesday, Feb 17\t9–11 AM\tpending\t2026-02-16 00:41:16\n120001\t-1\tlaundry\tMonday, Feb 16\t7–10 AM\tpending\t2026-02-15 23:25:22\n90008\t-1\tlaundry\tThursday, Feb 19\t7–10 AM\tpending\t2026-02-15 21:05:47\n90007\t-1\tlaundry\tMonday, Feb 16\t7–10 AM\tpending\t2026-02-15 21:05:29\n90006\t-1\tlaundry\tMonday, Feb 16\t7–10 AM\tpending\t2026-02-15 19:57:38\n90005\t30013\tlaundry\tMonday, Feb 16\t7–10 AM\tpending\t2026-02-15 19:53:26\n90004\t30007\tlaundry\tMonday, Feb 16\t7–10 AM\tpending\t2026-02-15 19:01:18\n90003\t1\tlaundry\tMonday, Feb 16\t7–10 AM\tpending\t2026-02-15 18:50:32\n",
+  "stderr": "",
+  "execution_time_ms": 424
+}

@@ -1,0 +1,10 @@
+{
+  "query": "\n-- Find the test user\nSELECT id, phoneE164, firstName, lastName, paymentMethodSaved, stripeCustomerId FROM bldg_users ORDER BY id DESC LIMIT 5;\n\n-- Clear chat messages\nDELETE FROM chat_messages WHERE bldg_user_id IN (SELECT id FROM bldg_users);\n\n-- Clear service requests\nDELETE FROM service_requests WHERE bldg_user_id IN (SELECT id FROM bldg_users);\n\n-- Reset payment flag and customer ID\nUPDATE bldg_users SET paymentMethodSaved = 0, stripeCustomerId = NULL;\n\n-- Clear onboarding flags\nDELETE FROM onboarding_flags WHERE bldg_user_id IN (SELECT id FROM bldg_users);\n\n-- Verify reset\nSELECT id, phoneE164, firstName, lastName, paymentMethodSaved, stripeCustomerId FROM bldg_users;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute \n-- Find the test user\nSELECT id, phoneE164, firstName, lastName, paymentMethodSaved, stripeCustomerId FROM bldg_users ORDER BY id DESC LIMIT 5;\n\n-- Clear chat messages\nDELETE FROM chat_messages WHERE bldg_user_id IN (SELECT id FROM bldg_users);\n\n-- Clear service requests\nDELETE FROM service_requests WHERE bldg_user_id IN (SELECT id FROM bldg_users);\n\n-- Reset payment flag and customer ID\nUPDATE bldg_users SET paymentMethodSaved = 0, stripeCustomerId = NULL;\n\n-- Clear onboarding flags\nDELETE FROM onboarding_flags WHERE bldg_user_id IN (SELECT id FROM bldg_users);\n\n-- Verify reset\nSELECT id, phoneE164, firstName, lastName, paymentMethodSaved, stripeCustomerId FROM bldg_users;\n",
+  "returncode": 1,
+  "logs": [
+    "id\tphoneE164\tfirstName\tlastName\tpaymentMethodSaved\tstripeCustomerId",
+    "1\t+13235559999\tTest\tResident\t0\tNULL",
+    "ERROR 1054 (42S22) at line 6: Unknown column 'bldg_user_id' in 'where clause'"
+  ]
+}

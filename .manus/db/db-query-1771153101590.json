@@ -1,0 +1,18 @@
+{
+  "query": "\n-- Clear chat messages\nDELETE FROM chat_messages;\n\n-- Clear service requests\nDELETE FROM service_requests;\n\n-- Reset payment flag and customer ID\nUPDATE bldg_users SET paymentMethodSaved = 0, stripeCustomerId = NULL;\n\n-- Clear onboarding flags\nDELETE FROM onboarding_flags;\n\n-- Verify reset\nSELECT id, phoneE164, firstName, lastName, paymentMethodSaved, stripeCustomerId FROM bldg_users;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute \n-- Clear chat messages\nDELETE FROM chat_messages;\n\n-- Clear service requests\nDELETE FROM service_requests;\n\n-- Reset payment flag and customer ID\nUPDATE bldg_users SET paymentMethodSaved = 0, stripeCustomerId = NULL;\n\n-- Clear onboarding flags\nDELETE FROM onboarding_flags;\n\n-- Verify reset\nSELECT id, phoneE164, firstName, lastName, paymentMethodSaved, stripeCustomerId FROM bldg_users;\n",
+  "rows": [
+    {
+      "id": "1",
+      "phoneE164": "+13235559999",
+      "firstName": "Test",
+      "lastName": "Resident",
+      "paymentMethodSaved": "0",
+      "stripeCustomerId": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tphoneE164\tfirstName\tlastName\tpaymentMethodSaved\tstripeCustomerId\n1\t+13235559999\tTest\tResident\t0\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 549
+}

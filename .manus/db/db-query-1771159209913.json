@@ -1,0 +1,26 @@
+{
+  "query": "SELECT id, firstName, phoneE164, paymentMethodSaved, stripeCustomerId, cardLast4 FROM bldg_users ORDER BY id DESC LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 24AAGG3qhGDQtYg.6dfdf33b5fab --database Fo3B6BkybMS5hGe2tFkYmf --execute SELECT id, firstName, phoneE164, paymentMethodSaved, stripeCustomerId, cardLast4 FROM bldg_users ORDER BY id DESC LIMIT 5;",
+  "rows": [
+    {
+      "id": "2",
+      "firstName": "Adam",
+      "phoneE164": "3238074661",
+      "paymentMethodSaved": "1",
+      "stripeCustomerId": "cus_Tz2ZRgUxJsLoOC",
+      "cardLast4": "4242"
+    },
+    {
+      "id": "1",
+      "firstName": "Test",
+      "phoneE164": "+13235559999",
+      "paymentMethodSaved": "0",
+      "stripeCustomerId": "NULL",
+      "cardLast4": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tfirstName\tphoneE164\tpaymentMethodSaved\tstripeCustomerId\tcardLast4\n2\tAdam\t3238074661\t1\tcus_Tz2ZRgUxJsLoOC\t4242\n1\tTest\t+13235559999\t0\tNULL\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 386
+}
