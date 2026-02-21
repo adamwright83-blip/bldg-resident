@@ -29,22 +29,23 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+const corsOptions = {
+  origin: [
+    "https://app.bldg.chat",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+  ],
+  credentials: true,
+};
+
 async function startServer() {
   const app = express();
+  // CORS first, before body parsers and any other middleware (fixes preflight 415)
+  app.use(cors(corsOptions));
+  app.options("*", cors(corsOptions));
   const server = createServer(app);
-  // CORS: allow app.bldg.chat for cross-origin tRPC + cookie auth
-  app.use(
-    cors({
-      origin: [
-        "https://app.bldg.chat",
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-      ],
-      credentials: true,
-    })
-  );
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
