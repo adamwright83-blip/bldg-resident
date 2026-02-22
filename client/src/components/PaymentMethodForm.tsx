@@ -18,6 +18,7 @@ interface PaymentMethodFormProps {
 export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
+  const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [last4, setLast4] = useState<string | null>(null);
@@ -47,6 +48,14 @@ export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
     }, 3000);
     return () => clearTimeout(timer);
   }, [saved]);
+
+  useEffect(() => {
+    console.log("[Stripe] PaymentMethodForm init", {
+      hasPublishableKey: Boolean(stripeKey),
+      stripeReady: Boolean(stripe),
+      elementsReady: Boolean(elements),
+    });
+  }, [stripeKey, stripe, elements]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

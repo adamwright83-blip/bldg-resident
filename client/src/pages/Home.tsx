@@ -35,6 +35,10 @@ import AccountSheet from "@/components/AccountSheet";
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
+if (typeof window !== "undefined") {
+  console.log("[Stripe] Frontend publishable key present:", Boolean(stripePublishableKey));
+}
+
 // ─── Service tile definitions ───
 
 interface ServiceTile {
