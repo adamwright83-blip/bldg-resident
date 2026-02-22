@@ -27,7 +27,6 @@ import {
   getBookingStats,
 } from "../db";
 import type { BookingStats } from "../db";
-import { eq } from "drizzle-orm";
 import { jwtVerify } from "jose";
 import { parse as parseCookieHeader } from "cookie";
 import {
@@ -39,6 +38,7 @@ import {
 import { sendOwnerAlert } from "../ownerNotify";
 import { createOpsPickup } from "../opsIntegration";
 import { parseExplicitDateTime } from "../lib/dateParser";
+import { getSessionCookieOptions } from "../_core/cookies";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const CONTEXT_WINDOW = 20;
@@ -287,50 +287,20 @@ async function handlePostBookingCollection(
       phone = "+" + phone;
     }
 
-    // Check if an existing user already has this phone number
+    // Check if an existing user already has this phone number.
+    // Privacy guardrail: never auto-merge users/chat history at this step.
     const existingUser = await getBldgUserByPhone(phone);
     if (existingUser && existingUser.id !== bldgUserId) {
-      // Merge guest into existing user
-      const guestUser = await getBldgUserById(bldgUserId);
-      await updateBldgUser(existingUser.id, {
-        firstName: guestUser?.firstName || existingUser.firstName,
-        lastName: guestUser?.lastName || existingUser.lastName,
-        unit: guestUser?.unit || existingUser.unit,
-        buildingSlug: guestUser?.buildingSlug || existingUser.buildingSlug,
-        onboardingStep: existingUser.paymentMethodSaved
-          ? ONBOARDING_STEP.COMPLETE
-          : ONBOARDING_STEP.COLLECTING_PAYMENT,
+      await updateBldgUser(bldgUserId, {
+        onboardingStep: ONBOARDING_STEP.COLLECTING_PAYMENT,
       } as any);
-
-      // Migrate chat messages and service requests from guest to existing user
-      const { getDb } = await import("../db");
-      const db = await getDb();
-      if (db) {
-        const { chatMessages: chatMessagesTable, serviceRequests: serviceRequestsTable } = await import("../../drizzle/schema");
-        await db.update(chatMessagesTable)
-          .set({ bldgUserId: existingUser.id })
-          .where(eq(chatMessagesTable.bldgUserId, bldgUserId));
-        await db.update(serviceRequestsTable)
-          .set({ bldgUserId: existingUser.id })
-          .where(eq(serviceRequestsTable.bldgUserId, bldgUserId));
-      }
-
-      console.log(`[Onboarding] Merged guest user ${bldgUserId} into existing user ${existingUser.id} (phone: ${phone})`);
-
-      if (existingUser.paymentMethodSaved) {
-        return {
-          response: "You're set.",
-          newStep: ONBOARDING_STEP.COMPLETE,
-          onboardingComplete: true,
-          mergedUserId: existingUser.id,
-        };
-      }
-
+      console.warn(
+        `[Onboarding] Duplicate phone ${phone} for user ${bldgUserId}; skipping account merge to prevent history bleed`
+      );
       return {
         response: "Last thing \u2014 add a card so you're set for next time.",
         newStep: ONBOARDING_STEP.COLLECTING_PAYMENT,
         onboardingComplete: false,
-        mergedUserId: existingUser.id,
         collectType: "payment",
       };
     }
@@ -995,87 +965,131 @@ export const chatRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active session",
+        });
+      }
 
       let user = null;
       let history: { role: string; content: string }[] = [];
       let consecutiveNonService = 0;
 
-      if (bldgUserId) {
-        user = await getBldgUserById(bldgUserId);
+      user = await getBldgUserById(bldgUserId);
+      if (!user) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Session user not found",
+        });
+      }
 
-        // Store the user's message
+      // Store the user's message
+      await insertChatMessage({
+        bldgUserId,
+        role: "user",
+        content: input.content,
+      });
+
+      // Server-canonical onboarding guardrail:
+      // If frontend misses/races startRegistration, do not allow step-0 users
+      // to bypass onboarding by sending booking intents directly.
+      if (user.onboardingStep === ONBOARDING_STEP.NOT_STARTED) {
+        const hasAddress = user.buildingSlug && user.unit;
+        const nextStep = hasAddress
+          ? ONBOARDING_STEP.COLLECTING_NAME
+          : ONBOARDING_STEP.COLLECTING_ADDRESS;
+        const collectType = hasAddress ? "name" : "address";
+        const prompt = hasAddress
+          ? "Name for the order?"
+          : "Where should the driver come? Building and unit.";
+
+        await updateBldgUser(bldgUserId, {
+          onboardingStep: nextStep,
+        } as any);
+
         await insertChatMessage({
           bldgUserId,
-          role: "user",
-          content: input.content,
+          role: "assistant",
+          content: prompt,
+          metadata: {
+            type: "onboarding_collect",
+            collectType,
+            step: nextStep,
+          },
         });
 
-        // ─── POST-BOOKING COLLECTION FLOW ───
-        // Step 0 (NOT_STARTED) = fresh user, let them through to LLM/booking.
-        // Steps 1-4 = collecting profile info after first booking.
-        // Step 5 (COMPLETE) = done, normal chat.
-        if (user && user.onboardingStep >= ONBOARDING_STEP.COLLECTING_ADDRESS && user.onboardingStep < ONBOARDING_STEP.COMPLETE) {
-          const collectResult = await handlePostBookingCollection(
-            bldgUserId,
-            input.content,
-            user.onboardingStep
-          );
+        return {
+          role: "assistant" as const,
+          content: prompt,
+          booking: null,
+          onboardingComplete: false,
+          collectStep: collectType,
+        };
+      }
 
-          if (collectResult) {
-            const effectiveUserId = collectResult.mergedUserId || bldgUserId;
+      // ─── POST-BOOKING COLLECTION FLOW ───
+      // Step 0 (NOT_STARTED) = fresh user, let them through to LLM/booking.
+      // Steps 1-4 = collecting profile info after first booking.
+      // Step 5 (COMPLETE) = done, normal chat.
+      if (user.onboardingStep >= ONBOARDING_STEP.COLLECTING_ADDRESS && user.onboardingStep < ONBOARDING_STEP.COMPLETE) {
+        const collectResult = await handlePostBookingCollection(
+          bldgUserId,
+          input.content,
+          user.onboardingStep
+        );
 
-            // Store the collection response with metadata for trust card rendering
-            await insertChatMessage({
-              bldgUserId: effectiveUserId,
-              role: "assistant",
-              content: collectResult.response,
-              metadata: {
-                type: "onboarding_collect",
-                collectType: collectResult.collectType || "info",
-                step: collectResult.newStep,
-                complete: collectResult.onboardingComplete,
-              },
+        if (collectResult) {
+          const effectiveUserId = collectResult.mergedUserId || bldgUserId;
+
+          // Store the collection response with metadata for trust card rendering
+          await insertChatMessage({
+            bldgUserId: effectiveUserId,
+            role: "assistant",
+            content: collectResult.response,
+            metadata: {
+              type: "onboarding_collect",
+              collectType: collectResult.collectType || "info",
+              step: collectResult.newStep,
+              complete: collectResult.onboardingComplete,
+            },
+          });
+
+          // Reissue session cookie if merged
+          if (collectResult.mergedUserId && ctx.res) {
+            const { SignJWT } = await import("jose");
+            const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
+            const newToken = await new SignJWT({ bldgUserId: collectResult.mergedUserId })
+              .setProtectedHeader({ alg: "HS256" })
+              .setIssuedAt()
+              .setExpirationTime("365d")
+              .sign(secret);
+
+            ctx.res.cookie("bldg_session", newToken, {
+              ...getSessionCookieOptions(ctx.req as any),
+              maxAge: 365 * 24 * 60 * 60 * 1000,
             });
-
-            // Reissue session cookie if merged
-            if (collectResult.mergedUserId && ctx.res) {
-              const { SignJWT } = await import("jose");
-              const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
-              const newToken = await new SignJWT({ bldgUserId: collectResult.mergedUserId })
-                .setProtectedHeader({ alg: "HS256" })
-                .setIssuedAt()
-                .setExpirationTime("365d")
-                .sign(secret);
-
-              ctx.res.cookie("bldg_session", newToken, {
-                httpOnly: true,
-                path: "/",
-                sameSite: "none",
-                secure: true,
-                domain: ".bldg.chat",
-                maxAge: 365 * 24 * 60 * 60 * 1000,
-              });
-              console.log(`[Onboarding] Reissued session cookie for merged user ${collectResult.mergedUserId}`);
-            }
-
-            // If payment collection step, include metadata for the Stripe form
-            const paymentMeta = collectResult.collectType === "payment"
-              ? { type: "payment_collection" as const, bldgUserId: effectiveUserId }
-              : undefined;
-
-            return {
-              role: "assistant" as const,
-              content: collectResult.response,
-              booking: null,
-              onboardingComplete: collectResult.onboardingComplete,
-              collectStep: collectResult.collectType,
-              paymentMeta,
-            };
+            console.log(`[Onboarding] Reissued session cookie for merged user ${collectResult.mergedUserId}`);
           }
-        }
 
-        // Fetch recent history for context (only after onboarding)
-        const dbHistory = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
+          // If payment collection step, include metadata for the Stripe form
+          const paymentMeta = collectResult.collectType === "payment"
+            ? { type: "payment_collection" as const, bldgUserId: effectiveUserId }
+            : undefined;
+
+          return {
+            role: "assistant" as const,
+            content: collectResult.response,
+            booking: null,
+            onboardingComplete: collectResult.onboardingComplete,
+            collectStep: collectResult.collectType,
+            paymentMeta,
+          };
+        }
+      }
+
+      // Fetch recent history for context (only after onboarding)
+      const dbHistory = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
         
         // Filter out stale booking confirmation messages
         // Keep only the most recent 5 assistant messages, then exclude booking messages older than that
@@ -1102,28 +1116,25 @@ export const chatRouter = router({
           return true;
         });
         
-        history = filteredHistory.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
+      history = filteredHistory.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
-        // Count consecutive non-service messages from the tail of history
-        // A "service message" is an assistant message containing booking metadata markers
-        consecutiveNonService = 0;
-        for (let i = dbHistory.length - 1; i >= 0; i--) {
-          const msg = dbHistory[i];
-          if (msg.role === "assistant") {
-            const meta = msg.metadata as any;
-            if (meta?.type === "booking" || meta?.type === "onboarding" || meta?.type === "onboarding_collect" || meta?.type === "payment_collection") {
-              break; // Hit a service message, stop counting
-            }
+      // Count consecutive non-service messages from the tail of history
+      // A "service message" is an assistant message containing booking metadata markers
+      consecutiveNonService = 0;
+      for (let i = dbHistory.length - 1; i >= 0; i--) {
+        const msg = dbHistory[i];
+        if (msg.role === "assistant") {
+          const meta = msg.metadata as any;
+          if (meta?.type === "booking" || meta?.type === "onboarding" || meta?.type === "onboarding_collect" || meta?.type === "payment_collection") {
+            break; // Hit a service message, stop counting
           }
-          consecutiveNonService++;
         }
-        console.log(`[NightConcierge] Consecutive non-service messages: ${consecutiveNonService}`);
-      } else {
-        history = [{ role: "user", content: input.content }];
+        consecutiveNonService++;
       }
+      console.log(`[NightConcierge] Consecutive non-service messages: ${consecutiveNonService}`);
 
       // Parse explicit date/time BEFORE calling LLM
       const dateTimeIntent = parseExplicitDateTime(input.content);
@@ -1232,18 +1243,18 @@ export const chatRouter = router({
           }
         }
 
-        // If booking detected, create service request (use guest ID -1 for unauthenticated)
+        // If booking detected, create service request
         let serviceRequestId: number | null = null;
         let serviceCategory: string | null = null;
         if (bookingMeta) {
-          const effectiveUserId = bldgUserId || -1;
+          const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
-          // Duplicate booking guardrail (skip for guest users)
-          const duplicate = bldgUserId ? await findDuplicateBooking(
+          // Duplicate booking guardrail
+          const duplicate = await findDuplicateBooking(
             bldgUserId,
             serviceCategory
-          ) : null;
+          );
 
           if (duplicate) {
             console.log(
@@ -1355,7 +1366,7 @@ export const chatRouter = router({
             console.log("[OPS_INTEGRATION] DEBUG: bldgUserId=", bldgUserId, "type:", typeof bldgUserId);
             try {
               // Re-fetch user to get latest profile data (may have been updated during onboarding)
-              const freshUser = bldgUserId ? await getBldgUserById(bldgUserId) : null;
+              const freshUser = await getBldgUserById(bldgUserId);
               const payload = {
                 bldgUserId: effectiveUserId, // User ID for receipt notifications
                 phone: freshUser?.phoneE164 || user?.phoneE164 || "+13235559999",
@@ -1435,10 +1446,24 @@ export const chatRouter = router({
   /**
    * Get chat history for the current bldg user.
    */
-  getHistory: publicProcedure.query(async ({ ctx }) => {
+  getHistory: publicProcedure
+    .input(
+      z
+        .object({
+          sessionEpoch: z.number().optional(),
+          sessionUserId: z.number().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx }) => {
     const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
     if (!bldgUserId) {
-      return { messages: [], user: null, onboardingComplete: false };
+      return {
+        messages: [],
+        user: null,
+        session: { bldgUserId: null },
+        onboardingComplete: false,
+      };
     }
 
     const user = await getBldgUserById(bldgUserId);
@@ -1474,6 +1499,9 @@ export const chatRouter = router({
             onboardingStep: user.onboardingStep,
           }
         : null,
+      session: {
+        bldgUserId,
+      },
       onboardingComplete: (user?.onboardingStep ?? 0) >= ONBOARDING_STEP.COMPLETE,
     };
   }),
@@ -1539,7 +1567,21 @@ export const chatRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
-      const effectiveUserId = bldgUserId || -1;
+      if (!bldgUserId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active session",
+        });
+      }
+
+      const userRequests = await getServiceRequests(bldgUserId, 100);
+      const ownsRequest = userRequests.some((r) => r.id === input.serviceRequestId);
+      if (!ownsRequest) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Service request not found",
+        });
+      }
 
       const updated = await updateServiceRequest(input.serviceRequestId, {
         scheduledDate: input.newDate,
@@ -1572,7 +1614,21 @@ export const chatRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
-      const effectiveUserId = bldgUserId || -1;
+      if (!bldgUserId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active session",
+        });
+      }
+
+      const userRequests = await getServiceRequests(bldgUserId, 100);
+      const ownsRequest = userRequests.some((r) => r.id === input.serviceRequestId);
+      if (!ownsRequest) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Service request not found",
+        });
+      }
 
       const updated = await updateServiceRequest(input.serviceRequestId, {
         status: "cancelled",
@@ -1609,9 +1665,11 @@ export const chatRouter = router({
    */
   getActiveBookings: publicProcedure.query(async ({ ctx }) => {
     const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
-    const effectiveUserId = bldgUserId || -1;
+    if (!bldgUserId) {
+      return { bookings: [] };
+    }
 
-    const requests = await getServiceRequests(effectiveUserId, 50);
+    const requests = await getServiceRequests(bldgUserId, 50);
     const activeBookings = requests.filter(
       (req) => req.status === "pending" || req.status === "confirmed"
     );

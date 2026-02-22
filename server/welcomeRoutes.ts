@@ -20,6 +20,7 @@ import { jwtVerify, SignJWT } from "jose";
 import { parse as parseCookieHeader } from "cookie";
 import axios from "axios";
 import { upsertBldgUser, getBldgUserById, insertChatMessage, updateBldgUser } from "./db";
+import { getSessionCookieOptions } from "./_core/cookies";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -211,11 +212,7 @@ export function registerWelcomeRoutes(app: Router): void {
       const { userId, sessionToken } = await createGuestUser();
 
       res.cookie(BLDG_COOKIE_NAME, sessionToken, {
-        httpOnly: true,
-        path: "/",
-        sameSite: "none",
-        secure: true,
-        domain: ".bldg.chat",
+        ...getSessionCookieOptions(req),
         maxAge: ONE_YEAR_SECONDS * 1000,
       });
 
@@ -290,11 +287,7 @@ export function registerWelcomeRoutes(app: Router): void {
       const sessionToken = await createBldgSession(bldgUser.id);
 
       res.cookie(BLDG_COOKIE_NAME, sessionToken, {
-        httpOnly: true,
-        path: "/",
-        sameSite: "none",
-        secure: true,
-        domain: ".bldg.chat",
+        ...getSessionCookieOptions(req),
         maxAge: ONE_YEAR_SECONDS * 1000,
       });
 

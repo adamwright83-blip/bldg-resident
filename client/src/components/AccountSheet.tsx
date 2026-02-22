@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { getLogoutUrl } from "@/const";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface AccountSheetProps {
@@ -17,7 +17,7 @@ export default function AccountSheet({ isOpen, onClose }: AccountSheetProps) {
     setShowSignOutConfirm(false);
     onClose();
     await logout();
-    window.location.href = getLoginUrl();
+    window.location.href = getLogoutUrl();
   };
 
   return (

@@ -1,22 +1,28 @@
 import { useState, useEffect } from "react";
-import { CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import {
+  CardCvcElement,
+  CardExpiryElement,
+  CardNumberElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 
 interface PaymentMethodFormProps {
-  bldgUserId: number;
   onSuccess: () => void;
 }
 
-export function PaymentMethodForm({ bldgUserId, onSuccess }: PaymentMethodFormProps) {
+export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [last4, setLast4] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [postalCode, setPostalCode] = useState("");
 
   const savePaymentMethod = trpc.stripe.savePaymentMethod.useMutation({
     onSuccess: (data) => {
@@ -46,14 +52,15 @@ export function PaymentMethodForm({ bldgUserId, onSuccess }: PaymentMethodFormPr
     e.preventDefault();
 
     if (!stripe || !elements) {
+      toast.error("Secure card fields are still loading.");
       return;
     }
 
     setLoading(true);
 
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) {
-      toast.error("Card element not found");
+    const cardNumberElement = elements.getElement(CardNumberElement);
+    if (!cardNumberElement) {
+      toast.error("Card number field not ready");
       setLoading(false);
       return;
     }
@@ -62,7 +69,12 @@ export function PaymentMethodForm({ bldgUserId, onSuccess }: PaymentMethodFormPr
       // Create payment method
       const { error, paymentMethod } = await stripe.createPaymentMethod({
         type: "card",
-        card: cardElement,
+        card: cardNumberElement,
+        billing_details: {
+          address: {
+            postal_code: postalCode || undefined,
+          },
+        },
       });
 
       if (error) {
@@ -80,7 +92,6 @@ export function PaymentMethodForm({ bldgUserId, onSuccess }: PaymentMethodFormPr
       // Save to backend
       await savePaymentMethod.mutateAsync({
         paymentMethodId: paymentMethod.id,
-        bldgUserId,
       });
     } catch (error) {
       console.error("[PaymentMethodForm] Error:", error);
@@ -119,28 +130,72 @@ export function PaymentMethodForm({ bldgUserId, onSuccess }: PaymentMethodFormPr
           className="bg-white border border-gray-200 rounded-lg p-4 my-3 w-full"
         >
           <form onSubmit={handleSubmit} className="w-full">
-            <div className="mb-4 w-full border border-gray-300 rounded-lg p-4 bg-white" style={{ minHeight: '48px' }}>
-              <CardElement
-                options={{
-                  style: {
-                    base: {
-                      fontSize: "16px",
-                      color: "#000",
-                      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                      "::placeholder": {
-                        color: "#999",
+            {!stripe || !elements ? (
+              <div className="mb-4 w-full border border-gray-300 rounded-lg p-4 bg-white text-sm text-[#4A4540]">
+                Initializing secure card fields...
+              </div>
+            ) : (
+              <>
+                <div className="mb-3 w-full border border-gray-300 rounded-lg p-4 bg-white" style={{ minHeight: "48px" }}>
+                  <CardNumberElement
+                    options={{
+                      style: {
+                        base: {
+                          fontSize: "16px",
+                          color: "#000",
+                          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                          "::placeholder": { color: "#999" },
+                        },
+                        invalid: { color: "#dc2626" },
                       },
-                    },
-                    invalid: {
-                      color: "#dc2626",
-                    },
-                  },
-                }}
-              />
-            </div>
+                    }}
+                  />
+                </div>
+                <div className="mb-3 grid grid-cols-2 gap-3">
+                  <div className="border border-gray-300 rounded-lg p-4 bg-white" style={{ minHeight: "48px" }}>
+                    <CardExpiryElement
+                      options={{
+                        style: {
+                          base: {
+                            fontSize: "16px",
+                            color: "#000",
+                            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                            "::placeholder": { color: "#999" },
+                          },
+                          invalid: { color: "#dc2626" },
+                        },
+                      }}
+                    />
+                  </div>
+                  <div className="border border-gray-300 rounded-lg p-4 bg-white" style={{ minHeight: "48px" }}>
+                    <CardCvcElement
+                      options={{
+                        style: {
+                          base: {
+                            fontSize: "16px",
+                            color: "#000",
+                            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                            "::placeholder": { color: "#999" },
+                          },
+                          invalid: { color: "#dc2626" },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+                <input
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  placeholder="ZIP"
+                  className="mb-4 w-full border border-gray-300 rounded-lg px-4 py-3 text-base text-black placeholder:text-gray-400 bg-white"
+                  autoComplete="postal-code"
+                  inputMode="numeric"
+                />
+              </>
+            )}
             <button
               type="submit"
-              disabled={!stripe || loading}
+              disabled={!stripe || !elements || loading}
               className="w-full bg-black text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ height: '48px' }}
             >

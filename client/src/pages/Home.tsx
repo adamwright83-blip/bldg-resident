@@ -32,7 +32,8 @@ import ServicesDrawer from "@/components/ServicesDrawer";
 import Vault from "@/pages/Vault";
 import AccountSheet from "@/components/AccountSheet";
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 // ─── Service tile definitions ───
 
@@ -319,20 +320,28 @@ function ConfirmationCard({
 
 // ─── Guest session helper ───
 
-async function ensureSession(): Promise<boolean> {
+type EnsureSessionResult = {
+  ok: boolean;
+  userId: number | null;
+  alreadyExists: boolean;
+};
+
+async function ensureSession(): Promise<EnsureSessionResult> {
   try {
     const res = await fetch(`${API_BASE}/api/guest-session`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { ok: false, userId: null, alreadyExists: false };
     const data = await res.json();
-    console.log("[Session]", data.alreadyExists ? "Existing session" : "Created guest session", data.userId);
-    return true;
+    const userId = typeof data.userId === "number" ? data.userId : null;
+    const alreadyExists = Boolean(data.alreadyExists);
+    console.log("[Session]", alreadyExists ? "Existing session" : "Created guest session", userId);
+    return { ok: true, userId, alreadyExists };
   } catch (err) {
     console.error("[Session] Failed to ensure session:", err);
-    return false;
+    return { ok: false, userId: null, alreadyExists: false };
   }
 }
 
@@ -359,6 +368,7 @@ function createRipple(e: React.MouseEvent<HTMLButtonElement>) {
 // ─── Main Component ───
 
 export default function Home() {
+  const utils = trpc.useUtils();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -380,6 +390,9 @@ export default function Home() {
   // Full-screen confirmation ceremony state
   const [ceremonyData, setCeremonyData] = useState<{ service: string; date: string; window: string } | null>(null);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
+  const [sessionUserId, setSessionUserId] = useState<number | null>(null);
+  const sessionBootstrapRetried = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -387,8 +400,11 @@ export default function Home() {
 
   // Ensure session exists on mount (creates guest user if needed)
   useEffect(() => {
-    ensureSession().then((ok) => {
-      setSessionReady(ok);
+    ensureSession().then((session) => {
+      setSessionReady(session.ok);
+      if (session.userId !== null) {
+        setSessionUserId(session.userId);
+      }
     });
   }, []);
 
@@ -407,8 +423,16 @@ export default function Home() {
     }
   }, [sessionReady]);
 
+  const historyQueryInput = useMemo(
+    () => ({
+      sessionEpoch,
+      sessionUserId: sessionUserId ?? undefined,
+    }),
+    [sessionEpoch, sessionUserId]
+  );
+
   // Fetch chat history AFTER session is ready
-  const historyQuery = trpc.chat.getHistory.useQuery(undefined, {
+  const historyQuery = trpc.chat.getHistory.useQuery(historyQueryInput, {
     refetchOnWindowFocus: false,
     enabled: sessionReady,
   });
@@ -428,6 +452,35 @@ export default function Home() {
 
   // Auto-trigger registration for fresh users (NOT_STARTED)
   const registrationTriggered = useRef(false);
+  const lastHistoryUserIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    const historyUserId = historyQuery.data.user?.id ?? null;
+
+    const previousUserId = lastHistoryUserIdRef.current;
+    if (previousUserId === null) {
+      lastHistoryUserIdRef.current = historyUserId;
+      return;
+    }
+    if (historyUserId === previousUserId) return;
+
+    console.warn("[Session] User changed, resetting chat cache/state");
+    lastHistoryUserIdRef.current = historyUserId;
+    void utils.chat.getHistory.cancel();
+    utils.chat.getHistory.setData(historyQueryInput, {
+      messages: [],
+      user: null,
+      session: { bldgUserId: null },
+      onboardingComplete: false,
+    });
+    void utils.chat.getHistory.invalidate();
+    setMessages([]);
+    registrationTriggered.current = false;
+    sessionBootstrapRetried.current = false;
+    setSessionUserId(historyUserId);
+    setSessionEpoch((prev) => prev + 1);
+  }, [historyQuery.data, historyQueryInput, sessionEpoch, utils]);
   useEffect(() => {
     if (
       historyQuery.data &&
@@ -456,6 +509,27 @@ export default function Home() {
       // If freshly logged in with empty history, clear messages immediately
       if (historyQuery.data.messages.length === 0 && historyQuery.data.user === null) {
         setMessages([]);
+        if (!sessionBootstrapRetried.current) {
+          sessionBootstrapRetried.current = true;
+          ensureSession().then((session) => {
+            if (session.ok) {
+              setSessionReady(true);
+              if (session.userId !== null && session.userId !== sessionUserId) {
+                void utils.chat.getHistory.cancel();
+                utils.chat.getHistory.setData(historyQueryInput, {
+                  messages: [],
+                  user: null,
+                  session: { bldgUserId: null },
+                  onboardingComplete: false,
+                });
+                void utils.chat.getHistory.invalidate();
+                setSessionUserId(session.userId);
+                setSessionEpoch((prev) => prev + 1);
+              }
+              setTimeout(() => historyQuery.refetch(), 250);
+            }
+          });
+        }
         return;
       }
       
@@ -601,6 +675,10 @@ export default function Home() {
     async (text?: string) => {
       const content = (text || input).trim();
       if (!content || isSending) return;
+      if (!sessionReady) {
+        console.warn("[Chat] Blocked send while session is not ready");
+        return;
+      }
 
       setInput("");
       setIsSending(true);
@@ -617,12 +695,20 @@ export default function Home() {
 
       try {
         const response = await sendMutation.mutateAsync({ content });
+        const collectStep = (response as any).collectStep as string | undefined;
+        const collectMetadata = collectStep
+          ? {
+              type: "onboarding_collect" as const,
+              collectType: collectStep,
+            }
+          : undefined;
+
         const assistantMsg: ChatMsg = {
           role: "assistant",
           content: response.content,
           metadata: response.booking
             ? { type: "booking", ...response.booking }
-            : undefined,
+            : collectMetadata,
           createdAt: new Date(),
         };
 
@@ -652,21 +738,6 @@ export default function Home() {
           setOnboardingComplete(true);
         }
 
-        // If the backend returned a collection step (name/phone/payment prompt),
-        // add it as a message immediately so the user sees it without waiting for refetch
-        if ((response as any).collectStep) {
-          const collectMsg: ChatMsg = {
-            role: "assistant",
-            content: (response as any).content,
-            metadata: {
-              type: "onboarding_collect",
-              collectType: (response as any).collectStep,
-            },
-            createdAt: new Date(),
-          };
-          setMessages((prev) => [...prev, collectMsg]);
-        }
-
         if (response.booking) {
           activeBookingsQuery.refetch();
           // Refetch history to pick up post-booking collection messages
@@ -680,6 +751,31 @@ export default function Home() {
         }
       } catch (err: any) {
         console.error("[Chat] Send error:", err);
+        if (err?.data?.code === "UNAUTHORIZED") {
+          const session = await ensureSession();
+          setSessionReady(session.ok);
+          if (session.userId !== null && session.userId !== sessionUserId) {
+            void utils.chat.getHistory.cancel();
+            utils.chat.getHistory.setData(historyQueryInput, {
+              messages: [],
+              user: null,
+              session: { bldgUserId: null },
+              onboardingComplete: false,
+            });
+            void utils.chat.getHistory.invalidate();
+            setSessionUserId(session.userId);
+            setSessionEpoch((prev) => prev + 1);
+          }
+          const sessionMsg: ChatMsg = {
+            role: "assistant",
+            content: session.ok
+              ? "Session restored. Send that again."
+              : "Session expired. Refresh and try again.",
+            createdAt: new Date(),
+          };
+          setMessages((prev) => [...prev, sessionMsg]);
+          return;
+        }
         const fallback: ChatMsg = {
           role: "assistant",
           content: "I'm having a moment \u2014 try again in a few seconds.",
@@ -880,12 +976,15 @@ export default function Home() {
                       </div>
                       {msg.metadata.collectType === "payment" ? (
                         <TrustCard collectType="payment" content={msg.content}>
-                          <Elements stripe={stripePromise}>
-                            <PaymentMethodForm
-                              bldgUserId={historyQuery.data?.user?.id || 0}
-                              onSuccess={() => historyQuery.refetch()}
-                            />
-                          </Elements>
+                          {!stripePromise ? (
+                            <p className="chat-bubble-text">Card setup is temporarily unavailable.</p>
+                          ) : !historyQuery.data?.user?.id ? (
+                            <p className="chat-bubble-text">Reconnecting your session. Try again in a moment.</p>
+                          ) : (
+                            <Elements stripe={stripePromise}>
+                              <PaymentMethodForm onSuccess={() => historyQuery.refetch()} />
+                            </Elements>
+                          )}
                         </TrustCard>
                       ) : (
                         <TrustCard collectType={msg.metadata.collectType || "info"} content={msg.content} />
@@ -898,21 +997,26 @@ export default function Home() {
                       <div className="bldg-avatar" style={{ visibility: "hidden" }}>
                         <BldgLogo size="small" />
                       </div>
-                      <Elements stripe={stripePromise}>
-                            <PaymentMethodForm
-                              bldgUserId={historyQuery.data?.user?.id || 0}
-                              onSuccess={() => {
-                                // Add success message to chat
-                                const successMsg: ChatMsg = {
-                                  role: "assistant",
-                                  content: "You're all set. Type 'laundry' and see what happens.",
-                                  createdAt: new Date(),
-                                };
-                                setMessages((prev) => [...prev, successMsg]);
-                                historyQuery.refetch();
-                              }}
-                        />
-                      </Elements>
+                      {!stripePromise ? (
+                        <p className="chat-bubble-text">Card setup is temporarily unavailable.</p>
+                      ) : !historyQuery.data?.user?.id ? (
+                        <p className="chat-bubble-text">Reconnecting your session. Try again in a moment.</p>
+                      ) : (
+                        <Elements stripe={stripePromise}>
+                          <PaymentMethodForm
+                            onSuccess={() => {
+                              // Add success message to chat
+                              const successMsg: ChatMsg = {
+                                role: "assistant",
+                                content: "You're all set. Type 'laundry' and see what happens.",
+                                createdAt: new Date(),
+                              };
+                              setMessages((prev) => [...prev, successMsg]);
+                              historyQuery.refetch();
+                            }}
+                          />
+                        </Elements>
+                      )}
                     </div>
                   )}
                 </div>

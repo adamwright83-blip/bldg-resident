@@ -8,6 +8,30 @@ import { createOpsPickup } from "../opsIntegration";
 import { getDb } from "../db";
 import { bldgUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { parse as parseCookieHeader } from "cookie";
+import { jwtVerify } from "jose";
+
+const BLDG_COOKIE_NAME = "bldg_session";
+
+async function getBldgUserIdFromRequest(req: any): Promise<number | null> {
+  const cookieHeader = req.headers?.cookie;
+  if (!cookieHeader) return null;
+
+  const parsed = parseCookieHeader(cookieHeader);
+  const token = parsed[BLDG_COOKIE_NAME];
+  if (!token) return null;
+
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
+    const { payload } = await jwtVerify(token, secret, {
+      algorithms: ["HS256"],
+    });
+    const { bldgUserId } = payload as Record<string, unknown>;
+    return typeof bldgUserId === "number" ? bldgUserId : null;
+  } catch {
+    return null;
+  }
+}
 
 export const stripeRouter = router({
   /**
@@ -18,11 +42,17 @@ export const stripeRouter = router({
     .input(
       z.object({
         paymentMethodId: z.string(), // pm_xxx from Stripe Elements
-        bldgUserId: z.number(),
       })
     )
-    .mutation(async ({ input }) => {
-      const { paymentMethodId, bldgUserId } = input;
+    .mutation(async ({ input, ctx }) => {
+      const { paymentMethodId } = input;
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active session",
+        });
+      }
 
       // Get user details
       const user = await getBldgUserById(bldgUserId);

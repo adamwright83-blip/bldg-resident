@@ -11,6 +11,7 @@
  */
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { API_BASE } from "@/const";
 
 export default function Welcome() {
   const [, navigate] = useLocation();
@@ -23,7 +24,7 @@ export default function Welcome() {
 
     if (token) {
       // Redirect to the server-side handler
-      window.location.href = `/api/welcome?token=${encodeURIComponent(token)}`;
+      window.location.href = `${API_BASE}/api/welcome?token=${encodeURIComponent(token)}`;
     } else {
       // No token — redirect to home
       navigate("/");
