@@ -32,11 +32,17 @@ import ServicesDrawer from "@/components/ServicesDrawer";
 import Vault from "@/pages/Vault";
 import AccountSheet from "@/components/AccountSheet";
 
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+const STRIPE_PUBLISHABLE_FALLBACK =
+  "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
+const stripePublishableKey =
+  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || STRIPE_PUBLISHABLE_FALLBACK;
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 if (typeof window !== "undefined") {
   console.log("[Stripe] Frontend publishable key present:", Boolean(stripePublishableKey));
+  if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
+    console.warn("[Stripe] Using fallback publishable key; set VITE_STRIPE_PUBLISHABLE_KEY in Vercel Production.");
+  }
 }
 
 // ─── Service tile definitions ───
