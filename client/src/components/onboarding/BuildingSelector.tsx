@@ -6,16 +6,20 @@
 import { useState } from "react";
 
 const BUILDINGS = [
-  { slug: "opus-la", name: "For Opus LA" },
-  { slug: "century-park-east", name: "For Century Park East" },
+  { slug: "opus-south", name: "3545 Wilshire Blvd (Opus South)" },
+  { slug: "opus-north", name: "3650 Wilshire Blvd (Opus North)" },
+  { slug: "cpe-north", name: "2160 Century Park East" },
+  { slug: "cpe-south", name: "2170 Century Park East" },
 ];
 
 interface BuildingSelectorProps {
   onComplete: (building: string, unit: string) => void;
+  /** If provided, building was resolved from hostname — skip dropdown */
+  preselectedBuilding?: { slug: string; displayName: string };
 }
 
-export default function BuildingSelector({ onComplete }: BuildingSelectorProps) {
-  const [building, setBuilding] = useState("");
+export default function BuildingSelector({ onComplete, preselectedBuilding }: BuildingSelectorProps) {
+  const [building, setBuilding] = useState(preselectedBuilding?.slug ?? "");
   const [unit, setUnit] = useState("");
   const [error, setError] = useState("");
 
@@ -78,7 +82,7 @@ export default function BuildingSelector({ onComplete }: BuildingSelectorProps) 
 
       {/* Form */}
       <div style={{ width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 16 }}>
-        {/* Building dropdown */}
+        {/* Building — locked if resolved from hostname, otherwise dropdown */}
         <div>
           <label
             style={{
@@ -93,39 +97,57 @@ export default function BuildingSelector({ onComplete }: BuildingSelectorProps) 
           >
             Building
           </label>
-          <select
-            value={building}
-            onChange={(e) => {
-              setBuilding(e.target.value);
-              setError("");
-            }}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: 10,
-              border: "1px solid #E0D9CE",
-              background: "#FFFFFF",
-              fontSize: 16,
-              color: building ? "#2C2824" : "#B0A89C",
-              fontFamily: "inherit",
-              appearance: "none",
-              WebkitAppearance: "none",
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%238A7D6B' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 14px center",
-              cursor: "pointer",
-              outline: "none",
-            }}
-          >
-            <option value="" disabled>
-              Select your building
-            </option>
-            {BUILDINGS.map((b) => (
-              <option key={b.slug} value={b.slug}>
-                {b.name}
+          {preselectedBuilding ? (
+            <div
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid #E0D9CE",
+                background: "#F5F0E8",
+                fontSize: 16,
+                color: "#2C2824",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
+              }}
+            >
+              {preselectedBuilding.displayName}
+            </div>
+          ) : (
+            <select
+              value={building}
+              onChange={(e) => {
+                setBuilding(e.target.value);
+                setError("");
+              }}
+              style={{
+                width: "100%",
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid #E0D9CE",
+                background: "#FFFFFF",
+                fontSize: 16,
+                color: building ? "#2C2824" : "#B0A89C",
+                fontFamily: "inherit",
+                appearance: "none",
+                WebkitAppearance: "none",
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%238A7D6B' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right 14px center",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              <option value="" disabled>
+                Select your building
               </option>
-            ))}
-          </select>
+              {BUILDINGS.map((b) => (
+                <option key={b.slug} value={b.slug}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Unit number */}

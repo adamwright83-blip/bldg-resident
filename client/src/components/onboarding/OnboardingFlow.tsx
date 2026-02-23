@@ -10,6 +10,10 @@
  */
 import { useState, useCallback, useEffect, useRef } from "react";
 import { API_BASE } from "@/const";
+import {
+  extractNumericHostToken,
+  resolveBuildingFromHostname,
+} from "@shared/buildingHostMap";
 import SplashScreen from "./SplashScreen";
 import BuildingSelector from "./BuildingSelector";
 import TutorialScreen from "./TutorialScreen";
@@ -48,9 +52,24 @@ function saveBuildingLocally(building: string, unit: string) {
 }
 
 const BUILDING_NAMES: Record<string, string> = {
-  "opus-la": "For Opus LA",
-  "century-park-east": "For Century Park East",
+  "opus-south": "3545 Wilshire Blvd",
+  "opus-north": "3650 Wilshire Blvd",
+  "cpe-north": "2160 Century Park East",
+  "cpe-south": "2170 Century Park East",
 };
+
+/** Resolve building from current hostname, if numeric subdomain */
+function getHostnameBuilding(): { slug: string; displayName: string } | null {
+  if (typeof window === "undefined") return null;
+  const token = extractNumericHostToken(window.location.hostname);
+  if (!token) return null;
+  const record = resolveBuildingFromHostname(window.location.hostname);
+  if (!record) return null;
+  return {
+    slug: record.slug,
+    displayName: BUILDING_NAMES[record.slug] || record.displayName || record.token,
+  };
+}
 
 /**
  * Create guest session early so the cookie exists before /api/set-building.
@@ -80,6 +99,8 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
   );
   const [buildingName, setBuildingName] = useState("");
   const sessionCreated = useRef(false);
+  // Resolved once on mount — non-reactive
+  const hostnameBuilding = getHostnameBuilding();
 
   // Create guest session as soon as onboarding starts (before building step)
   useEffect(() => {
@@ -139,7 +160,12 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
   return (
     <>
       {step === "splash" && <SplashScreen onComplete={handleSplashComplete} />}
-      {step === "building" && <BuildingSelector onComplete={handleBuildingComplete} />}
+      {step === "building" && (
+        <BuildingSelector
+          onComplete={handleBuildingComplete}
+          preselectedBuilding={hostnameBuilding ?? undefined}
+        />
+      )}
       {step === "tutorial" && (
         <TutorialScreen buildingName={buildingName} onComplete={handleTutorialComplete} />
       )}
