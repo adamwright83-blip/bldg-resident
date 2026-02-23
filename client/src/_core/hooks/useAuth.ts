@@ -40,7 +40,12 @@ export function useAuth(options?: UseAuthOptions) {
       await utils.auth.me.invalidate();
       // Clear chat history cache to prevent cross-user data leaks
       await utils.chat.getHistory.invalidate();
-      utils.chat.getHistory.setData(undefined, { messages: [], user: null, onboardingComplete: false });
+      utils.chat.getHistory.setData(undefined, {
+        messages: [],
+        user: null,
+        session: { bldgUserId: null },
+        onboardingComplete: false,
+      });
     }
   }, [logoutMutation, utils]);
 

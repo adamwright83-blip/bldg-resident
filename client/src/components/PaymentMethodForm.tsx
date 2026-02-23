@@ -18,12 +18,12 @@ interface PaymentMethodFormProps {
 export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
-  const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+  const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim();
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [last4, setLast4] = useState<string | null>(null);
-  const [hidden, setHidden] = useState(false);
   const [postalCode, setPostalCode] = useState("");
+  const [initError, setInitError] = useState<string | null>(null);
 
   const savePaymentMethod = trpc.stripe.savePaymentMethod.useMutation({
     onSuccess: (data) => {
@@ -40,28 +40,26 @@ export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
     },
   });
 
-  // After showing the confirmation for 3 seconds, fade out and hide completely
   useEffect(() => {
-    if (!saved) return;
+    if (stripe && elements) {
+      setInitError(null);
+      return;
+    }
     const timer = setTimeout(() => {
-      setHidden(true);
-    }, 3000);
+      setInitError(
+        publishableKey
+          ? "Secure card fields could not initialize. Refresh and try again."
+          : "Stripe is not configured. Missing VITE_STRIPE_PUBLISHABLE_KEY in production."
+      );
+    }, 5000);
     return () => clearTimeout(timer);
-  }, [saved]);
-
-  useEffect(() => {
-    console.log("[Stripe] PaymentMethodForm init", {
-      hasPublishableKey: Boolean(stripeKey),
-      stripeReady: Boolean(stripe),
-      elementsReady: Boolean(elements),
-    });
-  }, [stripeKey, stripe, elements]);
+  }, [elements, publishableKey, stripe]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!stripe || !elements) {
-      toast.error("Secure card fields are still loading.");
+      toast.error(initError || "Secure card fields are still loading.");
       return;
     }
 
@@ -109,11 +107,6 @@ export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
     }
   };
 
-  // Fully hidden after fade-out completes
-  if (hidden) {
-    return null;
-  }
-
   return (
     <AnimatePresence mode="wait">
       {saved ? (
@@ -141,7 +134,7 @@ export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
           <form onSubmit={handleSubmit} className="w-full">
             {!stripe || !elements ? (
               <div className="mb-4 w-full border border-gray-300 rounded-lg p-4 bg-white text-sm text-[#4A4540]">
-                Initializing secure card fields...
+                {initError || "Initializing secure card fields..."}
               </div>
             ) : (
               <>

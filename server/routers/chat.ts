@@ -331,21 +331,22 @@ async function handlePostBookingCollection(
   }
 
   // Step 4: Collecting payment — this is handled by the Stripe form on the frontend.
-  // If the user sends a text message while on this step, they might be trying to
-  // skip payment or ask something. Let them through to normal chat but keep the step.
+  // If the user sends a text message while on this step, keep them gated until
+  // payment is saved and onboarding is complete.
   if (currentStep === ONBOARDING_STEP.COLLECTING_PAYMENT) {
-    // Check if payment was saved (the Stripe form calls a separate endpoint)
     const user = await getBldgUserById(bldgUserId);
     if (user?.paymentMethodSaved) {
       await updateBldgUser(bldgUserId, {
         onboardingStep: ONBOARDING_STEP.COMPLETE,
       } as any);
-      // Don't return a response — let the message flow through to normal chat
       return null;
     }
-    // Payment not saved yet — let the message through to normal chat anyway.
-    // The payment form stays visible. Don't block them.
-    return null;
+    return {
+      response: "Payment method required before placing your first order.",
+      newStep: ONBOARDING_STEP.COLLECTING_PAYMENT,
+      onboardingComplete: false,
+      collectType: "payment",
+    };
   }
 
   // Step 5: Onboarding already complete
@@ -1247,6 +1248,37 @@ export const chatRouter = router({
         let serviceRequestId: number | null = null;
         let serviceCategory: string | null = null;
         if (bookingMeta) {
+          const userForPaymentGate = await getBldgUserById(bldgUserId);
+          if (!userForPaymentGate?.paymentMethodSaved) {
+            const paymentPrompt = "Last thing — add a card so you're set for next time.";
+            const paymentStep = ONBOARDING_STEP.COLLECTING_PAYMENT;
+
+            if ((userForPaymentGate?.onboardingStep ?? 0) < paymentStep) {
+              await updateBldgUser(bldgUserId, {
+                onboardingStep: paymentStep,
+              } as any);
+            }
+
+            await insertChatMessage({
+              bldgUserId,
+              role: "assistant",
+              content: paymentPrompt,
+              metadata: {
+                type: "onboarding_collect",
+                collectType: "payment",
+                step: paymentStep,
+              },
+            });
+
+            return {
+              role: "assistant" as const,
+              content: paymentPrompt,
+              booking: null,
+              onboardingComplete: false,
+              collectStep: "payment",
+            };
+          }
+
           const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
@@ -1469,9 +1501,23 @@ export const chatRouter = router({
     const user = await getBldgUserById(bldgUserId);
     const messages = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
 
-    // Filter out payment_collection messages if user already has payment method saved
+    // Filter out payment collection prompts once payment is saved.
+    // Include legacy plain-text prompts so old chat rows do not keep reappearing.
     const filteredMessages = messages.filter((m) => {
-      if (m.metadata && typeof m.metadata === 'object' && 'type' in m.metadata && m.metadata.type === 'payment_collection') {
+      if (user?.paymentMethodSaved && m.role === "assistant") {
+        const plain = m.content.toLowerCase();
+        if (plain.includes("last thing") && plain.includes("add a card")) {
+          return false;
+        }
+      }
+      if (!m.metadata || typeof m.metadata !== "object" || !("type" in m.metadata)) {
+        return true;
+      }
+      const meta: any = m.metadata;
+      const isPaymentCollection = meta.type === "payment_collection";
+      const isOnboardingPaymentCollect =
+        meta.type === "onboarding_collect" && meta.collectType === "payment";
+      if (isPaymentCollection || isOnboardingPaymentCollect) {
         return !user?.paymentMethodSaved;
       }
       return true;

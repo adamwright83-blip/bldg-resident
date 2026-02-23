@@ -32,18 +32,13 @@ import ServicesDrawer from "@/components/ServicesDrawer";
 import Vault from "@/pages/Vault";
 import AccountSheet from "@/components/AccountSheet";
 
-const STRIPE_PUBLISHABLE_FALLBACK =
-  "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
-const stripePublishableKey =
-  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || STRIPE_PUBLISHABLE_FALLBACK;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
-
-if (typeof window !== "undefined") {
-  console.log("[Stripe] Frontend publishable key present:", Boolean(stripePublishableKey));
-  if (!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
-    console.warn("[Stripe] Using fallback publishable key; set VITE_STRIPE_PUBLISHABLE_KEY in Vercel Production.");
-  }
-}
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
+const stripeInitError = stripePublishableKey
+  ? null
+  : "Stripe is not configured: missing VITE_STRIPE_PUBLISHABLE_KEY.";
+const stripePromise = stripeInitError ? null : loadStripe(stripePublishableKey);
+const PAYMENT_SAVED_MESSAGE =
+  "Payment info secured by Stripe. Time to place your first order - type 'laundry' in the composer chat field and see what happens. Your card on file will not be charged.";
 
 // ─── Service tile definitions ───
 
@@ -681,6 +676,35 @@ export default function Home() {
   const showTiles = !isSending && messages.length === 0 && onboardingComplete === true;
   const showEmptyState = messages.length === 0 && !isSending;
 
+  const handlePaymentSaved = useCallback(() => {
+    const successMsg: ChatMsg = {
+      role: "assistant",
+      content: PAYMENT_SAVED_MESSAGE,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => {
+      const withoutPaymentPrompt = prev.filter((msg) => {
+        if (msg.role !== "assistant") return true;
+        const content = msg.content.toLowerCase();
+        const isLegacyPrompt =
+          content.includes("last thing") && content.includes("add a card");
+        const isPaymentCollectMeta =
+          msg.metadata?.type === "payment_collection" ||
+          (msg.metadata?.type === "onboarding_collect" &&
+            msg.metadata?.collectType === "payment");
+        return !(isLegacyPrompt || isPaymentCollectMeta);
+      });
+
+      const last = withoutPaymentPrompt[withoutPaymentPrompt.length - 1];
+      if (last?.role === "assistant" && last.content === PAYMENT_SAVED_MESSAGE) {
+        return withoutPaymentPrompt;
+      }
+
+      return [...withoutPaymentPrompt, successMsg];
+    });
+    setOnboardingComplete(true);
+  }, []);
+
   const handleSend = useCallback(
     async (text?: string) => {
       const content = (text || input).trim();
@@ -987,12 +1011,14 @@ export default function Home() {
                       {msg.metadata.collectType === "payment" ? (
                         <TrustCard collectType="payment" content={msg.content}>
                           {!stripePromise ? (
-                            <p className="chat-bubble-text">Card setup is temporarily unavailable.</p>
+                            <p className="chat-bubble-text">
+                              {stripeInitError || "Card setup is temporarily unavailable."}
+                            </p>
                           ) : !historyQuery.data?.user?.id ? (
                             <p className="chat-bubble-text">Reconnecting your session. Try again in a moment.</p>
                           ) : (
                             <Elements stripe={stripePromise}>
-                              <PaymentMethodForm onSuccess={() => historyQuery.refetch()} />
+                              <PaymentMethodForm onSuccess={handlePaymentSaved} />
                             </Elements>
                           )}
                         </TrustCard>
@@ -1008,23 +1034,14 @@ export default function Home() {
                         <BldgLogo size="small" />
                       </div>
                       {!stripePromise ? (
-                        <p className="chat-bubble-text">Card setup is temporarily unavailable.</p>
+                        <p className="chat-bubble-text">
+                          {stripeInitError || "Card setup is temporarily unavailable."}
+                        </p>
                       ) : !historyQuery.data?.user?.id ? (
                         <p className="chat-bubble-text">Reconnecting your session. Try again in a moment.</p>
                       ) : (
                         <Elements stripe={stripePromise}>
-                          <PaymentMethodForm
-                            onSuccess={() => {
-                              // Add success message to chat
-                              const successMsg: ChatMsg = {
-                                role: "assistant",
-                                content: "You're all set. Type 'laundry' and see what happens.",
-                                createdAt: new Date(),
-                              };
-                              setMessages((prev) => [...prev, successMsg]);
-                              historyQuery.refetch();
-                            }}
-                          />
+                          <PaymentMethodForm onSuccess={handlePaymentSaved} />
                         </Elements>
                       )}
                     </div>

@@ -64,14 +64,26 @@ export const stripeRouter = router({
       }
 
       // Create Stripe customer
-      const { customerId, last4 } = await createStripeCustomer({
-        paymentMethodId,
-        email: undefined, // BLDG users don't have email
-        name: user.firstName && user.lastName 
-          ? `${user.firstName} ${user.lastName}` 
-          : undefined,
-        phone: user.phoneE164,
-      });
+      let customerId: string;
+      let last4: string;
+      try {
+        const customer = await createStripeCustomer({
+          paymentMethodId,
+          email: undefined, // BLDG users don't have email
+          name: user.firstName && user.lastName
+            ? `${user.firstName} ${user.lastName}`
+            : undefined,
+          phone: user.phoneE164,
+        });
+        customerId = customer.customerId;
+        last4 = customer.last4;
+      } catch (error: any) {
+        console.error("[Stripe] savePaymentMethod failed during customer creation:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Stripe customer setup failed. Please verify backend Stripe configuration.",
+        });
+      }
 
       // Update user record
       const db = await getDb();
