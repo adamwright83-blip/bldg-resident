@@ -9,22 +9,22 @@ export interface BuildingHostRecord {
 export const BUILDING_HOST_MAP: Record<string, BuildingHostRecord> = {
   "3545": {
     token: "3545",
-    slug: "opus_south",
+    slug: "opus-south",
     displayName: "3545",
   },
   "3650": {
     token: "3650",
-    slug: "opus_north",
+    slug: "opus-north",
     displayName: "3650",
   },
   "2160": {
     token: "2160",
-    slug: "cpe_north",
+    slug: "cpe-north",
     displayName: "2160",
   },
   "2170": {
     token: "2170",
-    slug: "cpe_south",
+    slug: "cpe-south",
     displayName: "2170",
   },
 };
