@@ -10,10 +10,15 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import OnboardingFlow from "./components/onboarding/OnboardingFlow";
+import NeutralBuildingFallback from "./components/NeutralBuildingFallback";
 import Home from "./pages/Home";
 import Welcome from "./pages/Welcome";
 import OrderReceipt from "./pages/OrderReceipt";
 import Receipt from "./pages/Receipt";
+import {
+  extractNumericHostToken,
+  resolveBuildingFromHostname,
+} from "@shared/buildingHostMap";
 
 function Router() {
   return (
@@ -37,6 +42,11 @@ function Router() {
 }
 
 function App() {
+  const shouldShowNeutralFallback =
+    typeof window !== "undefined" &&
+    Boolean(extractNumericHostToken(window.location.hostname)) &&
+    !resolveBuildingFromHostname(window.location.hostname);
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
@@ -54,9 +64,13 @@ function App() {
               },
             }}
           />
-          <OnboardingFlow>
-            <Router />
-          </OnboardingFlow>
+          {shouldShowNeutralFallback ? (
+            <NeutralBuildingFallback />
+          ) : (
+            <OnboardingFlow>
+              <Router />
+            </OnboardingFlow>
+          )}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

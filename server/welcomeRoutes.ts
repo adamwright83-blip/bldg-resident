@@ -21,6 +21,7 @@ import { parse as parseCookieHeader } from "cookie";
 import axios from "axios";
 import { upsertBldgUser, getBldgUserById, insertChatMessage, updateBldgUser } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -174,12 +175,13 @@ function formatReceiptMessage(
  * Create a guest BLDG user with a placeholder phone and return the session.
  * Used for first-time visitors who arrive directly at app.bldg.chat.
  */
-async function createGuestUser(): Promise<{ userId: number; sessionToken: string }> {
+async function createGuestUser(req: Request): Promise<{ userId: number; sessionToken: string }> {
   const guestPhone = `+1guest${Date.now()}`;
+  const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
   const bldgUser = await upsertBldgUser({
     phoneE164: guestPhone,
     firstName: null,
-    buildingSlug: null,
+    buildingSlug: hostBuilding?.slug ?? null,
   });
   const sessionToken = await createBldgSession(bldgUser.id);
   return { userId: bldgUser.id, sessionToken };
@@ -209,7 +211,7 @@ export function registerWelcomeRoutes(app: Router): void {
       }
 
       // Create a new guest user
-      const { userId, sessionToken } = await createGuestUser();
+      const { userId, sessionToken } = await createGuestUser(req);
 
       res.cookie(BLDG_COOKIE_NAME, sessionToken, {
         ...getSessionCookieOptions(req),
@@ -262,8 +264,11 @@ export function registerWelcomeRoutes(app: Router): void {
       const phone = payload.phone as string | undefined;
       const firstName = payload.firstName as string | undefined;
       const orderId = payload.orderId as string | undefined;
+      const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
       const buildingSlug =
-        (payload.buildingSlug as string | undefined) ?? "opusla";
+        hostBuilding?.slug ??
+        (payload.buildingSlug as string | undefined) ??
+        "opusla";
 
       if (!phone || !orderId) {
         console.error("[Welcome] JWT missing required fields (phone, orderId)");
