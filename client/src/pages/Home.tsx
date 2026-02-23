@@ -15,7 +15,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, MessageSquare, Loader2, LayoutGrid } from "lucide-react";
+import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check } from "lucide-react";
 import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
@@ -32,10 +32,11 @@ import ServicesDrawer from "@/components/ServicesDrawer";
 import Vault from "@/pages/Vault";
 import AccountSheet from "@/components/AccountSheet";
 
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
-const stripeInitError = stripePublishableKey
-  ? null
-  : "Stripe is not configured: missing VITE_STRIPE_PUBLISHABLE_KEY.";
+const STRIPE_PUBLISHABLE_FALLBACK =
+  "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
+const stripePublishableKey =
+  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
+const stripeInitError = stripePublishableKey ? null : "Stripe publishable key is unavailable.";
 const stripePromise = stripeInitError ? null : loadStripe(stripePublishableKey);
 const PAYMENT_SAVED_MESSAGE =
   "Payment info secured by Stripe. Time to place your first order - type 'laundry' in the composer chat field and see what happens. Your card on file will not be charged.";
@@ -193,6 +194,29 @@ const MODIFY_TIME_OPTIONS = [
   { date: "This Saturday", window: "9–12 PM" },
 ];
 
+const FREQUENCY_OPTIONS = [
+  { id: "one-time", label: "One-time" },
+  { id: "weekly", label: "Weekly" },
+  { id: "biweekly", label: "Every 2 weeks" },
+  { id: "monthly", label: "Monthly" },
+] as const;
+
+type FrequencyId = (typeof FREQUENCY_OPTIONS)[number]["id"];
+
+function normalizeFrequency(recurrence?: string): FrequencyId {
+  const value = (recurrence || "").trim().toLowerCase();
+  if (value === "weekly") return "weekly";
+  if (value === "every 2 weeks" || value === "biweekly" || value === "2-weeks" || value === "2 weeks") {
+    return "biweekly";
+  }
+  if (value === "monthly") return "monthly";
+  return "one-time";
+}
+
+function frequencyLabel(value: FrequencyId): string {
+  return FREQUENCY_OPTIONS.find((opt) => opt.id === value)?.label || "One-time";
+}
+
 function ConfirmationCard({
   booking,
   isNew,
@@ -211,6 +235,13 @@ function ConfirmationCard({
   const [upgradeApplied, setUpgradeApplied] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [showModifyOptions, setShowModifyOptions] = useState(false);
+  const [showFrequencySheet, setShowFrequencySheet] = useState(false);
+  const [frequency, setFrequency] = useState<FrequencyId>(() =>
+    normalizeFrequency(booking.recurrence)
+  );
+  const [draftFrequency, setDraftFrequency] = useState<FrequencyId>(() =>
+    normalizeFrequency(booking.recurrence)
+  );
 
   const category = serviceToCategory(booking.service);
   const upgrade = UPGRADE_MAP[category];
@@ -240,6 +271,22 @@ function ConfirmationCard({
     }
   };
 
+  const openFrequencySheet = () => {
+    setDraftFrequency(frequency);
+    setShowFrequencySheet(true);
+  };
+
+  const saveFrequency = () => {
+    setFrequency(draftFrequency);
+    setShowFrequencySheet(false);
+  };
+
+  const keepWeekly = () => {
+    setDraftFrequency("weekly");
+    setFrequency("weekly");
+    setShowFrequencySheet(false);
+  };
+
   return (
     <div className={`confirmation-card ${isNew ? "confirmation-ceremony" : "confirmation-enter"}`}>
       <div className="confirmation-card-status">
@@ -247,19 +294,15 @@ function ConfirmationCard({
       </div>
       <div className="confirmation-card-header">
         <span className="confirmation-card-service">{booking.service}</span>
-        {booking.recurrence && (
-          <div className="confirmation-card-recurrence-group">
-            <span className="confirmation-card-recurrence">{booking.recurrence}</span>
-            {booking.recurrence === "Weekly" && onCancel && (
-              <button
-                onClick={handleCancel}
-                className="confirmation-card-btn-cancel-weekly tappable"
-              >
-                Cancel Weekly
-              </button>
-            )}
-          </div>
-        )}
+        <button
+          type="button"
+          className="confirmation-card-frequency-pill tappable"
+          onClick={openFrequencySheet}
+          aria-label="Edit pickup frequency"
+        >
+          <span>{frequencyLabel(frequency)}</span>
+          <ChevronDown size={12} />
+        </button>
       </div>
       <div className="confirmation-card-details">
         <p className="confirmation-card-date">{booking.date}</p>
@@ -317,6 +360,57 @@ function ConfirmationCard({
           ? "Fulfilled by Laundry Butler."
           : `Fulfilled by BLDG.`}
       </div>
+
+      <AnimatePresence>
+        {showFrequencySheet && (
+          <>
+            <motion.div
+              className="frequency-sheet-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowFrequencySheet(false)}
+            />
+            <motion.div
+              className="frequency-sheet"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+            >
+              <div className="frequency-sheet-handle" />
+              <h3 className="frequency-sheet-title">Pickup Frequency</h3>
+              <div className="frequency-sheet-options">
+                {FREQUENCY_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setDraftFrequency(option.id)}
+                    className="frequency-sheet-option tappable"
+                  >
+                    <span>{option.label}</span>
+                    {draftFrequency === option.id ? <Check size={16} /> : null}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="frequency-sheet-save tappable"
+                onClick={saveFrequency}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                className="frequency-sheet-keep tappable"
+                onClick={keepWeekly}
+              >
+                Keep weekly
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

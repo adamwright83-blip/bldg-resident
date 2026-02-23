@@ -18,7 +18,9 @@ interface PaymentMethodFormProps {
 export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
-  const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim();
+  const publishableKey =
+    import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ||
+    "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [last4, setLast4] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function PaymentMethodForm({ onSuccess }: PaymentMethodFormProps) {
       setInitError(
         publishableKey
           ? "Secure card fields could not initialize. Refresh and try again."
-          : "Stripe is not configured. Missing VITE_STRIPE_PUBLISHABLE_KEY in production."
+          : "Stripe is not configured."
       );
     }, 5000);
     return () => clearTimeout(timer);

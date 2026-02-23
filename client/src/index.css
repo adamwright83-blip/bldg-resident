@@ -776,42 +776,110 @@
     text-transform: capitalize;
   }
 
-  .confirmation-card-recurrence-group {
-    display: flex;
+  .confirmation-card-frequency-pill {
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  .confirmation-card-recurrence {
+    gap: 5px;
     font-size: 12px;
     font-weight: 500;
     color: var(--text-secondary);
-    background: var(--bg-elevated);
-    padding: 2px 8px;
-    border-radius: 4px;
-    text-transform: capitalize;
-  }
-
-  .confirmation-card-btn-cancel-weekly {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-tertiary);
-    background: transparent;
-    border: 1px solid var(--border);
-    padding: 4px 8px;
-    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: 999px;
+    padding: 4px 10px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: all 160ms ease;
   }
 
-  .confirmation-card-btn-cancel-weekly:hover {
-    color: var(--text-secondary);
-    border-color: var(--border);
+  .confirmation-card-frequency-pill:hover {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    color: var(--text-primary);
+  }
+
+  .confirmation-card-frequency-pill:active {
+    transform: translateY(1px);
+  }
+
+  .frequency-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 14, 12, 0.35);
+    z-index: 920;
+  }
+
+  .frequency-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 921;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border-subtle);
+    border-radius: 18px 18px 0 0;
+    padding: 10px 16px 18px;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.2);
+  }
+
+  .frequency-sheet-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    margin: 0 auto 12px;
+    background: var(--border);
+  }
+
+  .frequency-sheet-title {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .frequency-sheet-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .frequency-sheet-option {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border-subtle);
     background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
   }
 
-  .confirmation-card-btn-cancel-weekly:active {
-    opacity: 0.8;
+  .frequency-sheet-save {
+    width: 100%;
+    height: 46px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+
+  .frequency-sheet-keep {
+    width: 100%;
+    height: 38px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
   }
 
   .confirmation-card-details {
