@@ -1317,6 +1317,59 @@ export const chatRouter = router({
               `[ServiceRequest] Created #${sr.id}: ${serviceCategory} — ${bookingMeta.date} ${bookingMeta.window}`
             );
 
+            // Fire-and-forget: mirror booking into bldg-admin-api orders table
+            // so it shows up in admin.bldg.chat and driver.bldg.chat.
+            (async () => {
+              try {
+                const adminApiUrl = (
+                  process.env.ADMIN_API_URL ||
+                  "https://bldg-admin-api-production.up.railway.app"
+                ).replace(/\/$/, "");
+
+                const sharedSecret = process.env.APP_SHARED_API_SECRET;
+                if (!sharedSecret) {
+                  console.warn("[AdminSync] APP_SHARED_API_SECRET not set — skipping order forward");
+                  return;
+                }
+
+                const serviceType =
+                  serviceCategory === "dry_cleaning" ? "dry_cleaning" : "wash_fold";
+
+                const address = [user?.buildingSlug, user?.unit]
+                  .filter(Boolean)
+                  .join(", ") || "—";
+
+                const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-app-shared-secret": sharedSecret,
+                  },
+                  body: JSON.stringify({
+                    source: "bldg-resident",
+                    serviceType,
+                    pickupDate: bookingMeta.date,
+                    pickupWindow: bookingMeta.window,
+                    address,
+                    unit: user?.unit || null,
+                    firstName: user?.firstName || "Resident",
+                    lastName: user?.lastName || "",
+                    phone: user?.phoneE164 || "",
+                    bldgUserId: bldgUserId ?? null,
+                  }),
+                });
+
+                if (fwdRes.ok) {
+                  console.log(`[AdminSync] Order forwarded to admin for service_request #${sr.id}`);
+                } else {
+                  const text = await fwdRes.text().catch(() => "");
+                  console.warn(`[AdminSync] Failed to forward order: ${fwdRes.status} ${text}`);
+                }
+              } catch (err) {
+                console.warn("[AdminSync] Error forwarding order to admin API:", err);
+              }
+            })();
+
             // Update preferences (skip for guest users)
             let driftRevealMessage: string | null = null;
             if (bldgUserId) {
