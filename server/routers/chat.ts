@@ -1356,6 +1356,9 @@ export const chatRouter = router({
                     lastName: user?.lastName || "",
                     phone: user?.phoneE164 || "",
                     bldgUserId: bldgUserId ?? null,
+                    // Forward Stripe IDs so admin can charge without a separate lookup
+                    stripeCustomerId: user?.stripeCustomerId || null,
+                    stripePaymentMethodId: user?.stripePaymentMethodId || null,
                   }),
                 });
 
