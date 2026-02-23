@@ -45,12 +45,13 @@ function buildCorsOptions(localPort: number) {
         return;
       }
 
-      if (allowlisted.has(origin)) {
+      // Allow any *.bldg.chat subdomain (covers app, 3545, 3650, 2160, 2170, etc.)
+      if (origin.endsWith(".bldg.chat") || allowlisted.has(origin)) {
         callback(null, true);
         return;
       }
 
-      callback(new Error(`Origin not allowed by CORS: ${origin}`));
+      callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
