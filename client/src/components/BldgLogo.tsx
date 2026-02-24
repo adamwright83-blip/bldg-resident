@@ -1,51 +1,67 @@
 /**
- * BldgLogo — Black square with white dot.
+ * BldgLogo — The app's character, not a decoration.
  *
- * Two sizes:
- *   - "large" (48px) — centered empty-state hero
- *   - "small" (24px) — message avatar
+ * Two elements: #square (the anchor) and #dot (the soul).
+ * All animation lives in the dot. The square never moves.
  *
- * Animation states:
- *   - "idle"      — static
- *   - "breathe"   — slow ambient breathing (empty state)
- *   - "bounce"    — 3-beat dot rhythm while AI is processing
- *   - "streaming" — steady active pulse while message streams
+ * Sizes:
+ *   - "hero"  (56px) — centered empty-state, waiting
+ *   - "small" (24px) — message avatar, working
+ *
+ * Animation states (passed as `mood`):
+ *   - "idle"      — dot at rest, no animation
+ *   - "breathe"   — slow ambient pulse, square is still (empty state)
+ *   - "orbit"     — dot circles inside the square (thinking / streaming)
+ *   - "settle"    — dot decelerates from orbit back to center (response done)
  *   - "recognize" — single quick swell when user sends ("got it")
- *   - "pulse"     — single scale-up (legacy, booking confirmed)
- *   - "confirm"   — dramatic 3-4x swell + settle on booking lock-in
+ *   - "confirm"   — dramatic 3-4x expansion when booking locks in
+ *
+ * Layout transition:
+ *   Pass `layoutId` to participate in Framer Motion hero → avatar leap.
+ *   The logo physically travels from its hero position to the first
+ *   message avatar position when the first response arrives.
  */
 
+import { motion } from "framer-motion";
+
 interface BldgLogoProps {
-  size?: "large" | "small";
-  animate?: "idle" | "breathe" | "bounce" | "streaming" | "recognize" | "pulse" | "confirm";
+  size?: "hero" | "small";
+  mood?: "idle" | "breathe" | "orbit" | "settle" | "recognize" | "confirm";
+  layoutId?: string;
   className?: string;
 }
 
 export default function BldgLogo({
   size = "small",
-  animate = "idle",
+  mood = "idle",
+  layoutId,
   className = "",
 }: BldgLogoProps) {
-  const px = size === "large" ? 48 : 24;
-  const dotR = size === "large" ? 6 : 3;
-  const cornerR = size === "large" ? 8 : 4;
+  const px = size === "hero" ? 56 : 24;
+  const dotR = size === "hero" ? 7 : 3;
+  const cornerR = size === "hero" ? 10 : 4;
+  const cx = px / 2;
+  const cy = px / 2;
 
-  const dotClass =
-    animate === "bounce"
-      ? "bldg-dot-bounce"
-      : animate === "pulse"
-        ? "bldg-dot-pulse"
-        : animate === "breathe"
+  // Orbit radius scales with logo size
+  const orbitClass =
+    mood === "orbit"
+      ? size === "hero"
+        ? "bldg-dot-orbit-hero"
+        : "bldg-dot-orbit-sm"
+      : mood === "settle"
+        ? size === "hero"
+          ? "bldg-dot-settle-hero"
+          : "bldg-dot-settle-sm"
+        : mood === "breathe"
           ? "bldg-dot-breathe"
-          : animate === "streaming"
-            ? "bldg-dot-streaming"
-            : animate === "recognize"
-              ? "bldg-dot-recognize"
-              : animate === "confirm"
-                ? "bldg-dot-confirm"
-                : "";
+          : mood === "recognize"
+            ? "bldg-dot-recognize"
+            : mood === "confirm"
+              ? "bldg-dot-confirm"
+              : "";
 
-  return (
+  const svgContent = (
     <svg
       width={px}
       height={px}
@@ -57,15 +73,23 @@ export default function BldgLogo({
     >
       <rect width={px} height={px} rx={cornerR} fill="#1a1a1a" />
       <circle
-        cx={px / 2}
-        cy={px / 2}
+        cx={cx}
+        cy={cy}
         r={dotR}
         fill="#ffffff"
-        className={dotClass}
-        style={{
-          transformOrigin: `${px / 2}px ${px / 2}px`,
-        }}
+        className={orbitClass}
+        style={{ transformOrigin: `${cx}px ${cy}px` }}
       />
     </svg>
   );
+
+  if (layoutId) {
+    return (
+      <motion.div layoutId={layoutId} style={{ display: "inline-flex" }}>
+        {svgContent}
+      </motion.div>
+    );
+  }
+
+  return svgContent;
 }

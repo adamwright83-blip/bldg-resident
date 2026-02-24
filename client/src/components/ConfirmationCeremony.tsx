@@ -58,8 +58,8 @@ export default function ConfirmationCeremony({
       {/* Logo with dot-expand animation — the "nod" that something happened */}
       <div className={`ceremony-logo ceremony-logo--${phase}`}>
         <BldgLogo
-          size="large"
-          animate={phase === "enter" ? "confirm" : "idle"}
+          size="hero"
+          mood={phase === "enter" ? "confirm" : "idle"}
         />
       </div>
 

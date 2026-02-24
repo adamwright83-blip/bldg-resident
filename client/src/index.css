@@ -1207,119 +1207,82 @@
     margin-top: 2px;
   }
 
-  /* Dot bounce — 3-beat rhythm while AI is processing */
-  .bldg-dot-bounce {
-    animation: bldg-dot-bounce 1.4s ease-in-out infinite;
+  /* ─── BLDG Logo dot animations ─── */
+
+  /* Breathe — slow ambient pulse, empty/idle state */
+  .bldg-dot-breathe {
+    animation: bldg-dot-breathe 4s ease-in-out infinite;
   }
 
-  @keyframes bldg-dot-bounce {
-    0%,
-    100% {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    15% {
-      transform: translateY(-2px);
-      opacity: 1;
-    }
-    30% {
-      transform: translateY(0);
-      opacity: 0.7;
-    }
-    45% {
-      transform: translateY(-2px);
-      opacity: 1;
-    }
-    60% {
-      transform: translateY(0);
-      opacity: 0.7;
-    }
-    75% {
-      transform: translateY(-1.5px);
-      opacity: 1;
-    }
-    90% {
-      transform: translateY(0);
-      opacity: 0.8;
-    }
+  @keyframes bldg-dot-breathe {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.35); opacity: 0.85; }
   }
 
-  /* Dot pulse — single scale-up on booking confirmed */
-  .bldg-dot-pulse {
-    animation: bldg-dot-pulse 0.4s ease-out forwards;
+  /* Orbit (small avatar, 5px radius) — dot circles inside the square while thinking */
+  .bldg-dot-orbit-sm {
+    animation: bldg-dot-orbit-sm 1.8s linear infinite;
   }
 
-  @keyframes bldg-dot-pulse {
-    0% {
-      transform: scale(1);
-    }
-    50% {
-      transform: scale(1.3);
-    }
-    100% {
-      transform: scale(1);
-    }
+  @keyframes bldg-dot-orbit-sm {
+    from { transform: rotate(0deg)   translateX(5px); }
+    to   { transform: rotate(360deg) translateX(5px); }
   }
 
-  /* Dot streaming — steady active pulse while message streams */
-  .bldg-dot-streaming {
-    animation: bldg-dot-streaming 0.9s ease-in-out infinite;
+  /* Orbit (hero size, 11px radius) */
+  .bldg-dot-orbit-hero {
+    animation: bldg-dot-orbit-hero 1.8s linear infinite;
   }
 
-  @keyframes bldg-dot-streaming {
-    0%, 100% {
-      transform: scale(1);
-      opacity: 0.85;
-    }
-    50% {
-      transform: scale(1.6);
-      opacity: 1;
-    }
+  @keyframes bldg-dot-orbit-hero {
+    from { transform: rotate(0deg)   translateX(11px); }
+    to   { transform: rotate(360deg) translateX(11px); }
   }
 
-  /* Dot recognize — single quick swell when user sends ("got it") */
+  /* Settle (small) — orbit decelerates and spirals back to center */
+  .bldg-dot-settle-sm {
+    animation: bldg-dot-settle-sm 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
+  @keyframes bldg-dot-settle-sm {
+    0%   { transform: rotate(0deg)   translateX(5px); }
+    60%  { transform: rotate(280deg) translateX(2px); }
+    100% { transform: rotate(360deg) translateX(0px); }
+  }
+
+  /* Settle (hero) */
+  .bldg-dot-settle-hero {
+    animation: bldg-dot-settle-hero 700ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
+  @keyframes bldg-dot-settle-hero {
+    0%   { transform: rotate(0deg)   translateX(11px); }
+    60%  { transform: rotate(280deg) translateX(4px); }
+    100% { transform: rotate(360deg) translateX(0px); }
+  }
+
+  /* Recognize — single quick swell when user sends ("got it") */
   .bldg-dot-recognize {
     animation: bldg-dot-recognize 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
 
   @keyframes bldg-dot-recognize {
-    0% {
-      transform: scale(1);
-    }
-    55% {
-      transform: scale(2.2);
-    }
-    100% {
-      transform: scale(1);
-    }
+    0%   { transform: scale(1); }
+    55%  { transform: scale(2.4); }
+    100% { transform: scale(1); }
   }
 
-  /* Dot confirm — dramatic 3-4x swell + settle when booking locks in */
+  /* Confirm — dramatic 3-4x swell + settle when booking locks in */
   .bldg-dot-confirm {
     animation: bldg-dot-confirm 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   @keyframes bldg-dot-confirm {
-    0% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    25% {
-      transform: scale(3.8);
-      opacity: 1;
-    }
-    55% {
-      transform: scale(3.2);
-      opacity: 0.95;
-    }
-    80% {
-      transform: scale(1.15);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(1);
-      opacity: 1;
-    }
+    0%   { transform: scale(1); opacity: 1; }
+    25%  { transform: scale(3.8); opacity: 1; }
+    55%  { transform: scale(3.2); opacity: 0.95; }
+    80%  { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
   }
 
   /* Empty state with centered logo */
@@ -1773,15 +1736,7 @@
     opacity: 1;
   }
 
-  /* ─── 5. Breathing Logo (empty state) ─── */
-  @keyframes logo-breathe {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.08); opacity: 0.9; }
-  }
-
-  .bldg-dot-breathe {
-    animation: logo-breathe 4s ease-in-out infinite;
-  }
+  /* ─── 5. Breathing Logo (empty state) — handled by .bldg-dot-breathe above ─── */
 
   /* ─── 6. Night Ambient Shift ─── */
   .app-shell.night-mode::after {
@@ -1898,7 +1853,10 @@
     .confirmation-ceremony,
     .confirmation-ticker,
     .bldg-dot-breathe,
-    .bldg-dot-streaming,
+    .bldg-dot-orbit-sm,
+    .bldg-dot-orbit-hero,
+    .bldg-dot-settle-sm,
+    .bldg-dot-settle-hero,
     .bldg-dot-recognize,
     .bldg-dot-confirm,
     .tile-ripple,

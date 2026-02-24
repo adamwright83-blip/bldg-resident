@@ -477,6 +477,7 @@ export default function Home() {
   const [lastBookingConfirmed, setLastBookingConfirmed] = useState(false);
   // Dot animation states
   const [streamingMsgIndex, setStreamingMsgIndex] = useState<number | null>(null);
+  const [settlingMsgIndex, setSettlingMsgIndex] = useState<number | null>(null);
   const [recognizeActive, setRecognizeActive] = useState(false);
   const [confirmDotIndex, setConfirmDotIndex] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -993,12 +994,10 @@ export default function Home() {
 
   // handleSuggestedChipClick removed — suggested chip eliminated
 
-  const getAvatarAnimation = (msgIndex: number): "idle" | "bounce" | "pulse" | "streaming" | "recognize" | "confirm" => {
+  const getAvatarMood = (msgIndex: number): "idle" | "orbit" | "settle" | "recognize" | "confirm" => {
     if (confirmDotIndex === msgIndex) return "confirm";
-    if (streamingMsgIndex === msgIndex) return "streaming";
-    const isLastAssistant =
-      msgIndex === messages.length - 1 && messages[msgIndex]?.role === "assistant";
-    if (lastBookingConfirmed && isLastAssistant) return "pulse";
+    if (streamingMsgIndex === msgIndex) return "orbit";
+    if (settlingMsgIndex === msgIndex) return "settle";
     return "idle";
   };
 
@@ -1063,8 +1062,8 @@ export default function Home() {
               transition={{ duration: 0.3 }}
             >
               <div className="chat-empty-inner">
-                {/* #5: Breathing logo in empty state */}
-                <BldgLogo size="large" animate="breathe" />
+                {/* Hero logo — leaps to first message avatar position on first response */}
+                <BldgLogo size="hero" mood="breathe" layoutId="bldg-hero-logo" />
                 <p className="chat-empty-text">{emptyGreeting}</p>
               </div>
             </motion.div>
@@ -1099,10 +1098,14 @@ export default function Home() {
                   {/* Skip regular bubble for booking messages (CONFIRMED card shows all info) and onboarding_collect (trust card shows it) */}
                   {isRegularBubble && (
                     <div className={`chat-bubble-row ${msg.role === "user" ? "chat-bubble-row-user" : "chat-bubble-row-assistant"}`}>
-                      {/* Avatar for assistant messages */}
+                      {/* Avatar — first assistant message participates in hero leap */}
                       {msg.role === "assistant" && (
                         <div className="bldg-avatar">
-                          <BldgLogo size="small" animate={getAvatarAnimation(i)} />
+                          <BldgLogo
+                            size="small"
+                            mood={getAvatarMood(i)}
+                            layoutId={i === 0 ? "bldg-hero-logo" : undefined}
+                          />
                         </div>
                       )}
                       <div className={`chat-bubble ${msg.role === "user" ? "chat-bubble-user" : "chat-bubble-assistant"}`}>
@@ -1111,7 +1114,15 @@ export default function Home() {
                             <StreamingText
                               content={msg.content}
                               onComplete={() => {
-                                setStreamingMsgIndex((prev) => (prev === i ? null : prev));
+                                setStreamingMsgIndex((prev) => {
+                                  if (prev === i) {
+                                    // Dot decelerates back to rest
+                                    setSettlingMsgIndex(i);
+                                    setTimeout(() => setSettlingMsgIndex(null), 750);
+                                    return null;
+                                  }
+                                  return prev;
+                                });
                               }}
                             />
                           </div>
@@ -1180,11 +1191,14 @@ export default function Home() {
                 );
               })}
 
-              {/* #10: Typing indicator with avatar presence glow */}
+              {/* Typing indicator — dot orbits while AI thinks */}
               {isSending && (
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
-                    <BldgLogo size="small" animate={recognizeActive ? "recognize" : "bounce"} />
+                    <BldgLogo
+                      size="small"
+                      mood={recognizeActive ? "recognize" : "orbit"}
+                    />
                   </div>
                   <div className="typing-shimmer" />
                 </div>
