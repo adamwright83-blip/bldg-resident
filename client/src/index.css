@@ -1285,6 +1285,46 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
+  /* ─── Laundry Mode: dot expands into washing machine door ─── */
+
+  /* Door expansion — small avatar (dot r=3 → door r=9, ratio ~0.333) */
+  .bldg-laundry-door-small {
+    animation: bldg-laundry-expand-sm 480ms cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+  }
+
+  @keyframes bldg-laundry-expand-sm {
+    0%   { transform: scale(0.333); }
+    100% { transform: scale(1); }
+  }
+
+  /* Door expansion — hero size (dot r=7 → door r=22, ratio ~0.318) */
+  .bldg-laundry-door-hero {
+    animation: bldg-laundry-expand-hero 480ms cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+  }
+
+  @keyframes bldg-laundry-expand-hero {
+    0%   { transform: scale(0.318); }
+    100% { transform: scale(1); }
+  }
+
+  /* Clothes tumble: rotation starts after door fully expands, fades in too */
+  .bldg-laundry-tumble {
+    opacity: 0;
+    animation:
+      bldg-laundry-rotate 2.4s linear 420ms infinite,
+      bldg-laundry-fade-in 220ms ease-out 420ms forwards;
+  }
+
+  @keyframes bldg-laundry-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  @keyframes bldg-laundry-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
   /* Empty state with centered logo */
   .chat-empty {
     height: 100%;
@@ -1859,6 +1899,9 @@
     .bldg-dot-settle-hero,
     .bldg-dot-recognize,
     .bldg-dot-confirm,
+    .bldg-laundry-door-small,
+    .bldg-laundry-door-hero,
+    .bldg-laundry-tumble,
     .tile-ripple,
     .chip-stagger,
     .booking-chip-pulse,
