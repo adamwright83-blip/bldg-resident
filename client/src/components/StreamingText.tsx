@@ -16,10 +16,10 @@ interface StreamingTextProps {
  *   - Night (22-6): deliberate cadence, ~12ms/char
  *   - 500ms pause before the final line (Phantom Thread / Depth Charge moment)
  *
- * - Receives full response text (no backend streaming required)
- * - Shows blinking cursor during reveal (~530ms blink)
- * - Respects prefers-reduced-motion (renders instantly if set)
- * - Stops immediately if component unmounts
+ * FIX: onComplete is stored in a ref so its identity never enters the effect
+ * dependency array. Previously, every parent re-render (e.g. every keystroke
+ * in the composer) created a new inline onComplete function, which caused the
+ * effect to cancel and restart the animation — erasing streamed text mid-type.
  */
 export function StreamingText({ content, onComplete }: StreamingTextProps) {
   const [displayedContent, setDisplayedContent] = useState("");
@@ -30,21 +30,25 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
   const pauseAppliedRef = useRef<boolean>(false);
   const pauseStartRef = useRef<number>(0);
 
+  // Keep onComplete in a ref — never let it enter the effect dep array
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  });
+
   // Tempo Shift: cadence based on time of day
   const msPerChar = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour >= 6 && hour < 12) return 5;   // Morning: crisp
-    if (hour >= 12 && hour < 18) return 7;  // Afternoon: standard
-    if (hour >= 18 && hour < 22) return 9;  // Evening: measured
-    return 12;                               // Night: deliberate
+    if (hour >= 6 && hour < 12) return 5;
+    if (hour >= 12 && hour < 18) return 7;
+    if (hour >= 18 && hour < 22) return 9;
+    return 12;
   }, []);
 
   // Find the last line break for the 500ms pause point
   const pauseIndex = useMemo(() => {
-    // Only pause if content has multiple lines (Phantom Thread / Depth Charge)
     const lastNewline = content.lastIndexOf("\n");
     if (lastNewline <= 0 || lastNewline >= content.length - 2) return -1;
-    // Only pause if the final line is short (< 80 chars) — likely an observation line
     const finalLine = content.slice(lastNewline + 1).trim();
     if (finalLine.length > 80 || finalLine.length < 5) return -1;
     return lastNewline;
@@ -56,7 +60,7 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
     if (prefersReducedMotion || content.length === 0) {
       setDisplayedContent(content);
       setIsStreaming(false);
-      onComplete?.();
+      onCompleteRef.current?.();
       return;
     }
 
@@ -66,20 +70,18 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
     pauseAppliedRef.current = false;
     pauseStartRef.current = 0;
 
-    const PAUSE_DURATION = 500; // 500ms pause before final line
+    const PAUSE_DURATION = 500;
 
     const reveal = (timestamp: number) => {
       if (startTimeRef.current === 0) {
         startTimeRef.current = timestamp;
       }
 
-      // Check if we're in a pause
       if (pauseStartRef.current > 0) {
         if (timestamp - pauseStartRef.current < PAUSE_DURATION) {
           animationFrameRef.current = requestAnimationFrame(reveal);
           return;
         }
-        // Pause complete — adjust start time to account for pause
         startTimeRef.current += PAUSE_DURATION;
         pauseStartRef.current = 0;
       }
@@ -88,7 +90,6 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
       const targetChars = Math.floor(elapsed / msPerChar);
       const charsToReveal = Math.min(targetChars, content.length);
 
-      // Check if we should pause before the final line
       if (
         pauseIndex > 0 &&
         !pauseAppliedRef.current &&
@@ -96,7 +97,6 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
       ) {
         pauseAppliedRef.current = true;
         pauseStartRef.current = timestamp;
-        // Show content up to the pause point
         charsRevealedRef.current = pauseIndex;
         setDisplayedContent(content.slice(0, pauseIndex));
         animationFrameRef.current = requestAnimationFrame(reveal);
@@ -112,7 +112,7 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
         animationFrameRef.current = requestAnimationFrame(reveal);
       } else {
         setIsStreaming(false);
-        onComplete?.();
+        onCompleteRef.current?.();
       }
     };
 
@@ -123,7 +123,7 @@ export function StreamingText({ content, onComplete }: StreamingTextProps) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [content, onComplete, msPerChar, pauseIndex]);
+  }, [content, msPerChar, pauseIndex]); // onComplete intentionally excluded — using ref
 
   return (
     <div className="streaming-text">

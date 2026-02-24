@@ -39,7 +39,7 @@ const stripePublishableKey =
 const stripeInitError = stripePublishableKey ? null : "Stripe publishable key is unavailable.";
 const stripePromise = stripeInitError ? null : loadStripe(stripePublishableKey);
 const PAYMENT_SAVED_MESSAGE =
-  "Payment info secured by Stripe. Time to place your first order - type 'laundry' in the composer chat field and see what happens. Your card on file will not be charged.";
+  "You're all set. Your card on file won't be charged until your order is picked up and undergoes intake.";
 
 // ─── Service tile definitions ───
 

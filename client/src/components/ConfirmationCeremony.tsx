@@ -52,7 +52,7 @@ export default function ConfirmationCeremony({
       role="status"
     >
       <div className={`ceremony-text ceremony-text--${phase}`}>
-        <span className="ceremony-service">Locked in.</span>
+        <span className="ceremony-service">Lock it in.</span>
         <span className="ceremony-detail">{serviceName} — {dateStr}, {windowStr2}.</span>
         <span className="ceremony-handled">You'll get a reminder the morning of.</span>
       </div>

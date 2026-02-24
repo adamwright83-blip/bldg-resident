@@ -1500,7 +1500,7 @@ export const chatRouter = router({
           greetBeat3 = `What should I handle?`;
         } else {
           greetBeat1 = `Unit ${unitLabel} is set.`;
-          greetBeat2 = `Laundry pickup available ${laundrySlot}. Car wash and dry cleaning ready to go.`;
+          greetBeat2 = `Laundry pickup available ${laundrySlot}. Car wash, dry cleaning, dog grooming — all available on demand.`;
           greetBeat3 = `Say what you need.`;
         }
       } catch {
@@ -1510,7 +1510,7 @@ export const chatRouter = router({
           greetBeat3 = `What should I handle?`;
         } else {
           greetBeat1 = `Unit ${unitLabel} is set.`;
-          greetBeat2 = `Laundry, car wash, dry cleaning ready to go.`;
+          greetBeat2 = `Car wash, dry cleaning, dog grooming — all available on demand.`;
           greetBeat3 = `Say what you need.`;
         }
       }
