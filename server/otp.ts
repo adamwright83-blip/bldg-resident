@@ -15,6 +15,14 @@ const OTP_RESEND_COOLDOWN_MS = 30 * 1000; // 30 seconds
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX_SENDS = 5;
 
+// ─── Dev Test Phone ───────────────────────────────────────────────────────────
+// Typing "5550000000" as the phone number always creates a brand-new user and
+// auto-accepts the OTP bypass code ("00000"). Useful for testing the new-user
+// flow without contaminating real accounts.
+const DEV_TEST_PHONE_NORMALIZED = "+15550000000";
+// Maps the magic phone to the unique internal phone created for this session
+const testPhoneMap = new Map<string, string>();
+
 // Simple in-memory rate limiter (phone -> timestamps[])
 const sendLog = new Map<string, number[]>();
 
@@ -68,6 +76,27 @@ export async function sendOTP(
   unit: string
 ): Promise<SendOTPResult> {
   const phone = normalizePhone(rawPhone);
+
+  // ── Dev test phone: always create a fresh user, bypass OTP ──────────────
+  if (phone === DEV_TEST_PHONE_NORMALIZED) {
+    const uniquePhone = `+1555test${Date.now()}`;
+    const freshUser = await upsertBldgUser({
+      phoneE164: uniquePhone,
+      buildingSlug,
+    });
+    await updateBldgUser(freshUser.id, { unit } as any);
+    // Store bypass code so verifyOTP accepts "00000"
+    const bypass = process.env.OTP_BYPASS_CODE || "00000";
+    await updateBldgUser(freshUser.id, {
+      otpCode: bypass,
+      otpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+      otpAttempts: 0,
+    } as any);
+    // Map magic phone → unique phone for verifyOTP lookup
+    testPhoneMap.set(DEV_TEST_PHONE_NORMALIZED, uniquePhone);
+    console.log(`[OTP] Dev test phone → fresh user ${freshUser.id} (${uniquePhone})`);
+    return { ok: true, maskedPhone: "(555) ***-**00" };
+  }
 
   if (isRateLimited(phone)) {
     return { ok: false, error: "Too many requests. Try again later." };
@@ -129,7 +158,13 @@ export async function verifyOTP(
   code: string
 ): Promise<VerifyOTPResult> {
   const phone = normalizePhone(rawPhone);
-  const user = await getBldgUserByPhone(phone);
+
+  // ── Dev test phone: resolve to the unique phone created in sendOTP ───────
+  const resolvedPhone = phone === DEV_TEST_PHONE_NORMALIZED
+    ? (testPhoneMap.get(DEV_TEST_PHONE_NORMALIZED) ?? phone)
+    : phone;
+
+  const user = await getBldgUserByPhone(resolvedPhone);
 
   if (!user) {
     return { ok: false, error: "Phone number not found." };
