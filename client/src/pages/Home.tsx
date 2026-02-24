@@ -1201,7 +1201,7 @@ export default function Home() {
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
                     <BldgLogo
-                      size="small"
+                      size={laundryMode ? "medium" : "small"}
                       mood={
                         recognizeActive ? "recognize"
                         : laundryMode    ? "laundry"

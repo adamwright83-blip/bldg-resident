@@ -24,7 +24,7 @@ import { motion } from "framer-motion";
 import { useId } from "react";
 
 interface BldgLogoProps {
-  size?: "hero" | "small";
+  size?: "hero" | "medium" | "small";
   mood?: "idle" | "breathe" | "orbit" | "settle" | "recognize" | "confirm" | "laundry";
   layoutId?: string;
   className?: string;
@@ -43,14 +43,14 @@ export default function BldgLogo({
   className = "",
 }: BldgLogoProps) {
   const uid = useId().replace(/:/g, "");
-  const px = size === "hero" ? 56 : 24;
-  const dotR = size === "hero" ? 7 : 3;
-  const cornerR = size === "hero" ? 10 : 4;
+  const px = size === "hero" ? 56 : size === "medium" ? 32 : 24;
+  const dotR = size === "hero" ? 7 : size === "medium" ? 4 : 3;
+  const cornerR = size === "hero" ? 10 : size === "medium" ? 6 : 4;
   const cx = px / 2;
   const cy = px / 2;
 
   // Washing machine door radius — fills most of the square
-  const doorR = size === "hero" ? 22 : 9;
+  const doorR = size === "hero" ? 22 : size === "medium" ? 12 : 9;
   // Scale for clothing items: items are in -1…1 space, multiply to get px
   const clothScale = doorR * 0.32;
 
@@ -59,7 +59,7 @@ export default function BldgLogo({
     : mood === "orbit"   ? (size === "hero" ? "bldg-dot-orbit-hero" : "bldg-dot-orbit-sm")
     : mood === "settle"  ? (size === "hero" ? "bldg-dot-settle-hero" : "bldg-dot-settle-sm")
     : mood === "recognize" ? "bldg-dot-recognize"
-    : mood === "confirm" ? "bldg-dot-confirm"
+    : mood === "confirm"   ? "bldg-dot-confirm"
     : "";
 
   const svgContent = (
@@ -83,7 +83,7 @@ export default function BldgLogo({
             cy={cy}
             r={doorR}
             fill="white"
-            className={`bldg-laundry-door-${size}`}
+            className={size === "hero" ? "bldg-laundry-door-hero" : "bldg-laundry-door-small"}
             style={{ transformOrigin: `${cx}px ${cy}px` }}
           />
 
@@ -114,7 +114,7 @@ export default function BldgLogo({
             fill="none"
             stroke="rgba(26,26,26,0.14)"
             strokeWidth={size === "hero" ? 1.8 : 0.7}
-            className={`bldg-laundry-door-${size}`}
+            className={size === "hero" ? "bldg-laundry-door-hero" : "bldg-laundry-door-small"}
             style={{ transformOrigin: `${cx}px ${cy}px` }}
           />
         </>
