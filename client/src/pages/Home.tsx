@@ -475,6 +475,10 @@ export default function Home() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [lastBookingConfirmed, setLastBookingConfirmed] = useState(false);
+  // Dot animation states
+  const [streamingMsgIndex, setStreamingMsgIndex] = useState<number | null>(null);
+  const [recognizeActive, setRecognizeActive] = useState(false);
+  const [confirmDotIndex, setConfirmDotIndex] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -816,6 +820,10 @@ export default function Home() {
       setInput("");
       setIsSending(true);
 
+      // Recognition pulse — dot says "got it" before the response streams
+      setRecognizeActive(true);
+      setTimeout(() => setRecognizeActive(false), 400);
+
       // #1: Trigger send animations
       setSendBtnCompress(true);
       setComposerExhale(true);
@@ -856,9 +864,16 @@ export default function Home() {
 
         setMessages((prev) => {
           const newMsgs = [...prev, assistantMsg];
+          const newIndex = newMsgs.length - 1;
           // #3: Track ceremony index for the new booking card
           if (response.booking) {
-            setCeremonyIndex(newMsgs.length - 1);
+            setCeremonyIndex(newIndex);
+            // Dot confirm swell — the nod that something locked in
+            setConfirmDotIndex(newIndex);
+            setTimeout(() => setConfirmDotIndex(null), 1000);
+          } else {
+            // Track streaming state for dot animation
+            setStreamingMsgIndex(newIndex);
           }
           return newMsgs;
         });
@@ -978,10 +993,11 @@ export default function Home() {
 
   // handleSuggestedChipClick removed — suggested chip eliminated
 
-  const getAvatarAnimation = (msgIndex: number): "idle" | "bounce" | "pulse" => {
+  const getAvatarAnimation = (msgIndex: number): "idle" | "bounce" | "pulse" | "streaming" | "recognize" | "confirm" => {
+    if (confirmDotIndex === msgIndex) return "confirm";
+    if (streamingMsgIndex === msgIndex) return "streaming";
     const isLastAssistant =
       msgIndex === messages.length - 1 && messages[msgIndex]?.role === "assistant";
-
     if (lastBookingConfirmed && isLastAssistant) return "pulse";
     return "idle";
   };
@@ -1067,9 +1083,19 @@ export default function Home() {
                 const isBooking = msg.role === "assistant" && msg.metadata?.type === "booking";
                 const isPaymentCollection = msg.role === "assistant" && msg.metadata?.type === "payment_collection";
                 const isRegularBubble = !(isOnboardingCollect || isBooking);
+
+                // Greeting beat stagger: 3-beat choreographed entrance
+                const isGreetingBeat = msg.metadata?.type === "system_greeting" && msg.metadata?.beat != null;
+                const greetingDelay = isGreetingBeat
+                  ? `${(msg.metadata.beat - 1) * 850}ms`
+                  : undefined;
                 
                 return (
-                <div key={msg.id || `msg-${i}`} className={msg._justSent && msg.role === "user" ? "bubble-launch" : "message-enter"}>
+                <div
+                  key={msg.id || `msg-${i}`}
+                  className={msg._justSent && msg.role === "user" ? "bubble-launch" : "message-enter"}
+                  style={greetingDelay ? { animationDelay: greetingDelay, opacity: 0, animationFillMode: "forwards" } : undefined}
+                >
                   {/* Skip regular bubble for booking messages (CONFIRMED card shows all info) and onboarding_collect (trust card shows it) */}
                   {isRegularBubble && (
                     <div className={`chat-bubble-row ${msg.role === "user" ? "chat-bubble-row-user" : "chat-bubble-row-assistant"}`}>
@@ -1082,7 +1108,12 @@ export default function Home() {
                       <div className={`chat-bubble ${msg.role === "user" ? "chat-bubble-user" : "chat-bubble-assistant"}`}>
                         {msg.role === "assistant" ? (
                           <div className="chat-bubble-md">
-                            <StreamingText content={msg.content} />
+                            <StreamingText
+                              content={msg.content}
+                              onComplete={() => {
+                                setStreamingMsgIndex((prev) => (prev === i ? null : prev));
+                              }}
+                            />
                           </div>
                         ) : (
                           <p className="chat-bubble-text">{msg.content}</p>
@@ -1153,7 +1184,7 @@ export default function Home() {
               {isSending && (
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
-                    <BldgLogo size="small" animate="bounce" />
+                    <BldgLogo size="small" animate={recognizeActive ? "recognize" : "bounce"} />
                   </div>
                   <div className="typing-shimmer" />
                 </div>

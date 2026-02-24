@@ -9,6 +9,7 @@
 // ============================================
 
 import { useEffect, useState } from "react";
+import BldgLogo from "@/components/BldgLogo";
 
 interface ConfirmationCeremonyProps {
   service: string;
@@ -17,19 +18,9 @@ interface ConfirmationCeremonyProps {
   onComplete: () => void;
 }
 
-/**
- * Format the ceremony text: "Laundry. Tuesday 7 AM. Handled."
- */
 function formatCeremonyText(service: string, date: string, window: string) {
-  // Extract just the time start from the window (e.g., "7–10 AM" → "7 AM")
-  const timeMatch = window.match(/^(\d{1,2})/);
-  const amPm = window.includes("PM") ? "PM" : "AM";
-  const shortTime = timeMatch ? `${timeMatch[1]} ${amPm}` : window;
-
-  // Capitalize service name
   const serviceName = service.charAt(0).toUpperCase() + service.slice(1);
-
-  return { serviceName, date, shortTime };
+  return { serviceName, date, window };
 }
 
 export default function ConfirmationCeremony({
@@ -39,15 +30,9 @@ export default function ConfirmationCeremony({
   onComplete,
 }: ConfirmationCeremonyProps) {
   const [phase, setPhase] = useState<"enter" | "peak" | "exit" | "done">("enter");
-  const { serviceName, date: dateStr, shortTime } = formatCeremonyText(service, date, windowStr);
+  const { serviceName, date: dateStr, window: windowStr2 } = formatCeremonyText(service, date, windowStr);
 
   useEffect(() => {
-    // Timeline:
-    // 0ms      → enter (fade to white) — 800ms
-    // 800ms    → peak (text visible, hold) — 1200ms
-    // 2000ms   → exit (fade back to dark) — 800ms
-    // 2800ms   → done (remove overlay)
-
     const peakTimer = setTimeout(() => setPhase("peak"), 800);
     const exitTimer = setTimeout(() => setPhase("exit"), 2000);
     const doneTimer = setTimeout(() => {
@@ -70,10 +55,18 @@ export default function ConfirmationCeremony({
       aria-live="assertive"
       role="status"
     >
+      {/* Logo with dot-expand animation — the "nod" that something happened */}
+      <div className={`ceremony-logo ceremony-logo--${phase}`}>
+        <BldgLogo
+          size="large"
+          animate={phase === "enter" ? "confirm" : "idle"}
+        />
+      </div>
+
       <div className={`ceremony-text ceremony-text--${phase}`}>
-        <span className="ceremony-service">{serviceName}.</span>
-        <span className="ceremony-detail">{dateStr} {shortTime}.</span>
-        <span className="ceremony-handled">Handled.</span>
+        <span className="ceremony-service">Locked in.</span>
+        <span className="ceremony-detail">{serviceName} — {dateStr}, {windowStr2}.</span>
+        <span className="ceremony-handled">You'll get a reminder the morning of.</span>
       </div>
     </div>
   );

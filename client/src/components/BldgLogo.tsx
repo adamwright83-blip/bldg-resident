@@ -6,15 +6,18 @@
  *   - "small" (24px) — message avatar
  *
  * Animation states:
- *   - "idle"    — static
- *   - "bounce"  — 3-beat dot rhythm while AI is processing
- *   - "pulse"   — single scale-up on booking confirmed
- *   - "breathe" — slow ambient breathing (empty state)
+ *   - "idle"      — static
+ *   - "breathe"   — slow ambient breathing (empty state)
+ *   - "bounce"    — 3-beat dot rhythm while AI is processing
+ *   - "streaming" — steady active pulse while message streams
+ *   - "recognize" — single quick swell when user sends ("got it")
+ *   - "pulse"     — single scale-up (legacy, booking confirmed)
+ *   - "confirm"   — dramatic 3-4x swell + settle on booking lock-in
  */
 
 interface BldgLogoProps {
   size?: "large" | "small";
-  animate?: "idle" | "bounce" | "pulse" | "breathe";
+  animate?: "idle" | "breathe" | "bounce" | "streaming" | "recognize" | "pulse" | "confirm";
   className?: string;
 }
 
@@ -34,7 +37,13 @@ export default function BldgLogo({
         ? "bldg-dot-pulse"
         : animate === "breathe"
           ? "bldg-dot-breathe"
-          : "";
+          : animate === "streaming"
+            ? "bldg-dot-streaming"
+            : animate === "recognize"
+              ? "bldg-dot-recognize"
+              : animate === "confirm"
+                ? "bldg-dot-confirm"
+                : "";
 
   return (
     <svg

@@ -1193,29 +1193,6 @@ export const chatRouter = router({
         let serviceRequestId: number | null = null;
         let serviceCategory: string | null = null;
         if (bookingMeta) {
-          const userForPaymentGate = await getBldgUserById(bldgUserId);
-          if (!userForPaymentGate?.paymentMethodSaved) {
-            const paymentPrompt = "Add a card to lock it in.";
-
-            await insertChatMessage({
-              bldgUserId,
-              role: "assistant",
-              content: paymentPrompt,
-              metadata: {
-                type: "payment_collection",
-                bldgUserId,
-              },
-            });
-
-            return {
-              role: "assistant" as const,
-              content: paymentPrompt,
-              booking: null,
-              onboardingComplete: false,
-              collectStep: "payment",
-            };
-          }
-
           const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
@@ -1498,7 +1475,7 @@ export const chatRouter = router({
     const user = await getBldgUserById(bldgUserId);
     let messages = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
 
-    // v2 bootstrap: if user is COMPLETE and history is empty, inject activation message
+    // v2 bootstrap: if user is COMPLETE and history is empty, inject contextual greeting
     if (
       user &&
       user.onboardingStep >= ONBOARDING_STEP.COMPLETE &&
@@ -1506,15 +1483,55 @@ export const chatRouter = router({
     ) {
       const unitLabel = user.unit || "your unit";
       const isReturning = user.lastLoginAt && (Date.now() - new Date(user.lastLoginAt).getTime()) > 60_000;
-      const activationText = isReturning
-        ? "Welcome back. What do you need?"
-        : `Unit ${unitLabel} is active. Say the word.`;
+
+      let greetBeat1: string;
+      let greetBeat2: string;
+      let greetBeat3: string;
+      try {
+        const laundryDefaults = await getBookingDefaults(bldgUserId, "laundry");
+        const carWashDefaults = await getBookingDefaults(bldgUserId, "car-wash");
+
+        const laundrySlot = `${laundryDefaults.date.split(",")[0]} ${laundryDefaults.window}`;
+        const carWashSlot = carWashDefaults.date.split(",")[0];
+
+        if (isReturning) {
+          greetBeat1 = `Welcome back, ${unitLabel}.`;
+          greetBeat2 = `Laundry pickup available ${laundrySlot}. Car wash slots open ${carWashSlot}. Dry cleaning same-day if ordered before noon.`;
+          greetBeat3 = `What should I handle?`;
+        } else {
+          greetBeat1 = `Unit ${unitLabel} is set.`;
+          greetBeat2 = `Laundry pickup available ${laundrySlot}. Car wash and dry cleaning ready to go.`;
+          greetBeat3 = `Say what you need.`;
+        }
+      } catch {
+        if (isReturning) {
+          greetBeat1 = `Welcome back, ${unitLabel}.`;
+          greetBeat2 = `Laundry, car wash, dry cleaning — all available.`;
+          greetBeat3 = `What should I handle?`;
+        } else {
+          greetBeat1 = `Unit ${unitLabel} is set.`;
+          greetBeat2 = `Laundry, car wash, dry cleaning ready to go.`;
+          greetBeat3 = `Say what you need.`;
+        }
+      }
 
       await insertChatMessage({
         bldgUserId,
         role: "assistant",
-        content: activationText,
-        metadata: { type: "system_greeting" },
+        content: greetBeat1,
+        metadata: { type: "system_greeting", beat: 1 },
+      });
+      await insertChatMessage({
+        bldgUserId,
+        role: "assistant",
+        content: greetBeat2,
+        metadata: { type: "system_greeting", beat: 2 },
+      });
+      await insertChatMessage({
+        bldgUserId,
+        role: "assistant",
+        content: greetBeat3,
+        metadata: { type: "system_greeting", beat: 3 },
       });
 
       messages = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
