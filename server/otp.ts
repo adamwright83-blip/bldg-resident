@@ -79,7 +79,7 @@ export async function sendOTP(
 
   // ── Dev test phone: always create a fresh user, bypass OTP ──────────────
   if (phone === DEV_TEST_PHONE_NORMALIZED) {
-    const uniquePhone = `+1555test${Date.now()}`;
+    const uniquePhone = `+1555${Date.now() % 10000000}`;
     const freshUser = await upsertBldgUser({
       phoneE164: uniquePhone,
       buildingSlug,
