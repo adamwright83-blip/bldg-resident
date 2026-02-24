@@ -43,16 +43,15 @@ import { getSessionCookieOptions } from "../_core/cookies";
 const BLDG_COOKIE_NAME = "bldg_session";
 const CONTEXT_WINDOW = 20;
 
-// ─── Onboarding step constants ───
-// NEW: Booking-first flow. Users book immediately, then we collect info post-booking.
-// Steps 0 = fresh guest, 1 = first booking placed (collecting address), 2-4 = collecting remaining info, 5 = done.
+// ─── Onboarding step constants (v2) ───
+// Keep numeric values stable for DB compatibility.
 const ONBOARDING_STEP = {
-  NOT_STARTED: 0,        // Fresh guest, no booking yet — let them book freely
-  COLLECTING_ADDRESS: 1, // First booking placed, now collecting building + unit
-  COLLECTING_NAME: 2,    // Address collected, now collecting name
-  COLLECTING_PHONE: 3,   // Name collected, now collecting phone
-  COLLECTING_PAYMENT: 4, // Phone collected, now collecting payment
-  COMPLETE: 5,           // All info collected
+  NOT_STARTED: 0,
+  COLLECTING_ADDRESS: 1, // legacy
+  COLLECTING_NAME: 2, // legacy
+  COLLECTING_PHONE: 3, // legacy
+  COLLECTING_PAYMENT: 4, // legacy
+  COMPLETE: 5,
 } as const;
 
 // ─── Date conversion helper ───
@@ -896,62 +895,9 @@ export const chatRouter = router({
    * Advances to COLLECTING_NAME (if address exists from overlay) or COLLECTING_ADDRESS.
    */
   startRegistration: publicProcedure.mutation(async ({ ctx }) => {
-    const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
-    if (!bldgUserId) {
-      return { started: false, reason: "no_session" };
-    }
-
-    const user = await getBldgUserById(bldgUserId);
-    if (!user) {
-      return { started: false, reason: "no_user" };
-    }
-
-    // Only trigger for NOT_STARTED users
-    if (user.onboardingStep !== ONBOARDING_STEP.NOT_STARTED) {
-      return { started: false, reason: "already_started", step: user.onboardingStep };
-    }
-
-    const hasAddress = user.buildingSlug && user.unit;
-
-    if (hasAddress) {
-      // Skip address collection — go straight to name
-      await updateBldgUser(bldgUserId, {
-        onboardingStep: ONBOARDING_STEP.COLLECTING_NAME,
-      } as any);
-
-      await insertChatMessage({
-        bldgUserId,
-        role: "assistant",
-        content: "Name for the order?",
-        metadata: {
-          type: "onboarding_collect",
-          collectType: "name",
-          step: ONBOARDING_STEP.COLLECTING_NAME,
-        },
-      });
-
-      console.log(`[Onboarding] startRegistration: user ${bldgUserId} has address, skipping to name`);
-      return { started: true, step: ONBOARDING_STEP.COLLECTING_NAME };
-    } else {
-      // No address from overlay — ask for it
-      await updateBldgUser(bldgUserId, {
-        onboardingStep: ONBOARDING_STEP.COLLECTING_ADDRESS,
-      } as any);
-
-      await insertChatMessage({
-        bldgUserId,
-        role: "assistant",
-        content: "Where should the driver come? Building and unit.",
-        metadata: {
-          type: "onboarding_collect",
-          collectType: "address",
-          step: ONBOARDING_STEP.COLLECTING_ADDRESS,
-        },
-      });
-
-      console.log(`[Onboarding] startRegistration: user ${bldgUserId} needs address`);
-      return { started: true, step: ONBOARDING_STEP.COLLECTING_ADDRESS };
-    }
+    // v2 onboarding no longer uses chat-driven registration.
+    // Keep the mutation for backward compatibility with older clients.
+    return { started: false, reason: "disabled_v2" };
   }),
 
   /**
@@ -992,48 +938,47 @@ export const chatRouter = router({
         content: input.content,
       });
 
-      // Server-canonical onboarding guardrail:
-      // If frontend misses/races startRegistration, do not allow step-0 users
-      // to bypass onboarding by sending booking intents directly.
-      if (user.onboardingStep === ONBOARDING_STEP.NOT_STARTED) {
-        const hasAddress = user.buildingSlug && user.unit;
-        const nextStep = hasAddress
-          ? ONBOARDING_STEP.COLLECTING_NAME
-          : ONBOARDING_STEP.COLLECTING_ADDRESS;
-        const collectType = hasAddress ? "name" : "address";
-        const prompt = hasAddress
-          ? "Name for the order?"
-          : "Where should the driver come? Building and unit.";
+      // v2: identity + OTP happen before chat. Do not auto-start legacy onboarding here.
 
-        await updateBldgUser(bldgUserId, {
-          onboardingStep: nextStep,
-        } as any);
+      // ─── CONVERSATIONAL NAME CAPTURE (v2) ───
+      // If last assistant message was "awaiting_name", try to capture the name.
+      // If the user types something that looks like a service request instead, skip silently.
+      {
+        const recentMessages = await getChatHistory(bldgUserId, 3);
+        const lastAssistant = recentMessages.filter(m => m.role === "assistant").pop();
+        if (lastAssistant?.metadata && (lastAssistant.metadata as any).type === "awaiting_name" && !user.firstName) {
+          const text = input.content.trim();
+          const isServiceRequest = /^(laundry|dry\s*clean|car\s*wash|groom|food|sushi|hungry)/i.test(text);
+          if (!isServiceRequest && text.length >= 2 && text.length <= 40 && !text.includes("?")) {
+            const nameParts = text.split(/\s+/);
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(" ") || null;
+            await updateBldgUser(bldgUserId, { firstName, lastName } as any);
 
-        await insertChatMessage({
-          bldgUserId,
-          role: "assistant",
-          content: prompt,
-          metadata: {
-            type: "onboarding_collect",
-            collectType,
-            step: nextStep,
-          },
-        });
+            const confirmMsg = `Got it, ${firstName}. You're set.`;
+            await insertChatMessage({
+              bldgUserId,
+              role: "assistant",
+              content: confirmMsg,
+              metadata: { type: "name_captured" },
+            });
 
-        return {
-          role: "assistant" as const,
-          content: prompt,
-          booking: null,
-          onboardingComplete: false,
-          collectStep: collectType,
-        };
+            return {
+              role: "assistant" as const,
+              content: confirmMsg,
+              booking: null,
+              onboardingComplete: true,
+            };
+          }
+          // If it looks like a service request, fall through to normal LLM flow
+        }
       }
 
-      // ─── POST-BOOKING COLLECTION FLOW ───
+      // ─── POST-BOOKING COLLECTION FLOW (legacy steps 1-4) ───
       // Step 0 (NOT_STARTED) = fresh user, let them through to LLM/booking.
       // Steps 1-4 = collecting profile info after first booking.
       // Step 5 (COMPLETE) = done, normal chat.
-      if (user.onboardingStep >= ONBOARDING_STEP.COLLECTING_ADDRESS && user.onboardingStep < ONBOARDING_STEP.COMPLETE) {
+      if (false && user.onboardingStep >= ONBOARDING_STEP.COLLECTING_ADDRESS && user.onboardingStep < ONBOARDING_STEP.COMPLETE) {
         const collectResult = await handlePostBookingCollection(
           bldgUserId,
           input.content,
@@ -1250,23 +1195,15 @@ export const chatRouter = router({
         if (bookingMeta) {
           const userForPaymentGate = await getBldgUserById(bldgUserId);
           if (!userForPaymentGate?.paymentMethodSaved) {
-            const paymentPrompt = "Last thing — add a card so you're set for next time.";
-            const paymentStep = ONBOARDING_STEP.COLLECTING_PAYMENT;
-
-            if ((userForPaymentGate?.onboardingStep ?? 0) < paymentStep) {
-              await updateBldgUser(bldgUserId, {
-                onboardingStep: paymentStep,
-              } as any);
-            }
+            const paymentPrompt = "Add a card to lock it in.";
 
             await insertChatMessage({
               bldgUserId,
               role: "assistant",
               content: paymentPrompt,
               metadata: {
-                type: "onboarding_collect",
-                collectType: "payment",
-                step: paymentStep,
+                type: "payment_collection",
+                bldgUserId,
               },
             });
 
@@ -1403,21 +1340,25 @@ export const chatRouter = router({
               console.error("[ownerNotify] Failed to send alert:", err);
             }
 
-            // ─── POST-BOOKING: Prompt payment for completed users who haven't saved card ───
-            // NOTE: Registration now happens BEFORE booking via startRegistration.
-            // NOT_STARTED users can no longer reach this code path because
-            // the frontend gates tile access behind onboardingComplete.
+            // ─── POST-BOOKING: Prompt payment + conversational name capture ───
             const latestUser = bldgUserId ? await getBldgUserById(bldgUserId) : null;
             if (latestUser && !latestUser.paymentMethodSaved && latestUser.onboardingStep >= ONBOARDING_STEP.COMPLETE) {
-              // Existing completed user who hasn't saved payment yet
               await insertChatMessage({
                 bldgUserId: bldgUserId!,
                 role: "assistant",
-                content: "Add a card so you're set for next time.",
+                content: "Add a card to lock it in.",
                 metadata: {
                   type: "payment_collection",
                   bldgUserId: bldgUserId!,
                 },
+              });
+            } else if (latestUser && !latestUser.firstName && latestUser.onboardingStep >= ONBOARDING_STEP.COMPLETE) {
+              // Payment already saved but no name — ask conversationally
+              await insertChatMessage({
+                bldgUserId: bldgUserId!,
+                role: "assistant",
+                content: "Locked in. What name should we use for pickups?",
+                metadata: { type: "awaiting_name" },
               });
             }
 
@@ -1555,7 +1496,29 @@ export const chatRouter = router({
     }
 
     const user = await getBldgUserById(bldgUserId);
-    const messages = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
+    let messages = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
+
+    // v2 bootstrap: if user is COMPLETE and history is empty, inject activation message
+    if (
+      user &&
+      user.onboardingStep >= ONBOARDING_STEP.COMPLETE &&
+      messages.length === 0
+    ) {
+      const unitLabel = user.unit || "your unit";
+      const isReturning = user.lastLoginAt && (Date.now() - new Date(user.lastLoginAt).getTime()) > 60_000;
+      const activationText = isReturning
+        ? "Welcome back. What do you need?"
+        : `Unit ${unitLabel} is active. Say the word.`;
+
+      await insertChatMessage({
+        bldgUserId,
+        role: "assistant",
+        content: activationText,
+        metadata: { type: "system_greeting" },
+      });
+
+      messages = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
+    }
 
     // Filter out payment collection prompts once payment is saved.
     // Include legacy plain-text prompts so old chat rows do not keep reappearing.

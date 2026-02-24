@@ -495,6 +495,114 @@ describe("Booking-First Onboarding Flow", () => {
   });
 });
 
+// ─── V2 OTP Onboarding Tests ───
+
+describe("V2 OTP Onboarding Flow", () => {
+  describe("OTP phone normalization", () => {
+    function normalizePhone(raw: string): string {
+      let digits = raw.replace(/\D/g, "");
+      if (digits.length === 10) digits = "1" + digits;
+      if (!digits.startsWith("1")) digits = "1" + digits;
+      return "+" + digits;
+    }
+
+    it("normalizes 10-digit US number", () => {
+      expect(normalizePhone("3105551234")).toBe("+13105551234");
+    });
+
+    it("strips formatting", () => {
+      expect(normalizePhone("(310) 555-1234")).toBe("+13105551234");
+    });
+
+    it("handles +1 prefix", () => {
+      expect(normalizePhone("+13105551234")).toBe("+13105551234");
+    });
+  });
+
+  describe("OTP code generation", () => {
+    function generateCode(): string {
+      return String(Math.floor(100000 + Math.random() * 900000));
+    }
+
+    it("generates a 6-digit numeric string", () => {
+      const code = generateCode();
+      expect(code).toMatch(/^\d{6}$/);
+      expect(parseInt(code)).toBeGreaterThanOrEqual(100000);
+      expect(parseInt(code)).toBeLessThan(1000000);
+    });
+  });
+
+  describe("Phone masking", () => {
+    function maskPhone(phone: string): string {
+      const digits = phone.replace(/\D/g, "");
+      if (digits.length < 4) return "***";
+      const last2 = digits.slice(-2);
+      if (digits.length >= 10) {
+        const areaCode = digits.slice(digits.length - 10, digits.length - 7);
+        return `(${areaCode}) ***-**${last2}`;
+      }
+      return `***${last2}`;
+    }
+
+    it("masks US phone number showing area code and last 2 digits", () => {
+      expect(maskPhone("+13105551234")).toBe("(310) ***-**34");
+    });
+
+    it("masks short numbers", () => {
+      expect(maskPhone("1234")).toBe("***34");
+    });
+
+    it("handles very short numbers", () => {
+      expect(maskPhone("12")).toBe("***");
+    });
+  });
+
+  describe("Onboarding step values", () => {
+    it("v2 users go directly from 0 to 5 via OTP", () => {
+      expect(ONBOARDING_STEP.NOT_STARTED).toBe(0);
+      expect(ONBOARDING_STEP.COMPLETE).toBe(5);
+    });
+  });
+
+  describe("Name capture heuristic", () => {
+    function isServiceRequest(text: string): boolean {
+      return /^(laundry|dry\s*clean|car\s*wash|groom|food|sushi|hungry)/i.test(text);
+    }
+
+    function isLikelyName(text: string): boolean {
+      return text.length >= 2 && text.length <= 40 && !text.includes("?") && !isServiceRequest(text);
+    }
+
+    it("accepts 'Adam' as a name", () => {
+      expect(isLikelyName("Adam")).toBe(true);
+    });
+
+    it("accepts 'Sarah Connor' as a name", () => {
+      expect(isLikelyName("Sarah Connor")).toBe(true);
+    });
+
+    it("rejects 'laundry' as a name", () => {
+      expect(isLikelyName("laundry")).toBe(false);
+    });
+
+    it("rejects 'dry cleaning' as a name", () => {
+      expect(isLikelyName("dry cleaning")).toBe(false);
+    });
+
+    it("rejects 'car wash' as a name", () => {
+      expect(isLikelyName("car wash")).toBe(false);
+    });
+
+    it("rejects very short input", () => {
+      expect(isLikelyName("A")).toBe(false);
+    });
+
+    it("rejects questions", () => {
+      expect(isLikelyName("what?")).toBe(false);
+    });
+  });
+});
+
 describe("Phone number normalization", () => {
   function normalizePhone(input: string): string {
     let phone = input.trim().replace(/[^\d+]/g, "");

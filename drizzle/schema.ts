@@ -45,7 +45,10 @@ export const bldgUsers = mysqlTable("bldg_users", {
   stripePaymentMethodId: varchar("stripePaymentMethodId", { length: 100 }), // Stripe payment method ID (pm_xxxxx)
   paymentMethodSaved: int("paymentMethodSaved").default(0).notNull(), // 0 = false, 1 = true
   cardLast4: varchar("cardLast4", { length: 4 }), // Last 4 digits of saved card
-  onboardingStep: int("onboardingStep").default(0).notNull(), // 0=not started, 1=asked name, 2=asked building, 3=asked unit, 4=asked phone, 5=complete
+  onboardingStep: int("onboardingStep").default(0).notNull(), // 0=not started, 5=complete (v2: OTP-verified)
+  otpCode: varchar("otpCode", { length: 6 }),
+  otpExpiresAt: timestamp("otpExpiresAt"),
+  otpAttempts: int("otpAttempts").default(0),
 });
 
 export type BldgUser = typeof bldgUsers.$inferSelect;

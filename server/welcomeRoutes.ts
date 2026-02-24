@@ -188,6 +188,83 @@ async function createGuestUser(req: Request): Promise<{ userId: number; sessionT
 }
 
 export function registerWelcomeRoutes(app: Router): void {
+  app.get("/api/session", async (req: Request, res: Response) => {
+    try {
+      const existingCookie = getBldgSessionCookie(req);
+      const userId = await verifyBldgSession(existingCookie);
+      if (!userId) {
+        return res.json({ authenticated: false });
+      }
+
+      const user = await getBldgUserById(userId);
+      if (!user) {
+        return res.json({ authenticated: false });
+      }
+
+      return res.json({
+        authenticated: true,
+        userId: user.id,
+        onboardingStep: user.onboardingStep,
+      });
+    } catch (err) {
+      console.error("[Session] Error:", err);
+      return res.status(500).json({ authenticated: false });
+    }
+  });
+
+  // ─── OTP Endpoints (v2 onboarding) ───
+
+  app.post("/api/otp/send", async (req: Request, res: Response) => {
+    try {
+      const { phone, buildingSlug, unit } = req.body || {};
+      if (!phone || !unit) {
+        return res.status(400).json({ error: "Phone and unit are required." });
+      }
+      const slug = buildingSlug || "unknown";
+
+      const { sendOTP } = await import("./otp");
+      const result = await sendOTP(phone, slug, unit);
+
+      if (!result.ok) {
+        return res.status(429).json({ error: result.error });
+      }
+      return res.json({ ok: true, maskedPhone: result.maskedPhone });
+    } catch (err) {
+      console.error("[OTP Send] Error:", err);
+      return res.status(500).json({ error: "Failed to send code." });
+    }
+  });
+
+  app.post("/api/otp/verify", async (req: Request, res: Response) => {
+    try {
+      const { phone, code } = req.body || {};
+      if (!phone || !code) {
+        return res.status(400).json({ error: "Phone and code are required." });
+      }
+
+      const { verifyOTP } = await import("./otp");
+      const result = await verifyOTP(phone, code);
+
+      if (!result.ok) {
+        return res.status(401).json({ error: result.error });
+      }
+
+      const sessionToken = await createBldgSession(result.userId);
+      res.cookie(BLDG_COOKIE_NAME, sessionToken, {
+        ...getSessionCookieOptions(req),
+        maxAge: ONE_YEAR_SECONDS * 1000,
+      });
+
+      console.log(`[OTP] Verified user ${result.userId}`);
+      return res.json({ ok: true, userId: result.userId });
+    } catch (err) {
+      console.error("[OTP Verify] Error:", err);
+      return res.status(500).json({ error: "Verification failed." });
+    }
+  });
+
+  // ─── Guest Session (legacy fallback) ───
+
   /**
    * POST /api/guest-session
    *

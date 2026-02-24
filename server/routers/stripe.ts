@@ -171,6 +171,17 @@ export const stripeRouter = router({
         console.error("[OPS_INTEGRATION] Re-fire after payment failed:", err);
       }
 
+      // v2: after payment saved, ask for name if not captured yet
+      const postPaymentUser = await getBldgUserById(bldgUserId);
+      if (postPaymentUser && !postPaymentUser.firstName) {
+        await insertChatMessage({
+          bldgUserId,
+          role: "assistant",
+          content: "Locked in. What name should we use for pickups?",
+          metadata: { type: "awaiting_name" },
+        });
+      }
+
       return {
         success: true,
         stripeCustomerId: customerId,

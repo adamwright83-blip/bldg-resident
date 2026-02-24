@@ -1,31 +1,30 @@
 /**
- * OnboardingFlow — Orchestrates the 3-screen onboarding sequence.
- * splash → building selector → tutorial → done (reveals chat)
+ * OnboardingFlow v2 — Identity + OTP → Chat
  *
- * Persists completion in localStorage so returning users skip it.
- * Also saves building + unit to the guest session via API.
+ * Numeric subdomains (3545.bldg.chat): building auto-locked, just Unit + Mobile.
+ * Generic entry (app.bldg.chat): shows building dropdown.
  *
- * BUG FIX: Children (chat) are NOT rendered until onboarding is "done".
- * This prevents the flash of the home screen between screens.
+ * Returning users (localStorage or valid session) skip directly to chat.
  */
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { API_BASE } from "@/const";
 import {
   extractNumericHostToken,
   resolveBuildingFromHostname,
 } from "@shared/buildingHostMap";
-import SplashScreen from "./SplashScreen";
-import BuildingSelector from "./BuildingSelector";
-import TutorialScreen from "./TutorialScreen";
+import IdentityScreen from "./IdentityScreen";
+import OTPScreen from "./OTPScreen";
 
 const ONBOARDING_KEY = "bldg_onboarding_complete";
-const BUILDING_KEY = "bldg_selected_building";
 
-type OnboardingStep = "splash" | "building" | "tutorial" | "done";
+const BUILDING_NAMES: Record<string, string> = {
+  "opus-south": "3545 Wilshire Blvd",
+  "opus-north": "3650 Wilshire Blvd",
+  "cpe-north": "2160 Century Park East",
+  "cpe-south": "2170 Century Park East",
+};
 
-interface OnboardingFlowProps {
-  children: React.ReactNode;
-}
+type OnboardingStep = "identity" | "otp" | "done";
 
 function isOnboardingComplete(): boolean {
   try {
@@ -38,27 +37,9 @@ function isOnboardingComplete(): boolean {
 function markOnboardingComplete() {
   try {
     localStorage.setItem(ONBOARDING_KEY, "true");
-  } catch {
-    // localStorage unavailable — proceed anyway
-  }
+  } catch {}
 }
 
-function saveBuildingLocally(building: string, unit: string) {
-  try {
-    localStorage.setItem(BUILDING_KEY, JSON.stringify({ building, unit }));
-  } catch {
-    // best effort
-  }
-}
-
-const BUILDING_NAMES: Record<string, string> = {
-  "opus-south": "3545 Wilshire Blvd",
-  "opus-north": "3650 Wilshire Blvd",
-  "cpe-north": "2160 Century Park East",
-  "cpe-south": "2170 Century Park East",
-};
-
-/** Resolve building from current hostname, if numeric subdomain */
 function getHostnameBuilding(): { slug: string; displayName: string } | null {
   if (typeof window === "undefined") return null;
   const token = extractNumericHostToken(window.location.hostname);
@@ -71,104 +52,162 @@ function getHostnameBuilding(): { slug: string; displayName: string } | null {
   };
 }
 
-/**
- * Create guest session early so the cookie exists before /api/set-building.
- * Without this, the building selector's POST fails with 401 because
- * ensureSession() in Home.tsx only runs after onboarding completes.
- */
-async function ensureGuestSession(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/api/guest-session`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    console.log("[OnboardingSession]", data.alreadyExists ? "Existing session" : "Created guest session", data.userId);
-    return true;
-  } catch (err) {
-    console.error("[OnboardingSession] Failed:", err);
-    return false;
-  }
+interface OnboardingFlowProps {
+  children: React.ReactNode;
 }
 
 export default function OnboardingFlow({ children }: OnboardingFlowProps) {
+  const [checkingSession, setCheckingSession] = useState(true);
   const [step, setStep] = useState<OnboardingStep>(
-    isOnboardingComplete() ? "done" : "splash"
+    isOnboardingComplete() ? "done" : "identity"
   );
-  const [buildingName, setBuildingName] = useState("");
-  const sessionCreated = useRef(false);
-  // Resolved once on mount — non-reactive
+
+  // Identity state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [identityError, setIdentityError] = useState("");
+
+  // OTP state
+  const [maskedPhone, setMaskedPhone] = useState("");
+  const [phone, setPhone] = useState("");
+  const [buildingSlug, setBuildingSlug] = useState("");
+  const [unit, setUnit] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [otpError, setOtpError] = useState("");
+
   const hostnameBuilding = getHostnameBuilding();
 
-  // Create guest session as soon as onboarding starts (before building step)
   useEffect(() => {
-    if (step !== "done" && !sessionCreated.current) {
-      sessionCreated.current = true;
-      ensureGuestSession();
-    }
-  }, [step]);
-
-  const handleSplashComplete = useCallback(() => {
-    setStep("building");
+    let active = true;
+    (async () => {
+      try {
+        // Returning users with a valid session cookie skip onboarding.
+        const res = await fetch(`${API_BASE}/api/session`, {
+          credentials: "include",
+        });
+        if (!active) return;
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.authenticated) {
+            markOnboardingComplete();
+            setStep("done");
+          }
+        }
+      } catch {
+        // No-op: fall back to normal onboarding when session check fails.
+      } finally {
+        if (active) setCheckingSession(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const handleBuildingComplete = useCallback(
-    async (building: string, unit: string) => {
-      saveBuildingLocally(building, unit);
-      setBuildingName(BUILDING_NAMES[building] || building);
-
-      // Ensure guest session exists before saving building (belt + suspenders)
-      if (!sessionCreated.current) {
-        await ensureGuestSession();
-        sessionCreated.current = true;
-      }
-
-      // Send building + unit to backend — cookie now exists
+  const handleIdentitySubmit = useCallback(
+    async (data: { phone: string; unit: string; buildingSlug: string }) => {
+      setIsSubmitting(true);
+      setIdentityError("");
       try {
-        const res = await fetch(`${API_BASE}/api/set-building`, {
+        const res = await fetch(`${API_BASE}/api/otp/send`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ building, unit }),
+          body: JSON.stringify({
+            phone: data.phone,
+            buildingSlug: data.buildingSlug,
+            unit: data.unit,
+          }),
         });
-        if (!res.ok) {
-          console.error("[SetBuilding] Failed:", res.status);
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setIdentityError(json.error || "Failed to send code.");
+          return;
         }
-      } catch (err) {
-        console.error("[SetBuilding] Error:", err);
+        setMaskedPhone(json.maskedPhone);
+        setPhone(data.phone);
+        setBuildingSlug(data.buildingSlug);
+        setUnit(data.unit);
+        setStep("otp");
+      } catch {
+        setIdentityError("Network error. Try again.");
+      } finally {
+        setIsSubmitting(false);
       }
-
-      setStep("tutorial");
     },
     []
   );
 
-  const handleTutorialComplete = useCallback(() => {
-    markOnboardingComplete();
-    setStep("done");
-  }, []);
+  const handleVerify = useCallback(
+    async (code: string) => {
+      setIsVerifying(true);
+      setOtpError("");
+      try {
+        const res = await fetch(`${API_BASE}/api/otp/verify`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, code }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setOtpError(json.error || "Verification failed.");
+          return;
+        }
+        markOnboardingComplete();
+        setStep("done");
+      } catch {
+        setOtpError("Network error. Try again.");
+      } finally {
+        setIsVerifying(false);
+      }
+    },
+    [phone]
+  );
 
-  // If onboarding is done, render children (the app) directly
+  const handleResend = useCallback(async () => {
+    setOtpError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/otp/send`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, buildingSlug, unit }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setOtpError(json.error || "Failed to resend.");
+      }
+    } catch {
+      setOtpError("Network error.");
+    }
+  }, [phone, buildingSlug, unit]);
+
+  if (checkingSession) {
+    return null;
+  }
+
   if (step === "done") {
     return <>{children}</>;
   }
 
-  // During onboarding, render ONLY the current onboarding screen.
-  // Children are NOT mounted — no flash of the home screen.
+  if (step === "otp") {
+    return (
+      <OTPScreen
+        maskedPhone={maskedPhone}
+        onVerify={handleVerify}
+        onResend={handleResend}
+        isVerifying={isVerifying}
+        error={otpError}
+      />
+    );
+  }
+
   return (
-    <>
-      {step === "splash" && <SplashScreen onComplete={handleSplashComplete} />}
-      {step === "building" && (
-        <BuildingSelector
-          onComplete={handleBuildingComplete}
-          preselectedBuilding={hostnameBuilding ?? undefined}
-        />
-      )}
-      {step === "tutorial" && (
-        <TutorialScreen buildingName={buildingName} onComplete={handleTutorialComplete} />
-      )}
-    </>
+    <IdentityScreen
+      onSubmit={handleIdentitySubmit}
+      preselectedBuilding={hostnameBuilding ?? undefined}
+      isSubmitting={isSubmitting}
+      error={identityError}
+    />
   );
 }

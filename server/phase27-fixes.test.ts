@@ -144,15 +144,15 @@ describe("Registration-first flow (Phase 3.4 update)", () => {
     "utf-8"
   );
 
-  it("has startRegistration mutation for pre-booking registration", () => {
+  it("keeps startRegistration mutation for backward compatibility", () => {
     expect(chatRouter).toContain("startRegistration: publicProcedure");
-    expect(chatRouter).toContain("ONBOARDING_STEP.NOT_STARTED");
-    expect(chatRouter).toContain("COLLECTING_NAME");
+    expect(chatRouter).toContain("NOT_STARTED: 0");
+    expect(chatRouter).toContain("disabled_v2");
   });
 
-  it("checks hasAddress in startRegistration", () => {
-    expect(chatRouter).toContain("hasAddress");
-    expect(chatRouter).toContain("has address, skipping to name");
+  it("does not run legacy registration prompts in v2", () => {
+    expect(chatRouter).not.toContain("Where should the driver come? Building and unit.");
+    expect(chatRouter).not.toContain("has address, skipping to name");
   });
 
   it("returns collectStep in the response for immediate frontend rendering", () => {

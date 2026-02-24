@@ -737,8 +737,13 @@ export default function Home() {
     return -1;
   }, [messages]);
 
-  // ─── Item 5: Gravity Well — dynamic composer placeholder ───\u2500\u2500\u2500
+  // ─── Composer placeholder: shows service keywords for new users, ambient tone for returning ───
   const gravityPlaceholder = useMemo(() => {
+    // New users with no messages: show service keywords as hint
+    if (messages.length <= 1) {
+      return "laundry \u00B7 dry cleaning \u00B7 car wash \u00B7 grooming";
+    }
+
     const hour = new Date().getHours();
     const day = new Date().getDay(); // 0=Sun
     const isWeekend = day === 0 || day === 6;
