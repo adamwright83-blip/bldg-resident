@@ -27,6 +27,7 @@ import { MicButton } from "@/components/MicButton";
 import BldgLogo from "@/components/BldgLogo";
 import WasherIcon from "@/components/WasherIcon";
 import LaundryConfirmCard from "@/components/LaundryConfirmCard";
+import HowItWorksCard from "@/components/HowItWorksCard";
 import TrustCard from "@/components/TrustCard";
 import ConfirmationCeremony from "@/components/ConfirmationCeremony";
 import { toast } from "sonner";
@@ -546,6 +547,7 @@ export default function Home() {
   const [postBookingPhase, setPostBookingPhase] = useState<"animating" | "name" | "payment" | null>(null);
   const postBookingPhaseRef = useRef(postBookingPhase);
   postBookingPhaseRef.current = postBookingPhase;
+  const syncBlockedUntilRef = useRef(0);
   const [postBookingData, setPostBookingData] = useState<{ service: string; date: string; window: string } | null>(null);
   const [collectedFirstName, setCollectedFirstName] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -706,10 +708,9 @@ export default function Home() {
         return;
       }
       
-      // During the post-booking animation/collection flow, don't overwrite
-      // local messages — it would unmount the animated confirmation card
-      // (Bug 1) and wipe locally-injected name/payment cards (Bug 2).
-      if (postBookingPhaseRef.current !== null) {
+      // During the post-booking animation/collection flow (or the brief
+      // post-payment local-message window), don't overwrite local messages.
+      if (postBookingPhaseRef.current !== null || Date.now() < syncBlockedUntilRef.current) {
         setOnboardingComplete(historyQuery.data.onboardingComplete);
         return;
       }
@@ -802,7 +803,7 @@ export default function Home() {
           ...prev,
           {
             role: "assistant" as const,
-            content: "You're all set! Just need a couple things to get this to your door.",
+            content: "Order secured — and forthcoming orders are scheduled by default for that same time window and day, every other week. Modify or cancel above.\n\nEnter your name to proceed.",
             metadata: { type: "post_booking_name" },
             createdAt: new Date(),
           },
@@ -815,7 +816,7 @@ export default function Home() {
           ...prev,
           {
             role: "assistant" as const,
-            content: "Last step — add a card for the pickup.",
+            content: "One last thing — add a payment method so future orders are instant. One word in, service at your door.",
             metadata: { type: "post_booking_payment" },
             createdAt: new Date(),
           },
@@ -893,17 +894,9 @@ export default function Home() {
 
   const handlePaymentSaved = useCallback(() => {
     const isPostBooking = postBookingPhase === "payment";
-    const finalMsg = isPostBooking && postBookingData
-      ? `Locked in. Your laundry pickup is confirmed for ${postBookingData.date} at ${postBookingData.window.split("–")[0] || postBookingData.window}. We'll send you a reminder before we arrive.`
-      : PAYMENT_SAVED_MESSAGE;
 
-    const successMsg: ChatMsg = {
-      role: "assistant",
-      content: finalMsg,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => {
-      const withoutPaymentPrompt = prev.filter((msg) => {
+    const stripPaymentPrompts = (msgs: ChatMsg[]) =>
+      msgs.filter((msg) => {
         if (msg.role !== "assistant") return true;
         const content = msg.content.toLowerCase();
         const isLegacyPrompt =
@@ -918,19 +911,53 @@ export default function Home() {
         return !(isLegacyPrompt || isPaymentCollectMeta || isPostBookingLocal);
       });
 
-      const last = withoutPaymentPrompt[withoutPaymentPrompt.length - 1];
-      if (last?.role === "assistant" && last.content === finalMsg) {
-        return withoutPaymentPrompt;
-      }
+    if (isPostBooking && postBookingData) {
+      // Message 6: How it works card
+      const howItWorksMsg: ChatMsg = {
+        role: "assistant",
+        content: "__HOW_IT_WORKS__",
+        metadata: { type: "how_it_works" },
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...stripPaymentPrompts(prev), howItWorksMsg]);
 
-      return [...withoutPaymentPrompt, successMsg];
-    });
+      // Message 7: Final handoff after a brief pause
+      const timeStr = postBookingData.window.split("–")[0] || postBookingData.window;
+      setTimeout(() => {
+        const handoffMsg: ChatMsg = {
+          role: "assistant",
+          content: `You're all set. Your driver has been notified and you'll receive a text when he's on his way. ${postBookingData.date} at ${timeStr}.`,
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, handoffMsg]);
+      }, 1500);
+    } else {
+      const successMsg: ChatMsg = {
+        role: "assistant",
+        content: PAYMENT_SAVED_MESSAGE,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => {
+        const cleaned = stripPaymentPrompts(prev);
+        const last = cleaned[cleaned.length - 1];
+        if (last?.role === "assistant" && last.content === PAYMENT_SAVED_MESSAGE) {
+          return cleaned;
+        }
+        return [...cleaned, successMsg];
+      });
+    }
+
     setOnboardingComplete(true);
     setPostBookingPhase(null);
     setPostBookingData(null);
     setCollectedFirstName(null);
-    // Gate has dropped — sync with server to pick up any missed messages.
-    setTimeout(() => historyQuery.refetch(), 300);
+    if (isPostBooking) {
+      // Block sync while the local how-it-works + handoff messages render (1.5s + buffer).
+      syncBlockedUntilRef.current = Date.now() + 3000;
+      setTimeout(() => historyQuery.refetch(), 3500);
+    } else {
+      setTimeout(() => historyQuery.refetch(), 300);
+    }
   }, [postBookingPhase, postBookingData, historyQuery]);
 
   const handleSend = useCallback(
@@ -1157,7 +1184,7 @@ export default function Home() {
           ...prev.filter((m) => m.metadata?.type !== "post_booking_name"),
           {
             role: "assistant" as const,
-            content: `Thanks, ${firstName}! Last step — add a card for the pickup.`,
+            content: `Good to meet you, ${firstName}. One last thing — add a payment method so future orders are instant. One word in, service at your door.`,
             metadata: { type: "post_booking_payment" },
             createdAt: new Date(),
           },
@@ -1265,18 +1292,19 @@ export default function Home() {
                 const isPaymentCollection = msg.role === "assistant" && msg.metadata?.type === "payment_collection";
                 const isPostBookingName = msg.role === "assistant" && msg.metadata?.type === "post_booking_name";
                 const isPostBookingPayment = msg.role === "assistant" && msg.metadata?.type === "post_booking_payment";
+                const isHowItWorks = msg.role === "assistant" && msg.metadata?.type === "how_it_works";
 
                 // During post-booking animation, suppress server-inserted payment_collection messages
                 if (isPaymentCollection && postBookingPhase !== null) {
                   return null;
                 }
 
-                const isRegularBubble = !(isOnboardingCollect || isBooking || isPostBookingName || isPostBookingPayment);
+                const isRegularBubble = !(isOnboardingCollect || isBooking || isPostBookingName || isPostBookingPayment || isHowItWorks);
 
                 // Greeting beat stagger: 3-beat choreographed entrance
                 const isGreetingBeat = msg.metadata?.type === "system_greeting" && msg.metadata?.beat != null;
                 const greetingDelay = isGreetingBeat
-                  ? `${(msg.metadata.beat - 1) * 850}ms`
+                  ? `${(msg.metadata.beat - 1) * 500}ms`
                   : undefined;
                 
                 return (
@@ -1409,6 +1437,16 @@ export default function Home() {
                           </Elements>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* How it works education card (post-payment) */}
+                  {isHowItWorks && (
+                    <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
+                      <div className="bldg-avatar" style={{ visibility: "hidden" }}>
+                        <BldgLogo size="small" />
+                      </div>
+                      <HowItWorksCard isNew />
                     </div>
                   )}
                 </div>

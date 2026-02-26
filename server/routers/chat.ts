@@ -522,11 +522,11 @@ When a resident requests a service, you respond with a completed booking (date +
 7. If a duplicate booking exists, do not book again. Response MUST be: "Already on it. [Day] [Window]. Want to move it?" (e.g., "Already on it. Tuesday 7\u201310 AM. Want to move it?")
 
 **WHAT YOU CAN DO:**
-- Laundry pickup (Fluff & Fold)
-- Dry cleaning
-- Car wash
-- Cleaning
-- Grooming
+- Laundry pickup (Fluff & Fold) — instant booking
+- Dry cleaning — instant booking
+- Car wash / Auto detailing — request only (requires manual coordination)
+- Grooming — request only (requires manual coordination)
+- Cleaning — request only (requires manual coordination)
 - Amenities (placeholder booking)
 
 **DISCOVERY RESPONSE:**
@@ -737,13 +737,11 @@ You: "Done. $30 — five dress shirts at $6 each. Pickup booked.
 [RECURRENCE: none]
 [EXPLICIT_DATE: no]"
 
-Example (no recurrence):
-"Done. Tomorrow morning. We will text when they arrive.
-[SERVICE: car-wash]
-[DATE: Friday, Feb 21]
-[WINDOW: 9\u201311 AM]
-[RECURRENCE: none]
-[EXPLICIT_DATE: yes]"
+**NON-INSTANT SERVICES (car wash, grooming):**
+These services require manual coordination. Do NOT produce booking markers ([SERVICE:], [DATE:], etc.) for car wash or grooming. Instead, respond with a soft acknowledgment:
+- Car wash: "Car wash request received. I'm coordinating with our detailing partner and will confirm your window shortly."
+- Grooming: "Grooming request noted. I'm checking availability with our grooming partners and will confirm timing shortly."
+Only laundry and dry cleaning get instant confirmation with booking markers.
 
 MODIFY FLOW:
 If the resident says "Modify" or asks to change the time, ask ONE question:
@@ -1513,9 +1511,9 @@ export const chatRouter = router({
           greetBeat2 = `Laundry pickup available ${laundrySlot}. Car wash slots open ${carWashSlot}. Dry cleaning same-day if ordered before noon.`;
           greetBeat3 = `What should I handle?`;
         } else {
-          greetBeat1 = `Unit ${unitLabel} is set.`;
-          greetBeat2 = `Laundry pickup available ${laundrySlot}. Car wash, dry cleaning, dog grooming — all available on demand.`;
-          greetBeat3 = `Say what you need.`;
+          greetBeat1 = `Welcome to BLDG. Your private concierge.`;
+          greetBeat2 = `We handle laundry, dry cleaning, auto detailing, and dog grooming.`;
+          greetBeat3 = `Most requests take a single word. Type 'Laundry' to begin.`;
         }
       } catch {
         if (isReturning) {
@@ -1523,9 +1521,9 @@ export const chatRouter = router({
           greetBeat2 = `Laundry, car wash, dry cleaning — all available.`;
           greetBeat3 = `What should I handle?`;
         } else {
-          greetBeat1 = `Unit ${unitLabel} is set.`;
-          greetBeat2 = `Car wash, dry cleaning, dog grooming — all available on demand.`;
-          greetBeat3 = `Say what you need.`;
+          greetBeat1 = `Welcome to BLDG. Your private concierge.`;
+          greetBeat2 = `We handle laundry, dry cleaning, auto detailing, and dog grooming.`;
+          greetBeat3 = `Most requests take a single word. Type 'Laundry' to begin.`;
         }
       }
 
