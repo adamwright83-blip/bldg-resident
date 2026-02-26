@@ -1285,44 +1285,106 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
-  /* ─── Laundry Mode: dot expands into washing machine door ─── */
+  /* ─── Laundry Projector Mode ─── */
+  /* Dot moves to upper-right, ring projects outward, clothes tumble inside */
 
-  /* Door expansion — small avatar (dot r=3 → door r=9, ratio ~0.333) */
-  .bldg-laundry-door-small {
-    animation: bldg-laundry-expand-sm 480ms cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+  /* Phase 1 — Dot slides from center to upper-right (120ms) */
+  /* The dot element is positioned at its destination; animation slides FROM center */
+  .bldg-dot-project-sm {
+    animation: bldg-dot-project-sm 120ms cubic-bezier(0.33, 0, 0.67, 1) forwards;
+  }
+  .bldg-dot-project-med {
+    animation: bldg-dot-project-med 120ms cubic-bezier(0.33, 0, 0.67, 1) forwards;
+  }
+  .bldg-dot-project-hero {
+    animation: bldg-dot-project-hero 120ms cubic-bezier(0.33, 0, 0.67, 1) forwards;
   }
 
-  @keyframes bldg-laundry-expand-sm {
-    0%   { transform: scale(0.333); }
-    100% { transform: scale(1); }
+  /* sm: 24px → center=12, dest=(17.28, 6.72), delta=(-5.28, 5.28) */
+  @keyframes bldg-dot-project-sm {
+    0%   { transform: translate(-5.28px, 5.28px); }
+    100% { transform: translate(0, 0); }
+  }
+  /* med: 32px → center=16, dest=(23.04, 8.96), delta=(-7.04, 7.04) */
+  @keyframes bldg-dot-project-med {
+    0%   { transform: translate(-7.04px, 7.04px); }
+    100% { transform: translate(0, 0); }
+  }
+  /* hero: 56px → center=28, dest=(40.32, 15.68), delta=(-12.32, 12.32) */
+  @keyframes bldg-dot-project-hero {
+    0%   { transform: translate(-12.32px, 12.32px); }
+    100% { transform: translate(0, 0); }
   }
 
-  /* Door expansion — hero size (dot r=7 → door r=22, ratio ~0.318) */
-  .bldg-laundry-door-hero {
-    animation: bldg-laundry-expand-hero 480ms cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+  /* Dot at rest after projection (no animation, just holds position) */
+  .bldg-dot-projected-sm,
+  .bldg-dot-projected-med,
+  .bldg-dot-projected-hero {
+    transform: translate(0, 0);
   }
 
-  @keyframes bldg-laundry-expand-hero {
-    0%   { transform: scale(0.318); }
-    100% { transform: scale(1); }
+  /* Phase 2 — Ring scales from 0→1, slight rotation (200ms, delayed 120ms) */
+  /* transform-origin is set inline to the dot's destination */
+  .bldg-ring-expand-sm,
+  .bldg-ring-expand-med,
+  .bldg-ring-expand-hero {
+    animation: bldg-ring-expand 200ms ease-out 120ms both;
   }
 
-  /* Clothes tumble: rotation starts after door fully expands, fades in too */
-  .bldg-laundry-tumble {
+  @keyframes bldg-ring-expand {
+    0%   { transform: scale(0) rotate(0deg); opacity: 0; }
+    40%  { opacity: 1; }
+    100% { transform: scale(1) rotate(8deg); opacity: 1; }
+  }
+
+  /* Ring hold: static after expansion */
+  .bldg-ring-hold {
+    transform: scale(1) rotate(8deg);
+  }
+
+  /* Phase 3 — Clothes tumble inside ring (fade in at 320ms, continuous rotation) */
+  .bldg-wash-tumble {
     opacity: 0;
     animation:
-      bldg-laundry-rotate 2.4s linear 420ms infinite,
-      bldg-laundry-fade-in 220ms ease-out 420ms forwards;
+      bldg-wash-rotate 2s linear 320ms infinite,
+      bldg-wash-fade-in 200ms ease-out 320ms forwards;
   }
 
-  @keyframes bldg-laundry-rotate {
+  @keyframes bldg-wash-rotate {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
   }
 
-  @keyframes bldg-laundry-fade-in {
+  @keyframes bldg-wash-fade-in {
     from { opacity: 0; }
     to   { opacity: 1; }
+  }
+
+  /* Phase 4 (Seal) — Tumble decelerates to stop */
+  .bldg-wash-settle {
+    opacity: 1;
+    animation: bldg-wash-decel 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
+  @keyframes bldg-wash-decel {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(45deg); }
+  }
+
+  /* Water wave — subtle oscillation while tumbling */
+  .bldg-water-wave {
+    opacity: 0;
+    animation: bldg-water-appear 200ms ease-out 320ms forwards;
+  }
+
+  @keyframes bldg-water-appear {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Water settle — already a straight line via path data, just fade to full */
+  .bldg-water-settle {
+    opacity: 1;
   }
 
   /* Empty state with centered logo */
@@ -1899,9 +1961,16 @@
     .bldg-dot-settle-hero,
     .bldg-dot-recognize,
     .bldg-dot-confirm,
-    .bldg-laundry-door-small,
-    .bldg-laundry-door-hero,
-    .bldg-laundry-tumble,
+    .bldg-dot-project-sm,
+    .bldg-dot-project-med,
+    .bldg-dot-project-hero,
+    .bldg-ring-expand-sm,
+    .bldg-ring-expand-med,
+    .bldg-ring-expand-hero,
+    .bldg-wash-tumble,
+    .bldg-wash-settle,
+    .bldg-water-wave,
+    .bldg-water-settle,
     .tile-ripple,
     .chip-stagger,
     .booking-chip-pulse,
@@ -1960,8 +2029,36 @@
   100% { background-color: rgba(250, 247, 242, 0); }
 }
 
-/* ─── Ceremony text ─── */
+/* ─── Ceremony logo (laundry projector) ─── */
+.ceremony-logo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -70%);
+  will-change: opacity;
+}
 
+.ceremony-logo--enter {
+  opacity: 0;
+  animation: ceremony-logo-in 300ms ease-out 100ms forwards;
+}
+
+.ceremony-logo--peak {
+  opacity: 1;
+  animation: ceremony-logo-out 300ms ease-in forwards;
+}
+
+@keyframes ceremony-logo-in {
+  from { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
+  to   { opacity: 1; transform: translate(-50%, -70%) scale(1); }
+}
+
+@keyframes ceremony-logo-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ─── Ceremony text ─── */
 
 .ceremony-text {
   display: flex;

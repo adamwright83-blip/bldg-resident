@@ -480,7 +480,7 @@ export default function Home() {
   const [settlingMsgIndex, setSettlingMsgIndex] = useState<number | null>(null);
   const [recognizeActive, setRecognizeActive] = useState(false);
   const [confirmDotIndex, setConfirmDotIndex] = useState<number | null>(null);
-  const [laundryMode, setLaundryMode] = useState(false);
+  const [laundryMode, setLaundryMode] = useState<false | "active" | "seal">(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -826,8 +826,8 @@ export default function Home() {
       setRecognizeActive(true);
       setTimeout(() => setRecognizeActive(false), 400);
 
-      // Laundry mode — dot becomes washing machine door while AI thinks
-      setLaundryMode(content.toLowerCase().includes("laundry"));
+      const isLaundrySend = content.toLowerCase().includes("laundry");
+      setLaundryMode(isLaundrySend ? "active" : false);
 
       // #1: Trigger send animations
       setSendBtnCompress(true);
@@ -937,7 +937,12 @@ export default function Home() {
         setMessages((prev) => [...prev, fallback]);
       } finally {
         setIsSending(false);
-        setLaundryMode(false);
+        if (isLaundrySend) {
+          setLaundryMode("seal");
+          setTimeout(() => setLaundryMode(false), 500);
+        } else {
+          setLaundryMode(false);
+        }
       }
     },
     [input, isSending, sendMutation, activeBookingsQuery, historyQuery]
@@ -1203,9 +1208,10 @@ export default function Home() {
                     <BldgLogo
                       size={laundryMode ? "medium" : "small"}
                       mood={
-                        recognizeActive ? "recognize"
-                        : laundryMode    ? "laundry"
-                        :                  "orbit"
+                        recognizeActive   ? "recognize"
+                        : laundryMode === "active" ? "laundry"
+                        : laundryMode === "seal"   ? "laundry-seal"
+                        :                            "orbit"
                       }
                     />
                   </div>
