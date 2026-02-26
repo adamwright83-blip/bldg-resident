@@ -26,6 +26,7 @@ import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { MicButton } from "@/components/MicButton";
 import BldgLogo from "@/components/BldgLogo";
 import WasherIcon from "@/components/WasherIcon";
+import LaundryConfirmCard from "@/components/LaundryConfirmCard";
 import TrustCard from "@/components/TrustCard";
 import ConfirmationCeremony from "@/components/ConfirmationCeremony";
 import { toast } from "sonner";
@@ -292,86 +293,34 @@ function ConfirmationCard({
 
   if (isLaundryCategory) {
     return (
-      <div className="radial-confirm-card">
-        <div className="radial-confirm-card-icon">
-          <WasherIcon state={isNew ? "confirmed" : "rest"} size={80} />
-        </div>
-        <div className="radial-confirm-card-status">
-          <span className={isNew ? "confirmation-ticker" : ""}>CONFIRMED</span>
-        </div>
-        <div className="radial-confirm-card-service">{booking.service}</div>
-        <p className="radial-confirm-card-date">{booking.date}</p>
-        <p className="radial-confirm-card-window">{booking.window}</p>
-        <div className="radial-confirm-card-actions">
-          {onModify && !showModifyOptions && (
-            <button
-              onClick={() => setShowModifyOptions(true)}
-              className="radial-confirm-card-modify tappable"
-            >
-              Modify time
-            </button>
-          )}
-          {showModifyOptions && (
-            <div className="confirmation-card-modify-options">
-              {MODIFY_TIME_OPTIONS.map((opt) => (
-                <button
-                  key={`${opt.date}-${opt.window}`}
-                  onClick={() => handleTimeSelect(opt.date, opt.window)}
-                  className="confirmation-card-time-option tappable"
-                >
-                  {opt.date} {opt.window}
-                </button>
-              ))}
+      <>
+        <LaundryConfirmCard
+          service={booking.service}
+          date={booking.date}
+          window={booking.window}
+          isNew={isNew}
+          onModify={onModify ? () => setShowModifyOptions(true) : undefined}
+        />
+        {showModifyOptions && (
+          <div className="confirmation-card-modify-options" style={{ marginTop: 8 }}>
+            {MODIFY_TIME_OPTIONS.map((opt) => (
               <button
-                onClick={handleCancel}
-                className="confirmation-card-btn-cancel-buried tappable"
+                key={`${opt.date}-${opt.window}`}
+                onClick={() => handleTimeSelect(opt.date, opt.window)}
+                className="confirmation-card-time-option tappable"
               >
-                Cancel pickup
+                {opt.date} {opt.window}
               </button>
-            </div>
-          )}
-        </div>
-        <div className="radial-confirm-card-footer">Fulfilled by Laundry Butler.</div>
-
-        <AnimatePresence>
-          {showFrequencySheet && (
-            <>
-              <motion.div
-                className="frequency-sheet-backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setShowFrequencySheet(false)}
-              />
-              <motion.div
-                className="frequency-sheet"
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 28, stiffness: 280 }}
-              >
-                <div className="frequency-sheet-handle" />
-                <h3 className="frequency-sheet-title">Pickup Frequency</h3>
-                <div className="frequency-sheet-options">
-                  {FREQUENCY_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setDraftFrequency(option.id)}
-                      className="frequency-sheet-option tappable"
-                    >
-                      <span>{option.label}</span>
-                      {draftFrequency === option.id ? <Check size={16} /> : null}
-                    </button>
-                  ))}
-                </div>
-                <button type="button" className="frequency-sheet-save tappable" onClick={saveFrequency}>Save</button>
-                <button type="button" className="frequency-sheet-keep tappable" onClick={keepWeekly}>Keep weekly</button>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-      </div>
+            ))}
+            <button
+              onClick={handleCancel}
+              className="confirmation-card-btn-cancel-buried tappable"
+            >
+              Cancel pickup
+            </button>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -1286,7 +1235,7 @@ export default function Home() {
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
                     {laundryMode ? (
-                      <WasherIcon state="rest" size={32} />
+                      <WasherIcon animate={false} size={32} />
                     ) : (
                       <BldgLogo
                         size="small"

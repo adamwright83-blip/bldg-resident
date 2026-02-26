@@ -1,81 +1,25 @@
 /**
- * RadialConfirm — Radial orbital confirmation icon.
+ * WasherIcon — Gold line-art washing machine.
  *
- * NOT a washing machine. NOT an illustration. A controlled radial mechanism:
- *   - A single gold arc ring
- *   - A single orbit dot
- *   - Subtle seal behavior via arc sweep + micro scale
+ * Extracted from bldg_laundry_v6.html. Gold strokes on transparent bg.
+ * Water waves, fabric tumble, and bubbles loop forever (CSS-driven, GPU only).
  *
- * States:
- *   "rest"      — static ~220° arc, dot at upper-right. No motion.
- *   "confirmed" — one-shot ~570ms sequence, then holds FINAL state (static).
- *   "final"     — static ~300° arc, dot at bottom-left. Distinct from rest.
- *
- * SVG IDs: bezel, bezelHighlight, orbitDot, ringGroup
+ * Props:
+ *   animate — true: all looping animations run. false: static rest state.
+ *   size    — rendered pixel size (default 130).
  */
 
-import { useEffect, useRef, useState } from "react";
-
 interface WasherIconProps {
-  state: "rest" | "confirmed";
+  animate?: boolean;
   size?: number;
   className?: string;
 }
 
-const GOLD = "#C9A227";
-const R = 34;
-const CX = 60;
-const CY = 60;
-const STROKE_W = 6;
-const CIRC = 2 * Math.PI * R; // ~213.63
-
-// Arc lengths
-const ARC_REST = CIRC * (220 / 360);   // ~130.55 (220° visible)
-const GAP_REST = CIRC - ARC_REST;       // ~83.08
-const ARC_FINAL = CIRC * (300 / 360);  // ~178.02 (300° visible)
-const GAP_FINAL = CIRC - ARC_FINAL;     // ~35.61
-
-// Highlight segment: ~60° arc
-const HL_ARC = CIRC * (60 / 360);      // ~35.6
-const HL_GAP = CIRC - HL_ARC;           // ~178.0
-
-// Dot positions (on circle at radius 34 from center 60,60)
-// REST: upper-right, ~35° from top clockwise → 55° from right CCW
-const DOT_REST_X = CX + R * Math.cos((-55 * Math.PI) / 180);  // ~79.5
-const DOT_REST_Y = CY + R * Math.sin((-55 * Math.PI) / 180);  // ~32.2
-// FINAL: bottom-left, ~220° from top clockwise → 230° from right CCW
-const DOT_FINAL_X = CX + R * Math.cos((230 * Math.PI) / 180); // ~38.1
-const DOT_FINAL_Y = CY + R * Math.sin((230 * Math.PI) / 180); // ~86.0
-
-// Translation delta for dot move
-const DOT_DX = DOT_FINAL_X - DOT_REST_X; // ~-41.4
-const DOT_DY = DOT_FINAL_Y - DOT_REST_Y; // ~53.8
-
 export default function WasherIcon({
-  state,
-  size = 80,
+  animate = true,
+  size = 130,
   className = "",
 }: WasherIconProps) {
-  const [playOnce, setPlayOnce] = useState(false);
-  const [hasPlayed, setHasPlayed] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => {
-    if (state === "confirmed" && !hasPlayed) {
-      setPlayOnce(true);
-      timerRef.current = setTimeout(() => {
-        setPlayOnce(false);
-        setHasPlayed(true);
-      }, 920);
-    }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [state, hasPlayed]);
-
-  const isAnimating = playOnce;
-  const isSealed = hasPlayed || (state === "confirmed" && !playOnce);
-
   return (
     <svg
       width={size}
@@ -83,56 +27,59 @@ export default function WasherIcon({
       viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={`radial-confirm ${isAnimating ? "radial-playing" : ""} ${isSealed ? "radial-sealed" : ""} ${className}`}
-      aria-label="Confirmation indicator"
+      className={`washer-machine ${animate ? "washer-animate" : ""} ${className}`}
+      aria-label="Washing machine"
+      overflow="visible"
     >
-      <g id="ringGroup" className="radial-ring-group">
-        {/* Main arc ring */}
-        <circle
-          id="bezel"
-          className="radial-bezel"
-          cx={CX}
-          cy={CY}
-          r={R}
-          fill="none"
-          stroke={GOLD}
-          strokeWidth={STROKE_W}
-          strokeLinecap="round"
-          strokeDasharray={
-            isSealed
-              ? `${ARC_FINAL} ${GAP_FINAL}`
-              : `${ARC_REST} ${GAP_REST}`
-          }
-          transform={`rotate(-130 ${CX} ${CY})`}
-        />
+      {/* Machine body */}
+      <rect className="wm-body" x="16" y="14" width="88" height="96" rx="10" />
 
-        {/* Highlight sweep arc (same ring, separate for animation) */}
-        <circle
-          id="bezelHighlight"
-          className="radial-highlight"
-          cx={CX}
-          cy={CY}
-          r={R}
-          fill="none"
-          stroke={GOLD}
-          strokeWidth={STROKE_W}
-          strokeLinecap="round"
-          strokeDasharray={`${HL_ARC} ${HL_GAP}`}
-          strokeDashoffset={HL_ARC + HL_GAP}
-          opacity="0"
-          transform={`rotate(-130 ${CX} ${CY})`}
-        />
+      {/* Control panel divider */}
+      <line className="wm-panel-line" x1="16" y1="32" x2="104" y2="32" />
+
+      {/* Control knob */}
+      <circle className="wm-knob" cx="28" cy="23" r="4" />
+      <line className="wm-knob wm-knob-tick" x1="28" y1="19" x2="28" y2="21" />
+
+      {/* Indicator light */}
+      <circle className="wm-indicator" cx="94" cy="23" r="2" />
+
+      {/* Small display */}
+      <rect className="wm-knob" x="40" y="20" width="16" height="6" rx="1.5" />
+
+      {/* Door outer ring */}
+      <circle className="wm-door-outer" cx="60" cy="68" r="30" />
+
+      {/* Door inner ring */}
+      <circle className="wm-door-inner" cx="60" cy="68" r="26" />
+
+      {/* Handle */}
+      <path className="wm-handle" d="M 90 60 Q 95 60, 95 66 Q 95 72, 90 72" />
+
+      {/* Interior (clipped to door) */}
+      <clipPath id="wm-door-clip">
+        <circle cx="60" cy="68" r="25" />
+      </clipPath>
+
+      <g clipPath="url(#wm-door-clip)">
+        {/* Water fill */}
+        <path className="wm-water-fill" d="M 34 68 Q 44 61, 56 68 Q 68 75, 78 68 L 78 95 L 34 95 Z" />
+
+        {/* Water waves */}
+        <path className="wm-water-line" d="M 34 68 Q 44 61, 56 68 Q 68 75, 78 68" />
+        <path className="wm-water-line-2" d="M 34 71 Q 45 67, 56 71 Q 67 75, 78 71" />
+
+        {/* Fabric */}
+        <path className="wm-fabric wm-fabric-1" d="M 42 72 Q 50 64, 60 70 Q 68 76, 74 68" />
+        <path className="wm-fabric wm-fabric-2" d="M 38 76 Q 48 82, 58 75 Q 66 68, 76 74" />
+        <path className="wm-fabric wm-fabric-3" d="M 46 78 Q 54 70, 64 76 Q 70 80, 78 72" />
+
+        {/* Bubbles */}
+        <circle className="wm-bubble wm-b1" cx="50" cy="63" r="2.5" />
+        <circle className="wm-bubble wm-b2" cx="66" cy="61" r="1.8" />
+        <circle className="wm-bubble wm-b3" cx="56" cy="59" r="1.5" />
+        <circle className="wm-bubble wm-b4" cx="44" cy="60" r="2" />
       </g>
-
-      {/* Orbit dot */}
-      <circle
-        id="orbitDot"
-        className="radial-dot"
-        cx={isSealed ? DOT_FINAL_X : DOT_REST_X}
-        cy={isSealed ? DOT_FINAL_Y : DOT_REST_Y}
-        r="3.5"
-        fill={GOLD}
-      />
     </svg>
   );
 }
