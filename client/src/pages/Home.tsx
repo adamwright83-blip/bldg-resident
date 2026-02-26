@@ -292,21 +292,21 @@ function ConfirmationCard({
 
   if (isLaundryCategory) {
     return (
-      <div className="washer-confirm-card">
-        <div className="washer-confirm-card-icon">
+      <div className="radial-confirm-card">
+        <div className="radial-confirm-card-icon">
           <WasherIcon state={isNew ? "confirmed" : "rest"} size={80} />
         </div>
-        <div className="washer-confirm-card-status">
+        <div className="radial-confirm-card-status">
           <span className={isNew ? "confirmation-ticker" : ""}>CONFIRMED</span>
         </div>
-        <div className="washer-confirm-card-service">{booking.service}</div>
-        <p className="washer-confirm-card-date">{booking.date}</p>
-        <p className="washer-confirm-card-window">{booking.window}</p>
-        <div className="washer-confirm-card-actions">
+        <div className="radial-confirm-card-service">{booking.service}</div>
+        <p className="radial-confirm-card-date">{booking.date}</p>
+        <p className="radial-confirm-card-window">{booking.window}</p>
+        <div className="radial-confirm-card-actions">
           {onModify && !showModifyOptions && (
             <button
               onClick={() => setShowModifyOptions(true)}
-              className="washer-confirm-card-modify tappable"
+              className="radial-confirm-card-modify tappable"
             >
               Modify time
             </button>
@@ -331,7 +331,7 @@ function ConfirmationCard({
             </div>
           )}
         </div>
-        <div className="washer-confirm-card-footer">Fulfilled by Laundry Butler.</div>
+        <div className="radial-confirm-card-footer">Fulfilled by Laundry Butler.</div>
 
         <AnimatePresence>
           {showFrequencySheet && (

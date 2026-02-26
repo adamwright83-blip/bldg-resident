@@ -1,18 +1,20 @@
 /**
- * WasherIcon — Radial confirmation mechanism.
+ * RadialConfirm — Radial orbital confirmation icon.
  *
- * Two states:
- *   - "rest"      — static: bezel ring + dot parked top-right. No motion.
- *   - "confirmed" — one-shot 900ms sequence, then freezes in sealed state.
+ * NOT a washing machine. NOT an illustration. A controlled radial mechanism:
+ *   - A single gold arc ring
+ *   - A single orbit dot
+ *   - Subtle seal behavior via arc sweep + micro scale
  *
- * Sealed state is visually distinct from rest:
- *   - Dot ends bottom-left (not top-right)
- *   - Arc highlight ends in completed position
+ * States:
+ *   "rest"      — static ~220° arc, dot at upper-right. No motion.
+ *   "confirmed" — one-shot ~570ms sequence, then holds FINAL state (static).
+ *   "final"     — static ~300° arc, dot at bottom-left. Distinct from rest.
  *
- * Do not loop. Do not add glow/bounce/blur.
+ * SVG IDs: bezel, bezelHighlight, orbitDot, ringGroup
  */
 
-import { useId } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface WasherIconProps {
   state: "rest" | "confirmed";
@@ -20,139 +22,117 @@ interface WasherIconProps {
   className?: string;
 }
 
+const GOLD = "#C9A227";
+const R = 34;
+const CX = 60;
+const CY = 60;
+const STROKE_W = 6;
+const CIRC = 2 * Math.PI * R; // ~213.63
+
+// Arc lengths
+const ARC_REST = CIRC * (220 / 360);   // ~130.55 (220° visible)
+const GAP_REST = CIRC - ARC_REST;       // ~83.08
+const ARC_FINAL = CIRC * (300 / 360);  // ~178.02 (300° visible)
+const GAP_FINAL = CIRC - ARC_FINAL;     // ~35.61
+
+// Highlight segment: ~60° arc
+const HL_ARC = CIRC * (60 / 360);      // ~35.6
+const HL_GAP = CIRC - HL_ARC;           // ~178.0
+
+// Dot positions (on circle at radius 34 from center 60,60)
+// REST: upper-right, ~35° from top clockwise → 55° from right CCW
+const DOT_REST_X = CX + R * Math.cos((-55 * Math.PI) / 180);  // ~79.5
+const DOT_REST_Y = CY + R * Math.sin((-55 * Math.PI) / 180);  // ~32.2
+// FINAL: bottom-left, ~220° from top clockwise → 230° from right CCW
+const DOT_FINAL_X = CX + R * Math.cos((230 * Math.PI) / 180); // ~38.1
+const DOT_FINAL_Y = CY + R * Math.sin((230 * Math.PI) / 180); // ~86.0
+
+// Translation delta for dot move
+const DOT_DX = DOT_FINAL_X - DOT_REST_X; // ~-41.4
+const DOT_DY = DOT_FINAL_Y - DOT_REST_Y; // ~53.8
+
 export default function WasherIcon({
   state,
-  size = 56,
+  size = 80,
   className = "",
 }: WasherIconProps) {
-  const uid = useId().replace(/:/g, "");
-  const confirmed = state === "confirmed";
+  const [playOnce, setPlayOnce] = useState(false);
+  const [hasPlayed, setHasPlayed] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (state === "confirmed" && !hasPlayed) {
+      setPlayOnce(true);
+      timerRef.current = setTimeout(() => {
+        setPlayOnce(false);
+        setHasPlayed(true);
+      }, 920);
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [state, hasPlayed]);
+
+  const isAnimating = playOnce;
+  const isSealed = hasPlayed || (state === "confirmed" && !playOnce);
 
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 100 100"
+      viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={`washer-icon ${confirmed ? "washer-confirmed" : ""} ${className}`}
-      aria-label="Washer confirmation"
+      className={`radial-confirm ${isAnimating ? "radial-playing" : ""} ${isSealed ? "radial-sealed" : ""} ${className}`}
+      aria-label="Confirmation indicator"
     >
-      <defs>
-        <linearGradient id={`bezelGrad-${uid}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#1e1e1e" />
-          <stop offset="18%" stopColor="#6a6a6a" />
-          <stop offset="35%" stopColor="#e7e7e7" />
-          <stop offset="55%" stopColor="#7f7f7f" />
-          <stop offset="78%" stopColor="#2a2a2a" />
-          <stop offset="100%" stopColor="#0f0f0f" />
-        </linearGradient>
-
-        <radialGradient id={`glassGrad-${uid}`} cx="35%" cy="30%" r="70%">
-          <stop offset="0%" stopColor="#2b2b2b" />
-          <stop offset="55%" stopColor="#161616" />
-          <stop offset="100%" stopColor="#0a0a0a" />
-        </radialGradient>
-
-        <clipPath id={`glassClip-${uid}`}>
-          <circle cx="50" cy="50" r="28" />
-        </clipPath>
-
-        <linearGradient id={`highlightGrad-${uid}`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
-          <stop offset="40%" stopColor="#ffffff" stopOpacity="0.22" />
-          <stop offset="60%" stopColor="#ffffff" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-
-      {/* Bezel (porthole) */}
-      <g className="washer-bezel">
-        <circle cx="50" cy="50" r="34" fill="none" stroke={`url(#bezelGrad-${uid})`} strokeWidth="6" />
-        <circle cx="50" cy="50" r="30.5" fill="none" stroke="#000000" strokeOpacity="0.55" strokeWidth="1.2" />
-      </g>
-
-      {/* Bezel highlight arc */}
-      <g className="washer-highlight" opacity="0.55">
+      <g id="ringGroup" className="radial-ring-group">
+        {/* Main arc ring */}
         <circle
-          cx="50" cy="50" r="34"
+          id="bezel"
+          className="radial-bezel"
+          cx={CX}
+          cy={CY}
+          r={R}
           fill="none"
-          stroke={`url(#highlightGrad-${uid})`}
-          strokeWidth="6"
+          stroke={GOLD}
+          strokeWidth={STROKE_W}
           strokeLinecap="round"
-          strokeDasharray="36 178"
-          transform="rotate(-25 50 50)"
+          strokeDasharray={
+            isSealed
+              ? `${ARC_FINAL} ${GAP_FINAL}`
+              : `${ARC_REST} ${GAP_REST}`
+          }
+          transform={`rotate(-130 ${CX} ${CY})`}
+        />
+
+        {/* Highlight sweep arc (same ring, separate for animation) */}
+        <circle
+          id="bezelHighlight"
+          className="radial-highlight"
+          cx={CX}
+          cy={CY}
+          r={R}
+          fill="none"
+          stroke={GOLD}
+          strokeWidth={STROKE_W}
+          strokeLinecap="round"
+          strokeDasharray={`${HL_ARC} ${HL_GAP}`}
+          strokeDashoffset={HL_ARC + HL_GAP}
+          opacity="0"
+          transform={`rotate(-130 ${CX} ${CY})`}
         />
       </g>
 
-      {/* Glass */}
-      <g className="washer-glass">
-        <circle cx="50" cy="50" r="28" fill={`url(#glassGrad-${uid})`} />
-        <circle cx="50" cy="50" r="27.5" fill="none" stroke="#000" strokeOpacity="0.35" strokeWidth="1" />
-      </g>
-
-      {/* Interior (clipped to glass) */}
-      <g clipPath={`url(#glassClip-${uid})`}>
-        {/* Water + bubbles */}
-        <g className="washer-water-group">
-          <path
-            className="washer-water-fill"
-            d="M0,64 C12,60 24,66 36,63 C48,60 60,67 72,64 C84,61 92,66 100,63 L100,100 L0,100 Z"
-            fill="#ffffff"
-            opacity="0.10"
-          />
-          <path
-            className="washer-wave"
-            d="M-10,63 C2,59 14,66 26,62 C38,58 50,67 62,63 C74,59 86,66 98,62 C110,58 122,67 134,63"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity="0.22"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
-          <g className="washer-bubbles" fill="#ffffff" opacity="0.16">
-            <circle cx="26" cy="76" r="1.4" />
-            <circle cx="34" cy="70" r="0.9" />
-            <circle cx="44" cy="78" r="1.1" />
-            <circle cx="58" cy="73" r="1.3" />
-            <circle cx="66" cy="80" r="0.8" />
-            <circle cx="74" cy="71" r="1.0" />
-          </g>
-        </g>
-
-        {/* Clothes silhouettes */}
-        <g className="washer-clothes" opacity="0.22">
-          <path
-            d="M42,44 C40,40 42,36 46,35 C49,34 51,36 52,39 C54,43 58,44 60,48 C62,53 59,58 54,59 C49,60 45,58 44,54 C43,51 44,48 42,44 Z"
-            fill="#ffffff"
-          />
-          <path
-            d="M55,40 C58,38 62,39 64,42 C66,45 65,49 62,51 C60,53 60,56 58,58 C55,61 50,61 47,58 C44,55 45,50 49,48 C51,47 52,43 55,40 Z"
-            fill="#ffffff"
-          />
-          <path
-            d="M36,52 C42,47 46,46 51,49 C56,52 61,51 66,45"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity="0.18"
-            strokeWidth="1"
-            strokeLinecap="round"
-          />
-        </g>
-
-        {/* Inner ticks — reads "machine" */}
-        <g opacity="0.10" stroke="#ffffff" strokeWidth="1" strokeLinecap="round">
-          <path d="M50 24 L50 27" />
-          <path d="M72 50 L69 50" />
-          <path d="M50 76 L50 73" />
-          <path d="M28 50 L31 50" />
-        </g>
-      </g>
-
       {/* Orbit dot */}
-      <g className="washer-dot">
-        <circle cx="78" cy="30" r="2.6" fill="#ffffff" opacity="0.92" />
-      </g>
+      <circle
+        id="orbitDot"
+        className="radial-dot"
+        cx={isSealed ? DOT_FINAL_X : DOT_REST_X}
+        cy={isSealed ? DOT_FINAL_Y : DOT_REST_Y}
+        r="3.5"
+        fill={GOLD}
+      />
     </svg>
   );
 }

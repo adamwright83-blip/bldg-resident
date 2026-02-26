@@ -1286,90 +1286,80 @@
   }
 
   /* ═══════════════════════════════════════════
-     WASHER CONFIRMATION — Radial mechanism
-     One-shot 900ms sequence on confirmed card mount.
+     RADIAL ORBITAL CONFIRMATION
+     Gold arc ring + orbit dot. No illustration.
+     One-shot ~570ms active, then static FINAL.
      Mechanical. Inevitable. Premium.
      ═══════════════════════════════════════════ */
 
-  .washer-icon {
+  .radial-confirm {
     display: block;
     flex-shrink: 0;
   }
 
-  /* Phase A — Dot repositions: top-right (78,30) → bottom-left (22,70) over 120ms.
-     SVG transforms use user units matching the viewBox, not CSS px. */
-  .washer-confirmed .washer-dot {
-    animation: washer-dot-move 120ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  /* Phase 1 — DECISION: dot translates upper-right → bottom-left (0–120ms) */
+  .radial-playing .radial-dot {
+    animation: radial-dot-move 120ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
   }
 
-  @keyframes washer-dot-move {
+  @keyframes radial-dot-move {
     0%   { transform: translate(0, 0); }
-    100% { transform: translate(-56px, 40px); }
+    100% { transform: translate(-41.4px, 53.8px); }
   }
 
-  /* Phase B — Bezel seal: micro scale pulse (120–320ms) */
-  .washer-confirmed .washer-bezel {
-    transform-origin: 50px 50px;
-    animation: washer-bezel-seal 200ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
+  /* Phase 2 — SEAL: ringGroup micro-scale pulse (120–320ms) */
+  .radial-playing .radial-ring-group {
+    transform-origin: 60px 60px;
+    animation: radial-ring-seal 200ms ease-out 120ms both;
   }
 
-  @keyframes washer-bezel-seal {
+  @keyframes radial-ring-seal {
     0%   { transform: scale(1); }
     50%  { transform: scale(1.04); }
     100% { transform: scale(1); }
   }
 
-  /* Phase B — Highlight arc sweep (120–320ms): dashoffset animates to sweep ~70% */
-  .washer-confirmed .washer-highlight {
-    transform-origin: 50px 50px;
-    animation: washer-highlight-sweep 200ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
+  /* Phase 2 — HIGHLIGHT SWEEP: 60° segment sweeps clockwise (120–320ms) */
+  .radial-playing .radial-highlight {
+    animation: radial-highlight-sweep 200ms ease-out 120ms both;
   }
 
-  @keyframes washer-highlight-sweep {
-    0%   { opacity: 0.3; transform: rotate(0deg); }
-    100% { opacity: 0.7; transform: rotate(65deg); }
+  @keyframes radial-highlight-sweep {
+    0%   { opacity: 0; stroke-dashoffset: 213; }
+    30%  { opacity: 0.45; }
+    100% { opacity: 0; stroke-dashoffset: 142; }
   }
 
-  /* Phase C — Clothes tumble: one full rotation (220–820ms) */
-  .washer-confirmed .washer-clothes {
-    transform-origin: 50px 50px;
-    animation: washer-clothes-rotate 600ms cubic-bezier(0.4, 0, 0.2, 1) 220ms both;
+  /* Phase 3 — EMERGENCE: arc expands 220° → 300° + ring rotates +8° (320–570ms) */
+  .radial-playing .radial-bezel {
+    animation: radial-arc-expand 250ms cubic-bezier(0.2, 0.0, 0.2, 1) 320ms both;
   }
 
-  @keyframes washer-clothes-rotate {
-    0%   { transform: rotate(0deg); opacity: 0.22; }
-    100% { transform: rotate(360deg); opacity: 0.22; }
+  @keyframes radial-arc-expand {
+    0%   { stroke-dasharray: 130.55 83.08; }
+    100% { stroke-dasharray: 178.02 35.61; }
   }
 
-  /* Phase C — Wave oscillation (220–820ms): subtle horizontal shift */
-  .washer-confirmed .washer-wave {
-    animation: washer-wave-drift 600ms ease-in-out 220ms both;
+  /* Ring rotation during emergence (applied to group, stacks with seal) */
+  .radial-playing .radial-ring-group {
+    animation:
+      radial-ring-seal 200ms ease-out 120ms both,
+      radial-ring-rotate 250ms cubic-bezier(0.2, 0.0, 0.2, 1) 320ms both;
   }
 
-  @keyframes washer-wave-drift {
-    0%   { transform: translateX(0); }
-    25%  { transform: translateX(-2px); }
-    50%  { transform: translateX(0); }
-    75%  { transform: translateX(2px); }
-    100% { transform: translateX(0); }
+  @keyframes radial-ring-rotate {
+    0%   { transform: scale(1) rotate(0deg); }
+    100% { transform: scale(1) rotate(8deg); }
   }
 
-  /* Phase C — Bubbles float up and fade (220–820ms) */
-  .washer-confirmed .washer-bubbles {
-    animation: washer-bubbles-float 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 220ms both;
+  /* FINAL / SEALED state — static, visually distinct from rest */
+  .radial-sealed .radial-ring-group {
+    transform-origin: 60px 60px;
+    transform: rotate(8deg);
   }
 
-  @keyframes washer-bubbles-float {
-    0%   { transform: translateY(0); opacity: 0.16; }
-    100% { transform: translateY(-7px); opacity: 0.04; }
-  }
-
-  /* Phase D — Settle/freeze: all animations have forwards fill-mode.
-     Dot stays at bottom-left. Highlight stays at sealed rotation.
-     Everything holds. No loop. */
-
-  /* ─── Washer Confirmation Card (dark glass) ─── */
-  .washer-confirm-card {
+  /* ─── Radial Confirmation Card (dark glass) ─── */
+  .radial-confirm-card {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1388,19 +1378,19 @@
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.04) inset,
       0 12px 40px rgba(0, 0, 0, 0.5);
-    animation: washer-card-enter 400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation: radial-card-enter 400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 
-  @keyframes washer-card-enter {
+  @keyframes radial-card-enter {
     0%   { opacity: 0; transform: scale(0.96); }
     100% { opacity: 1; transform: scale(1); }
   }
 
-  .washer-confirm-card-icon {
+  .radial-confirm-card-icon {
     margin-bottom: 20px;
   }
 
-  .washer-confirm-card-status {
+  .radial-confirm-card-status {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 2.2px;
@@ -1409,7 +1399,7 @@
     margin-bottom: 8px;
   }
 
-  .washer-confirm-card-service {
+  .radial-confirm-card-service {
     font-size: 22px;
     font-weight: 600;
     color: #F5F0E8;
@@ -1417,26 +1407,26 @@
     text-transform: capitalize;
   }
 
-  .washer-confirm-card-date {
+  .radial-confirm-card-date {
     font-size: 15px;
     font-weight: 400;
     color: rgba(245, 240, 232, 0.75);
     margin: 0;
   }
 
-  .washer-confirm-card-window {
+  .radial-confirm-card-window {
     font-size: 15px;
     font-weight: 400;
     color: rgba(245, 240, 232, 0.55);
     margin: 2px 0 0;
   }
 
-  .washer-confirm-card-actions {
+  .radial-confirm-card-actions {
     margin-top: 18px;
     width: 100%;
   }
 
-  .washer-confirm-card-modify {
+  .radial-confirm-card-modify {
     width: 100%;
     padding: 11px 16px;
     border-radius: 10px;
@@ -1450,16 +1440,16 @@
     transition: background 0.15s, border-color 0.15s;
   }
 
-  .washer-confirm-card-modify:hover {
+  .radial-confirm-card-modify:hover {
     background: rgba(245, 240, 232, 0.06);
     border-color: rgba(245, 240, 232, 0.2);
   }
 
-  .washer-confirm-card-modify:active {
+  .radial-confirm-card-modify:active {
     background: rgba(245, 240, 232, 0.1);
   }
 
-  .washer-confirm-card-footer {
+  .radial-confirm-card-footer {
     margin-top: 14px;
     font-size: 11px;
     color: rgba(245, 240, 232, 0.3);
@@ -2040,13 +2030,11 @@
     .bldg-dot-settle-hero,
     .bldg-dot-recognize,
     .bldg-dot-confirm,
-    .washer-confirmed .washer-dot,
-    .washer-confirmed .washer-bezel,
-    .washer-confirmed .washer-highlight,
-    .washer-confirmed .washer-clothes,
-    .washer-confirmed .washer-wave,
-    .washer-confirmed .washer-bubbles,
-    .washer-confirm-card,
+    .radial-playing .radial-dot,
+    .radial-playing .radial-ring-group,
+    .radial-playing .radial-highlight,
+    .radial-playing .radial-bezel,
+    .radial-confirm-card,
     .tile-ripple,
     .chip-stagger,
     .booking-chip-pulse,
