@@ -84,7 +84,7 @@ export default function HowItWorksCard({ isNew = false }: HowItWorksCardProps) {
           <DoorPickupIllustration />
         </div>
         <div className="hiw-step-text">
-          <span className="hiw-step-num">2.</span> We'll text you 10 min before arrival. You don't need to be home.
+          <span className="hiw-step-num">2.</span> You'll receive a text the moment your driver is on the way.
         </div>
       </div>
     </div>

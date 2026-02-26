@@ -494,6 +494,16 @@ function createRipple(e: React.MouseEvent<HTMLButtonElement>) {
   ripple.addEventListener("animationend", () => ripple.remove());
 }
 
+// ─── Typing pacing helper ───
+// Returns how long to show a typing indicator before a message, and how long
+// to pause after it renders before the next indicator starts.
+function getTypingTiming(text: string): { typing: number; pause: number } {
+  const words = text.trim().split(/\s+/).length;
+  if (words < 15) return { typing: 800,  pause: 600 };
+  if (words < 40) return { typing: 1500, pause: 800 };
+  return                 { typing: 2200, pause: 1000 };
+}
+
 // ─── Name Input Card (post-booking collection) ───
 
 function NameInputCard({ onSubmit, loading }: { onSubmit: (first: string, last: string) => void; loading?: boolean }) {
@@ -562,6 +572,13 @@ export default function Home() {
   const [postBookingData, setPostBookingData] = useState<{ service: string; date: string; window: string } | null>(null);
   const [collectedFirstName, setCollectedFirstName] = useState<string | null>(null);
   const [collectedLastName, setCollectedLastName] = useState<string | null>(null);
+  // Local typing indicator — shows before injected messages (greeting beats,
+  // post-booking messages). Separate from isSending which tracks LLM generation.
+  const [localTypingActive, setLocalTypingActive] = useState(false);
+  // Tracks which greeting beat numbers (1,2,3) have been revealed.
+  // Beats hidden until the sequential typing → reveal animation runs.
+  const [revealedBeats, setRevealedBeats] = useState<Set<number>>(new Set());
+  const greetingInitializedRef = useRef(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -759,6 +776,45 @@ export default function Home() {
     }
   }, [historyQuery.data, historyQuery.dataUpdatedAt]);
 
+  // Reset greeting state when the active user changes (new session / logout)
+  useEffect(() => {
+    greetingInitializedRef.current = false;
+    setRevealedBeats(new Set());
+    setLocalTypingActive(false);
+  }, [sessionUserId]);
+
+  // Sequential greeting reveal: show typing indicator before each beat
+  useEffect(() => {
+    const greetingMsgs = messages.filter(
+      (m) => m.metadata?.type === "system_greeting" && m.metadata?.beat != null
+    );
+    if (greetingMsgs.length === 0 || greetingInitializedRef.current) return;
+    greetingInitializedRef.current = true;
+
+    const sorted = [...greetingMsgs].sort(
+      (a, b) => (a.metadata!.beat as number) - (b.metadata!.beat as number)
+    );
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let offset = 0;
+
+    for (const msg of sorted) {
+      const beat = msg.metadata!.beat as number;
+      const { typing, pause } = getTypingTiming(msg.content);
+      const t1Start = offset;
+      const t1End   = offset + typing;
+      offset = t1End + pause;
+
+      timers.push(setTimeout(() => setLocalTypingActive(true), t1Start));
+      timers.push(setTimeout(() => {
+        setLocalTypingActive(false);
+        setRevealedBeats((prev) => new Set([...prev, beat]));
+      }, t1End));
+    }
+
+    return () => timers.forEach(clearTimeout);
+  }, [messages]);
+
   // Scroll to bottom when messages change — like real texting
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     // Try scrollIntoView first
@@ -807,25 +863,44 @@ export default function Home() {
   }, [ceremonyIndex, postBookingPhase]);
 
   // Post-booking phase: inject name collection messages when transitioning to "name"
+  // Each message is preceded by a typing indicator sized to message length.
+  //
+  // Sequence timing (cumulative from phase="name"):
+  //   0ms       typing starts (msg 4 — 26w medium = 1500ms typing)
+  //   1500ms    msg 4 reveals, 800ms pause
+  //   2300ms    typing starts (msg 4B — 23w medium = 1500ms typing)
+  //   3800ms    msg 4B reveals, 800ms pause
+  //   4600ms    typing starts (msg 4C — 9w short = 800ms typing)
+  //   5400ms    msg 4C reveals, 600ms pause
+  //   6000ms    typing starts (name card — 5w short = 800ms typing)
+  //   6800ms    name card reveals
   useEffect(() => {
     if (postBookingPhase === "name") {
-      // Guard: only run if none of these messages exist yet
-      setMessages((prev) => {
-        if (prev.some((m) => m.metadata?.type === "post_booking_name" || m.metadata?.type === "post_booking_intro")) return prev;
-        return [
-          ...prev,
-          {
+      const timers: ReturnType<typeof setTimeout>[] = [];
+      const guard = (type: string, prev: typeof messages) =>
+        prev.some((m) => m.metadata?.type === type);
+
+      // Msg 4 (medium): typing 0 → 1500ms, reveal at 1500ms
+      timers.push(setTimeout(() => setLocalTypingActive(true), 0));
+      timers.push(setTimeout(() => {
+        setLocalTypingActive(false);
+        setMessages((prev) => {
+          if (guard("post_booking_intro", prev)) return prev;
+          return [...prev, {
             role: "assistant" as const,
             content: "That's your first order — and it was that easy. You can adjust the pickup time or cancel anytime using the Modify button above.",
             metadata: { type: "post_booking_intro" },
             createdAt: new Date(),
-          },
-        ];
-      });
-      // 4B — ~1s after 4
-      const t1 = setTimeout(() => {
+          }];
+        });
+      }, 1500));
+
+      // Msg 4B (medium): typing 2300 → 3800ms, reveal at 3800ms
+      timers.push(setTimeout(() => setLocalTypingActive(true), 2300));
+      timers.push(setTimeout(() => {
+        setLocalTypingActive(false);
         setMessages((prev) => {
-          if (prev.some((m) => m.metadata?.type === "post_booking_learn")) return prev;
+          if (guard("post_booking_learn", prev)) return prev;
           return [...prev, {
             role: "assistant" as const,
             content: "The more you use BLDG, the more it learns — your preferred days, time windows, and services start to fill in automatically.",
@@ -833,11 +908,14 @@ export default function Home() {
             createdAt: new Date(),
           }];
         });
-      }, 1000);
-      // 4C — ~2s after 4
-      const t2 = setTimeout(() => {
+      }, 3800));
+
+      // Msg 4C (short): typing 4600 → 5400ms, reveal at 5400ms
+      timers.push(setTimeout(() => setLocalTypingActive(true), 4600));
+      timers.push(setTimeout(() => {
+        setLocalTypingActive(false);
         setMessages((prev) => {
-          if (prev.some((m) => m.metadata?.type === "post_booking_tagline")) return prev;
+          if (guard("post_booking_tagline", prev)) return prev;
           return [...prev, {
             role: "assistant" as const,
             content: "One word is all it takes. That's the point.",
@@ -845,11 +923,14 @@ export default function Home() {
             createdAt: new Date(),
           }];
         });
-      }, 2000);
-      // Name input card — ~3s after 4
-      const t3 = setTimeout(() => {
+      }, 5400));
+
+      // Name card (short): typing 6000 → 6800ms, reveal at 6800ms
+      timers.push(setTimeout(() => setLocalTypingActive(true), 6000));
+      timers.push(setTimeout(() => {
+        setLocalTypingActive(false);
         setMessages((prev) => {
-          if (prev.some((m) => m.metadata?.type === "post_booking_name")) return prev;
+          if (guard("post_booking_name", prev)) return prev;
           return [...prev, {
             role: "assistant" as const,
             content: "Enter your name to proceed.",
@@ -857,8 +938,9 @@ export default function Home() {
             createdAt: new Date(),
           }];
         });
-      }, 3000);
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      }, 6800));
+
+      return () => timers.forEach(clearTimeout);
     } else if (postBookingPhase === "payment" && !collectedFirstName) {
       setMessages((prev) => {
         if (prev.some((m) => m.metadata?.type === "post_booking_payment")) return prev;
@@ -975,42 +1057,48 @@ export default function Home() {
       };
       setMessages((prev) => [...stripPaymentPrompts(prev), howItWorksMsg]);
 
-      // "24 hours" closing text (no illustration — conversation must end on text)
-      setTimeout(() => {
-        setMessages((prev) => [...prev, {
-          role: "assistant" as const,
-          content: "We'll return your laundry within 24 hours.",
-          createdAt: new Date(),
-        }]);
-      }, 1200);
+      // All subsequent messages get typing indicators.
+      // Cumulative timings:
+      //   200ms   typing → 1000ms   reveal "We'll return..." (7w short)
+      //   1600ms  typing → 3100ms   reveal follow-up (37w medium)
+      //   3900ms  typing → 5400ms   reveal phone nudge (20w medium)
+      //   6200ms  typing → 7700ms   reveal vault nudge (18w medium)
+      //   8500ms  typing → 10000ms  reveal final handoff (21w medium)
+      const addMsg = (content: string, delay: number) =>
+        setTimeout(() => setMessages((prev) => [...prev, {
+          role: "assistant" as const, content, createdAt: new Date(),
+        }]), delay);
+      const showTyping = (delay: number) =>
+        setTimeout(() => setLocalTypingActive(true), delay);
+      const hideTyping = (delay: number) =>
+        setTimeout(() => setLocalTypingActive(false), delay);
 
-      // Real-person nudge
-      setTimeout(() => {
-        setMessages((prev) => [...prev, {
-          role: "assistant" as const,
-          content: "See the phone and message icons up top? That's a real person — no hold music, no phone tree, no robots. Instant.",
-          createdAt: new Date(),
-        }]);
-      }, 2500);
+      showTyping(200);
+      hideTyping(1000);
+      addMsg("We'll return your laundry within 24 hours.", 1000);
 
-      // Vault nudge
-      setTimeout(() => {
-        setMessages((prev) => [...prev, {
-          role: "assistant" as const,
-          content: "Your receipts and service history live in the Vault. Tap Services at the bottom, then Vault. Everything's there.",
-          createdAt: new Date(),
-        }]);
-      }, 3800);
+      showTyping(1600);
+      hideTyping(3100);
+      addMsg(
+        "We're happy to meet you at the door to go over any garment notes. If you're unavailable, tap the text or phone icons at the top right to reach the team lead directly. We do whatever makes your life easiest.",
+        3100
+      );
 
-      // Final handoff (the warm send-off)
+      showTyping(3900);
+      hideTyping(5400);
+      addMsg("See the phone and message icons up top? That's a real person — no hold music, no phone tree, no robots. Instant.", 5400);
+
+      showTyping(6200);
+      hideTyping(7700);
+      addMsg("Your receipts and service history live in the Vault. Tap Services at the bottom, then Vault. Everything's there.", 7700);
+
       const timeStr = postBookingData.window.split("–")[0] || postBookingData.window;
-      setTimeout(() => {
-        setMessages((prev) => [...prev, {
-          role: "assistant" as const,
-          content: `You're all set. Your driver has been notified and you'll receive a text when he's on his way. ${postBookingData.date} at ${timeStr}.`,
-          createdAt: new Date(),
-        }]);
-      }, 5200);
+      showTyping(8500);
+      hideTyping(10000);
+      addMsg(
+        `You're all set. Your driver has been notified and you'll receive a text when he's on his way. ${postBookingData.date} at ${timeStr}.`,
+        10000
+      );
     } else {
       const successMsg: ChatMsg = {
         role: "assistant",
@@ -1033,9 +1121,9 @@ export default function Home() {
     setCollectedFirstName(null);
     setCollectedLastName(null);
     if (isPostBooking) {
-      // Block sync for 20s — all local-only post-payment messages must
+      // Block sync for 25s — all local-only post-payment messages must
       // finish rendering before server sync can overwrite them.
-      syncBlockedUntilRef.current = Date.now() + 20000;
+      syncBlockedUntilRef.current = Date.now() + 25000;
     } else {
       setTimeout(() => historyQuery.refetch(), 300);
     }
@@ -1382,17 +1470,14 @@ export default function Home() {
 
                 const isRegularBubble = !(isOnboardingCollect || isBooking || isPostBookingName || isPostBookingPayment || isHowItWorks);
 
-                // Greeting beat stagger: 3-beat choreographed entrance
+                // Greeting beats: hide until the typing → reveal sequence runs
                 const isGreetingBeat = msg.metadata?.type === "system_greeting" && msg.metadata?.beat != null;
-                const greetingDelay = isGreetingBeat
-                  ? `${(msg.metadata.beat - 1) * 500}ms`
-                  : undefined;
-                
+                if (isGreetingBeat && !revealedBeats.has(msg.metadata!.beat as number)) return null;
+
                 return (
                 <div
                   key={msg.id || `msg-${i}`}
                   className={msg._justSent && msg.role === "user" ? "bubble-launch" : "message-enter"}
-                  style={greetingDelay ? { animationDelay: greetingDelay, opacity: 0, animationFillMode: "forwards" } : undefined}
                 >
                   {/* Skip regular bubble for booking messages (CONFIRMED card shows all info) and onboarding_collect (trust card shows it) */}
                   {isRegularBubble && (
@@ -1538,8 +1623,9 @@ export default function Home() {
                 );
               })}
 
-              {/* Typing indicator */}
-              {isSending && (
+              {/* Typing indicator — shown for real AI generation (isSending)
+                  AND for locally-simulated typing before injected messages */}
+              {(isSending || (localTypingActive && postBookingPhase !== "animating")) && (
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
                     {laundryMode ? (
