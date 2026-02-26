@@ -1079,18 +1079,18 @@ export default function Home() {
       showTyping(1600);
       hideTyping(3100);
       addMsg(
-        "We're happy to meet you at the door to go over any garment notes. If you're unavailable, tap the text or phone icons at the top right to reach the team lead directly. We do whatever it takes to make your life easy.",
+        "Need to leave garment notes? We're happy to go over them at the door. You can also call or text us anytime via the icons top right.",
         3100
       );
 
       showTyping(3900);
       hideTyping(5400);
-      addMsg("Your receipts and service history live in the Vault. Tap Services at the bottom, then Vault. Everything's there.", 5400);
+      addMsg("Receipts and service history live in Services \u2192 Vault.", 5400);
 
       showTyping(6200);
       hideTyping(7700);
       addMsg(
-        `Your driver has been notified and you'll receive a text on ${postBookingData.date} between ${postBookingData.window} the moment he's on his way.`,
+        `Driver notified. You'll receive a text on ${postBookingData.date} between ${postBookingData.window} the moment he's on his way.`,
         7700
       );
     } else {
