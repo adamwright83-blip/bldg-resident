@@ -544,6 +544,8 @@ export default function Home() {
   const [confirmDotIndex, setConfirmDotIndex] = useState<number | null>(null);
   const [laundryMode, setLaundryMode] = useState(false);
   const [postBookingPhase, setPostBookingPhase] = useState<"animating" | "name" | "payment" | null>(null);
+  const postBookingPhaseRef = useRef(postBookingPhase);
+  postBookingPhaseRef.current = postBookingPhase;
   const [postBookingData, setPostBookingData] = useState<{ service: string; date: string; window: string } | null>(null);
   const [collectedFirstName, setCollectedFirstName] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -704,6 +706,14 @@ export default function Home() {
         return;
       }
       
+      // During the post-booking animation/collection flow, don't overwrite
+      // local messages — it would unmount the animated confirmation card
+      // (Bug 1) and wipe locally-injected name/payment cards (Bug 2).
+      if (postBookingPhaseRef.current !== null) {
+        setOnboardingComplete(historyQuery.data.onboardingComplete);
+        return;
+      }
+
       const serverMsgs: ChatMsg[] = historyQuery.data.messages.map((m) => ({
         id: m.id,
         role: m.role as "user" | "assistant",
@@ -919,7 +929,9 @@ export default function Home() {
     setPostBookingPhase(null);
     setPostBookingData(null);
     setCollectedFirstName(null);
-  }, [postBookingPhase, postBookingData]);
+    // Gate has dropped — sync with server to pick up any missed messages.
+    setTimeout(() => historyQuery.refetch(), 300);
+  }, [postBookingPhase, postBookingData, historyQuery]);
 
   const handleSend = useCallback(
     async (text?: string) => {
@@ -987,8 +999,10 @@ export default function Home() {
           const userData = historyQuery.data?.user;
           const needsName = !userData?.firstName;
           const needsPayment = !(userData as any)?.paymentMethodSaved;
-          if (isLaundryBooking && (needsName || needsPayment)) {
+          const shouldGate = isLaundryBooking && (needsName || needsPayment);
+          if (shouldGate) {
             setPostBookingPhase("animating");
+            postBookingPhaseRef.current = "animating";
             setPostBookingData({
               service: response.booking.service,
               date: response.booking.date,
@@ -1026,10 +1040,12 @@ export default function Home() {
 
         if (response.booking) {
           activeBookingsQuery.refetch();
-          // Refetch history to pick up post-booking collection messages
-          // Use multiple refetches to ensure we catch DB writes
-          setTimeout(() => historyQuery.refetch(), 600);
-          setTimeout(() => historyQuery.refetch(), 1500);
+          // Don't refetch history during the post-booking animation gate —
+          // the sync effect would overwrite local messages and kill the animation.
+          if (!postBookingPhaseRef.current) {
+            setTimeout(() => historyQuery.refetch(), 600);
+            setTimeout(() => historyQuery.refetch(), 1500);
+          }
         } else {
           // Also refetch after non-booking messages during onboarding collection
           setTimeout(() => historyQuery.refetch(), 400);
@@ -1151,7 +1167,8 @@ export default function Home() {
         setPostBookingPhase(null);
         setPostBookingData(null);
       }
-      historyQuery.refetch();
+      // Don't refetch history here — the sync effect would wipe our
+      // locally-injected payment card. History syncs after payment completes.
     } catch {
       // Silently handle — name will be collected later
     }
