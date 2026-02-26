@@ -14,9 +14,10 @@ import { CheckCircle2 } from "lucide-react";
 interface PaymentMethodFormProps {
   onSuccess: () => void;
   dark?: boolean;
+  defaultCardholderName?: string;
 }
 
-export function PaymentMethodForm({ onSuccess, dark = false }: PaymentMethodFormProps) {
+export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderName = "" }: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const publishableKey =
@@ -25,6 +26,7 @@ export function PaymentMethodForm({ onSuccess, dark = false }: PaymentMethodForm
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [last4, setLast4] = useState<string | null>(null);
+  const [cardholderName, setCardholderName] = useState(defaultCardholderName);
   const [postalCode, setPostalCode] = useState("");
   const [initError, setInitError] = useState<string | null>(null);
 
@@ -81,6 +83,7 @@ export function PaymentMethodForm({ onSuccess, dark = false }: PaymentMethodForm
         type: "card",
         card: cardNumberElement,
         billing_details: {
+          name: cardholderName.trim() || undefined,
           address: {
             postal_code: postalCode || undefined,
           },
@@ -179,6 +182,14 @@ export function PaymentMethodForm({ onSuccess, dark = false }: PaymentMethodForm
               </div>
             ) : (
               <>
+                <input
+                  value={cardholderName}
+                  onChange={(e) => setCardholderName(e.target.value)}
+                  placeholder="Name on card"
+                  className={dark ? "bldg-pay-zip" : zipCls}
+                  style={{ marginBottom: "12px" }}
+                  autoComplete="cc-name"
+                />
                 <div className={`mb-3 w-full ${fieldCls}`} style={{ minHeight: "48px" }}>
                   <CardNumberElement options={{ style: stripeStyle }} />
                 </div>

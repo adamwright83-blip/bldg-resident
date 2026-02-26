@@ -899,15 +899,17 @@ export const chatRouter = router({
   }),
 
   saveName: publicProcedure
-    .input(z.object({ firstName: z.string().min(1).max(60) }))
+    .input(z.object({
+      firstName: z.string().min(1).max(60),
+      lastName: z.string().max(60).optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
       if (!bldgUserId) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "No active session" });
       }
-      const parts = input.firstName.trim().split(/\s+/);
-      const firstName = parts[0];
-      const lastName = parts.length > 1 ? parts.slice(1).join(" ") : null;
+      const firstName = input.firstName.trim();
+      const lastName = input.lastName?.trim() || null;
       await updateBldgUser(bldgUserId, { firstName, lastName } as any);
       return { success: true, firstName };
     }),

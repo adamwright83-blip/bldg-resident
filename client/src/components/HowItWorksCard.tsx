@@ -79,17 +79,13 @@ export default function HowItWorksCard({ isNew = false }: HowItWorksCardProps) {
         </div>
       </div>
 
-      <div className="hiw-step">
+      <div className="hiw-step" style={{ marginBottom: 0 }}>
         <div className="hiw-illustration">
           <DoorPickupIllustration />
         </div>
         <div className="hiw-step-text">
           <span className="hiw-step-num">2.</span> We'll text you 10 min before arrival. You don't need to be home.
         </div>
-      </div>
-
-      <div className="hiw-footer">
-        That's it. We'll return your laundry within 24 hours.
       </div>
     </div>
   );

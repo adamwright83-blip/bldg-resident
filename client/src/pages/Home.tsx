@@ -496,29 +496,40 @@ function createRipple(e: React.MouseEvent<HTMLButtonElement>) {
 
 // ─── Name Input Card (post-booking collection) ───
 
-function NameInputCard({ onSubmit, loading }: { onSubmit: (name: string) => void; loading?: boolean }) {
-  const [name, setName] = useState("");
+function NameInputCard({ onSubmit, loading }: { onSubmit: (first: string, last: string) => void; loading?: boolean }) {
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (trimmed && !loading) onSubmit(trimmed);
+    if (first.trim() && last.trim() && !loading) onSubmit(first.trim(), last.trim());
   };
   return (
     <form onSubmit={handleSubmit} className="bldg-name-form">
       <label className="bldg-name-label">What's your name?</label>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="First name"
-        className="bldg-name-input"
-        autoFocus
-        autoComplete="given-name"
-        disabled={loading}
-      />
+      <div className="bldg-name-row">
+        <input
+          type="text"
+          value={first}
+          onChange={(e) => setFirst(e.target.value)}
+          placeholder="First name"
+          className="bldg-name-input"
+          autoFocus
+          autoComplete="given-name"
+          disabled={loading}
+        />
+        <input
+          type="text"
+          value={last}
+          onChange={(e) => setLast(e.target.value)}
+          placeholder="Last name"
+          className="bldg-name-input"
+          autoComplete="family-name"
+          disabled={loading}
+        />
+      </div>
       <button
         type="submit"
-        disabled={!name.trim() || loading}
+        disabled={!first.trim() || !last.trim() || loading}
         className="bldg-name-submit"
       >
         {loading ? "..." : "Continue"}
@@ -550,6 +561,7 @@ export default function Home() {
   const syncBlockedUntilRef = useRef(0);
   const [postBookingData, setPostBookingData] = useState<{ service: string; date: string; window: string } | null>(null);
   const [collectedFirstName, setCollectedFirstName] = useState<string | null>(null);
+  const [collectedLastName, setCollectedLastName] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -788,7 +800,7 @@ export default function Home() {
   useEffect(() => {
     if (ceremonyIndex !== null) {
       const isLaundry = postBookingPhase !== null;
-      const delay = isLaundry ? 5000 : 2200;
+      const delay = isLaundry ? 7000 : 2200;
       const timer = setTimeout(() => setCeremonyIndex(null), delay);
       return () => clearTimeout(timer);
     }
@@ -912,7 +924,7 @@ export default function Home() {
       });
 
     if (isPostBooking && postBookingData) {
-      // Message 6: How it works card
+      // Message 6: How it works card (illustrations)
       const howItWorksMsg: ChatMsg = {
         role: "assistant",
         content: "__HOW_IT_WORKS__",
@@ -921,16 +933,24 @@ export default function Home() {
       };
       setMessages((prev) => [...stripPaymentPrompts(prev), howItWorksMsg]);
 
-      // Message 7: Final handoff after a brief pause
+      // Closing text (no illustration — conversation must end on text)
+      setTimeout(() => {
+        setMessages((prev) => [...prev, {
+          role: "assistant" as const,
+          content: "We'll return your laundry within 24 hours.",
+          createdAt: new Date(),
+        }]);
+      }, 1200);
+
+      // Message 7: Final handoff (the warm send-off)
       const timeStr = postBookingData.window.split("–")[0] || postBookingData.window;
       setTimeout(() => {
-        const handoffMsg: ChatMsg = {
-          role: "assistant",
+        setMessages((prev) => [...prev, {
+          role: "assistant" as const,
           content: `You're all set. Your driver has been notified and you'll receive a text when he's on his way. ${postBookingData.date} at ${timeStr}.`,
           createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, handoffMsg]);
-      }, 1500);
+        }]);
+      }, 2800);
     } else {
       const successMsg: ChatMsg = {
         role: "assistant",
@@ -951,10 +971,11 @@ export default function Home() {
     setPostBookingPhase(null);
     setPostBookingData(null);
     setCollectedFirstName(null);
+    setCollectedLastName(null);
     if (isPostBooking) {
-      // Block sync while the local how-it-works + handoff messages render (1.5s + buffer).
-      syncBlockedUntilRef.current = Date.now() + 3000;
-      setTimeout(() => historyQuery.refetch(), 3500);
+      // Block sync for 15s — the how-it-works card, closing text, and
+      // handoff message are local-only and would be wiped by server sync.
+      syncBlockedUntilRef.current = Date.now() + 15000;
     } else {
       setTimeout(() => historyQuery.refetch(), 300);
     }
@@ -1037,7 +1058,7 @@ export default function Home() {
             });
             setTimeout(() => {
               setPostBookingPhase(needsName ? "name" : "payment");
-            }, 5000);
+            }, 7000);
           }
         }
 
@@ -1173,10 +1194,11 @@ export default function Home() {
     }
   };
 
-  const handleNameSubmit = useCallback(async (firstName: string) => {
+  const handleNameSubmit = useCallback(async (firstName: string, lastName: string) => {
     try {
-      await saveNameMutation.mutateAsync({ firstName });
+      await saveNameMutation.mutateAsync({ firstName, lastName });
       setCollectedFirstName(firstName);
+      setCollectedLastName(lastName);
       const userData = historyQuery.data?.user;
       const needsPayment = !(userData as any)?.paymentMethodSaved;
       if (needsPayment) {
@@ -1194,8 +1216,6 @@ export default function Home() {
         setPostBookingPhase(null);
         setPostBookingData(null);
       }
-      // Don't refetch history here — the sync effect would wipe our
-      // locally-injected payment card. History syncs after payment completes.
     } catch {
       // Silently handle — name will be collected later
     }
@@ -1433,7 +1453,11 @@ export default function Home() {
                           </p>
                         ) : (
                           <Elements stripe={stripePromise}>
-                            <PaymentMethodForm onSuccess={handlePaymentSaved} dark />
+                            <PaymentMethodForm
+                              onSuccess={handlePaymentSaved}
+                              dark
+                              defaultCardholderName={[collectedFirstName, collectedLastName].filter(Boolean).join(" ")}
+                            />
                           </Elements>
                         )}
                       </div>

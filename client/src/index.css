@@ -2992,6 +2992,12 @@
     font-weight: 400;
   }
 
+  .bldg-name-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
   .bldg-name-input {
     width: 100%;
     background: transparent;
@@ -3172,10 +3178,4 @@
     font-weight: 500;
   }
 
-  .hiw-footer {
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 13px;
-    font-weight: 300;
-    padding-top: 12px;
-    border-top: 1px solid rgba(201, 169, 110, 0.08);
-  }
+  /* hiw-footer removed — conversation ends on a text bubble, not inside the card */
