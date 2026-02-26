@@ -89,12 +89,9 @@ export default function Vault({ onBack }: VaultProps) {
   const { data: requestsData, isLoading } = trpc.chat.getRequests.useQuery();
   const requests = requestsData?.requests || [];
 
-  // Separate active vs past
-  const active = requests.filter(
-    (r: any) => r.status === "pending" || r.status === "confirmed" || r.status === "in-progress"
-  );
-  const past = requests.filter(
-    (r: any) => r.status === "completed" || r.status === "cancelled"
+  // All bookings in one list, newest first
+  const allBookings = [...requests].sort(
+    (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
   const memberSince = user?.createdAt ? formatDate(user.createdAt) : "—";
@@ -155,67 +152,26 @@ export default function Vault({ onBack }: VaultProps) {
         </div>
       </motion.div>
 
-      {/* Active Bookings */}
-      {active.length > 0 && (
-        <motion.div
-          className="vault-section"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.3 }}
-        >
-          <div className="vault-section-header">
-            <Clock size={14} />
-            <span>Active</span>
-          </div>
-          {active.map((req: any) => (
-            <button
-              key={req.id}
-              className="vault-booking-row"
-              onClick={() => setSelectedRequest(req)}
-            >
-              <span className="vault-booking-icon">
-                {SERVICE_ICONS[req.serviceType] || <Package size={16} />}
-              </span>
-              <div className="vault-booking-info">
-                <span className="vault-booking-service">
-                  {SERVICE_LABELS[req.serviceType] || req.serviceType}
-                </span>
-                <span className="vault-booking-date">
-                  {req.scheduledDate || "Pending"} · {req.scheduledWindow || ""}
-                </span>
-              </div>
-              <span
-                className="vault-booking-status"
-                style={{ color: STATUS_COLORS[req.status] || "#9E8E82" }}
-              >
-                {req.status}
-              </span>
-              <ChevronRight size={14} className="vault-booking-chevron" />
-            </button>
-          ))}
-        </motion.div>
-      )}
-
-      {/* Past Bookings */}
+      {/* All Bookings */}
       <motion.div
         className="vault-section"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.3 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
       >
         <div className="vault-section-header">
-          <Package size={14} />
-          <span>History</span>
-          {past.length > 0 && (
-            <span className="vault-section-count">{past.length}</span>
+          <Clock size={14} />
+          <span>Bookings</span>
+          {allBookings.length > 0 && (
+            <span className="vault-section-count">{allBookings.length}</span>
           )}
         </div>
         {isLoading ? (
           <div className="vault-empty">Loading...</div>
-        ) : past.length === 0 ? (
-          <div className="vault-empty">No completed bookings yet.</div>
+        ) : allBookings.length === 0 ? (
+          <div className="vault-empty">No bookings yet.</div>
         ) : (
-          past.map((req: any) => (
+          allBookings.map((req: any) => (
             <button
               key={req.id}
               className="vault-booking-row"
@@ -230,6 +186,7 @@ export default function Vault({ onBack }: VaultProps) {
                 </span>
                 <span className="vault-booking-date">
                   {req.scheduledDate || formatDate(req.createdAt)}
+                  {req.scheduledWindow ? ` · ${req.scheduledWindow}` : ""}
                 </span>
               </div>
               <span

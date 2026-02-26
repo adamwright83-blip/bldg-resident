@@ -903,7 +903,7 @@ export default function Home() {
           if (guard("post_booking_learn", prev)) return prev;
           return [...prev, {
             role: "assistant" as const,
-            content: "The more you use BLDG, the more it learns — your preferred days, time windows, and services start to fill in automatically.",
+            content: "BLDG learns as you go. Your preferred days, time windows, and services fill in over time — so every order gets easier than the last.",
             metadata: { type: "post_booking_learn" },
             createdAt: new Date(),
           }];
@@ -990,7 +990,7 @@ export default function Home() {
   const gravityPlaceholder = useMemo(() => {
     // New users with no messages: show service keywords as hint
     if (messages.length <= 1) {
-      return "laundry \u00B7 dry cleaning \u00B7 car wash \u00B7 grooming";
+      return "laundry \u00B7 dry cleaning \u00B7 car wash";
     }
 
     const hour = new Date().getHours();
@@ -1061,9 +1061,8 @@ export default function Home() {
       // Cumulative timings:
       //   200ms   typing → 1000ms   reveal "We'll return..." (7w short)
       //   1600ms  typing → 3100ms   reveal follow-up (37w medium)
-      //   3900ms  typing → 5400ms   reveal phone nudge (20w medium)
-      //   6200ms  typing → 7700ms   reveal vault nudge (18w medium)
-      //   8500ms  typing → 10000ms  reveal final handoff (21w medium)
+      //   3900ms  typing → 5400ms   reveal vault nudge (18w medium)
+      //   6200ms  typing → 7700ms   reveal final handoff (22w medium)
       const addMsg = (content: string, delay: number) =>
         setTimeout(() => setMessages((prev) => [...prev, {
           role: "assistant" as const, content, createdAt: new Date(),
@@ -1080,24 +1079,19 @@ export default function Home() {
       showTyping(1600);
       hideTyping(3100);
       addMsg(
-        "We're happy to meet you at the door to go over any garment notes. If you're unavailable, tap the text or phone icons at the top right to reach the team lead directly. We do whatever makes your life easiest.",
+        "We're happy to meet you at the door to go over any garment notes. If you're unavailable, tap the text or phone icons at the top right to reach the team lead directly. We do whatever it takes to make your life easy.",
         3100
       );
 
       showTyping(3900);
       hideTyping(5400);
-      addMsg("See the phone and message icons up top? That's a real person — no hold music, no phone tree, no robots. Instant.", 5400);
+      addMsg("Your receipts and service history live in the Vault. Tap Services at the bottom, then Vault. Everything's there.", 5400);
 
       showTyping(6200);
       hideTyping(7700);
-      addMsg("Your receipts and service history live in the Vault. Tap Services at the bottom, then Vault. Everything's there.", 7700);
-
-      const timeStr = postBookingData.window.split("–")[0] || postBookingData.window;
-      showTyping(8500);
-      hideTyping(10000);
       addMsg(
-        `You're all set. Your driver has been notified and you'll receive a text when he's on his way. ${postBookingData.date} at ${timeStr}.`,
-        10000
+        `Your driver has been notified and you'll receive a text on ${postBookingData.date} between ${postBookingData.window} the moment he's on his way.`,
+        7700
       );
     } else {
       const successMsg: ChatMsg = {
@@ -1121,9 +1115,9 @@ export default function Home() {
     setCollectedFirstName(null);
     setCollectedLastName(null);
     if (isPostBooking) {
-      // Block sync for 25s — all local-only post-payment messages must
+      // Block sync for 15s — all local-only post-payment messages must
       // finish rendering before server sync can overwrite them.
-      syncBlockedUntilRef.current = Date.now() + 25000;
+      syncBlockedUntilRef.current = Date.now() + 15000;
     } else {
       setTimeout(() => historyQuery.refetch(), 300);
     }

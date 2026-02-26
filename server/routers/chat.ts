@@ -1514,8 +1514,8 @@ export const chatRouter = router({
           greetBeat3 = `What should I handle?`;
         } else {
           greetBeat1 = `Welcome to BLDG. Your private concierge.`;
-          greetBeat2 = `We handle laundry, dry cleaning, auto detailing, and dog grooming.`;
-          greetBeat3 = `Most requests take a single word.\nSee how it works — type 'Laundry' below.`;
+          greetBeat2 = `We handle laundry, dry cleaning, car wash, and dog grooming.`;
+          greetBeat3 = `Type 'Laundry' below and watch what happens.`;
         }
       } catch {
         if (isReturning) {
@@ -1524,8 +1524,8 @@ export const chatRouter = router({
           greetBeat3 = `What should I handle?`;
         } else {
           greetBeat1 = `Welcome to BLDG. Your private concierge.`;
-          greetBeat2 = `We handle laundry, dry cleaning, auto detailing, and dog grooming.`;
-          greetBeat3 = `Most requests take a single word.\nSee how it works — type 'Laundry' below.`;
+          greetBeat2 = `We handle laundry, dry cleaning, car wash, and dog grooming.`;
+          greetBeat3 = `Type 'Laundry' below and watch what happens.`;
         }
       }
 
