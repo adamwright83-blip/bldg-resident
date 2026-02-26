@@ -806,21 +806,59 @@ export default function Home() {
     }
   }, [ceremonyIndex, postBookingPhase]);
 
-  // Post-booking phase: inject name collection message when transitioning to "name"
+  // Post-booking phase: inject name collection messages when transitioning to "name"
   useEffect(() => {
     if (postBookingPhase === "name") {
+      // Guard: only run if none of these messages exist yet
       setMessages((prev) => {
-        if (prev.some((m) => m.metadata?.type === "post_booking_name")) return prev;
+        if (prev.some((m) => m.metadata?.type === "post_booking_name" || m.metadata?.type === "post_booking_intro")) return prev;
         return [
           ...prev,
           {
             role: "assistant" as const,
-            content: "Order secured — and forthcoming orders are scheduled by default for that same time window and day, every other week. Modify or cancel above.\n\nEnter your name to proceed.",
-            metadata: { type: "post_booking_name" },
+            content: "That's your first order — and it was that easy. You can adjust the pickup time or cancel anytime using the Modify button above.",
+            metadata: { type: "post_booking_intro" },
             createdAt: new Date(),
           },
         ];
       });
+      // 4B — ~1s after 4
+      const t1 = setTimeout(() => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.metadata?.type === "post_booking_learn")) return prev;
+          return [...prev, {
+            role: "assistant" as const,
+            content: "The more you use BLDG, the more it learns — your preferred days, time windows, and services start to fill in automatically.",
+            metadata: { type: "post_booking_learn" },
+            createdAt: new Date(),
+          }];
+        });
+      }, 1000);
+      // 4C — ~2s after 4
+      const t2 = setTimeout(() => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.metadata?.type === "post_booking_tagline")) return prev;
+          return [...prev, {
+            role: "assistant" as const,
+            content: "One word is all it takes. That's the point.",
+            metadata: { type: "post_booking_tagline" },
+            createdAt: new Date(),
+          }];
+        });
+      }, 2000);
+      // Name input card — ~3s after 4
+      const t3 = setTimeout(() => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.metadata?.type === "post_booking_name")) return prev;
+          return [...prev, {
+            role: "assistant" as const,
+            content: "Enter your name to proceed.",
+            metadata: { type: "post_booking_name" },
+            createdAt: new Date(),
+          }];
+        });
+      }, 3000);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     } else if (postBookingPhase === "payment" && !collectedFirstName) {
       setMessages((prev) => {
         if (prev.some((m) => m.metadata?.type === "post_booking_payment")) return prev;
@@ -920,7 +958,11 @@ export default function Home() {
         const isPostBookingLocal =
           msg.metadata?.type === "post_booking_name" ||
           msg.metadata?.type === "post_booking_payment";
-        return !(isLegacyPrompt || isPaymentCollectMeta || isPostBookingLocal);
+        const isPostBookingIntro =
+          msg.metadata?.type === "post_booking_intro" ||
+          msg.metadata?.type === "post_booking_learn" ||
+          msg.metadata?.type === "post_booking_tagline";
+        return !(isLegacyPrompt || isPaymentCollectMeta || isPostBookingLocal || isPostBookingIntro);
       });
 
     if (isPostBooking && postBookingData) {
@@ -933,7 +975,7 @@ export default function Home() {
       };
       setMessages((prev) => [...stripPaymentPrompts(prev), howItWorksMsg]);
 
-      // Closing text (no illustration — conversation must end on text)
+      // "24 hours" closing text (no illustration — conversation must end on text)
       setTimeout(() => {
         setMessages((prev) => [...prev, {
           role: "assistant" as const,
@@ -942,7 +984,25 @@ export default function Home() {
         }]);
       }, 1200);
 
-      // Message 7: Final handoff (the warm send-off)
+      // Real-person nudge
+      setTimeout(() => {
+        setMessages((prev) => [...prev, {
+          role: "assistant" as const,
+          content: "See the phone and message icons up top? That's a real person — no hold music, no phone tree, no robots. Instant.",
+          createdAt: new Date(),
+        }]);
+      }, 2500);
+
+      // Vault nudge
+      setTimeout(() => {
+        setMessages((prev) => [...prev, {
+          role: "assistant" as const,
+          content: "Your receipts and service history live in the Vault. Tap Services at the bottom, then Vault. Everything's there.",
+          createdAt: new Date(),
+        }]);
+      }, 3800);
+
+      // Final handoff (the warm send-off)
       const timeStr = postBookingData.window.split("–")[0] || postBookingData.window;
       setTimeout(() => {
         setMessages((prev) => [...prev, {
@@ -950,7 +1010,7 @@ export default function Home() {
           content: `You're all set. Your driver has been notified and you'll receive a text when he's on his way. ${postBookingData.date} at ${timeStr}.`,
           createdAt: new Date(),
         }]);
-      }, 2800);
+      }, 5200);
     } else {
       const successMsg: ChatMsg = {
         role: "assistant",
@@ -973,9 +1033,9 @@ export default function Home() {
     setCollectedFirstName(null);
     setCollectedLastName(null);
     if (isPostBooking) {
-      // Block sync for 15s — the how-it-works card, closing text, and
-      // handoff message are local-only and would be wiped by server sync.
-      syncBlockedUntilRef.current = Date.now() + 15000;
+      // Block sync for 20s — all local-only post-payment messages must
+      // finish rendering before server sync can overwrite them.
+      syncBlockedUntilRef.current = Date.now() + 20000;
     } else {
       setTimeout(() => historyQuery.refetch(), 300);
     }
@@ -1202,8 +1262,9 @@ export default function Home() {
       const userData = historyQuery.data?.user;
       const needsPayment = !(userData as any)?.paymentMethodSaved;
       if (needsPayment) {
+        const strippedTypes = new Set(["post_booking_name", "post_booking_intro", "post_booking_learn", "post_booking_tagline"]);
         setMessages((prev) => [
-          ...prev.filter((m) => m.metadata?.type !== "post_booking_name"),
+          ...prev.filter((m) => !strippedTypes.has(m.metadata?.type as string)),
           {
             role: "assistant" as const,
             content: `Good to meet you, ${firstName}. One last thing — add a payment method so future orders are instant. One word in, service at your door.`,
