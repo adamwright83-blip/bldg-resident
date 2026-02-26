@@ -900,6 +900,20 @@ export const chatRouter = router({
     return { started: false, reason: "disabled_v2" };
   }),
 
+  saveName: publicProcedure
+    .input(z.object({ firstName: z.string().min(1).max(60) }))
+    .mutation(async ({ input, ctx }) => {
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "No active session" });
+      }
+      const parts = input.firstName.trim().split(/\s+/);
+      const firstName = parts[0];
+      const lastName = parts.length > 1 ? parts.slice(1).join(" ") : null;
+      await updateBldgUser(bldgUserId, { firstName, lastName } as any);
+      return { success: true, firstName };
+    }),
+
   /**
    * Send a message and get an AI response.
    * Handles onboarding flow for first-time users, then auto-books services.
@@ -1579,6 +1593,7 @@ export const chatRouter = router({
             firstName: user.firstName,
             buildingSlug: user.buildingSlug,
             onboardingStep: user.onboardingStep,
+            paymentMethodSaved: !!user.paymentMethodSaved,
           }
         : null,
       session: {

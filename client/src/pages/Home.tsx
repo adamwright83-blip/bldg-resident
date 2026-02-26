@@ -493,6 +493,39 @@ function createRipple(e: React.MouseEvent<HTMLButtonElement>) {
   ripple.addEventListener("animationend", () => ripple.remove());
 }
 
+// ─── Name Input Card (post-booking collection) ───
+
+function NameInputCard({ onSubmit, loading }: { onSubmit: (name: string) => void; loading?: boolean }) {
+  const [name, setName] = useState("");
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (trimmed && !loading) onSubmit(trimmed);
+  };
+  return (
+    <form onSubmit={handleSubmit} className="bldg-name-form">
+      <label className="bldg-name-label">What's your name?</label>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="First name"
+        className="bldg-name-input"
+        autoFocus
+        autoComplete="given-name"
+        disabled={loading}
+      />
+      <button
+        type="submit"
+        disabled={!name.trim() || loading}
+        className="bldg-name-submit"
+      >
+        {loading ? "..." : "Continue"}
+      </button>
+    </form>
+  );
+}
+
 // ─── Main Component ───
 
 export default function Home() {
@@ -510,6 +543,9 @@ export default function Home() {
   const [recognizeActive, setRecognizeActive] = useState(false);
   const [confirmDotIndex, setConfirmDotIndex] = useState<number | null>(null);
   const [laundryMode, setLaundryMode] = useState(false);
+  const [postBookingPhase, setPostBookingPhase] = useState<"animating" | "name" | "payment" | null>(null);
+  const [postBookingData, setPostBookingData] = useState<{ service: string; date: string; window: string } | null>(null);
+  const [collectedFirstName, setCollectedFirstName] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -583,6 +619,7 @@ export default function Home() {
   const cancelMutation = trpc.chat.cancelRequest.useMutation();
   const upgradeMutation = trpc.chat.applyUpgrade.useMutation();
   const startRegistrationMutation = trpc.chat.startRegistration.useMutation();
+  const saveNameMutation = trpc.chat.saveName.useMutation();
 
   // Auto-trigger registration for fresh users (NOT_STARTED)
   const registrationTriggered = useRef(false);
@@ -735,13 +772,47 @@ export default function Home() {
     }
   }, [lastBookingConfirmed]);
 
-  // Clear ceremony index after animation completes (2s)
+  // Clear ceremony index after animation completes.
+  // Laundry cards need longer (3.5s animation + breathing room).
   useEffect(() => {
     if (ceremonyIndex !== null) {
-      const timer = setTimeout(() => setCeremonyIndex(null), 2200);
+      const isLaundry = postBookingPhase !== null;
+      const delay = isLaundry ? 5000 : 2200;
+      const timer = setTimeout(() => setCeremonyIndex(null), delay);
       return () => clearTimeout(timer);
     }
-  }, [ceremonyIndex]);
+  }, [ceremonyIndex, postBookingPhase]);
+
+  // Post-booking phase: inject name collection message when transitioning to "name"
+  useEffect(() => {
+    if (postBookingPhase === "name") {
+      setMessages((prev) => {
+        if (prev.some((m) => m.metadata?.type === "post_booking_name")) return prev;
+        return [
+          ...prev,
+          {
+            role: "assistant" as const,
+            content: "You're all set! Just need a couple things to get this to your door.",
+            metadata: { type: "post_booking_name" },
+            createdAt: new Date(),
+          },
+        ];
+      });
+    } else if (postBookingPhase === "payment" && !collectedFirstName) {
+      setMessages((prev) => {
+        if (prev.some((m) => m.metadata?.type === "post_booking_payment")) return prev;
+        return [
+          ...prev,
+          {
+            role: "assistant" as const,
+            content: "Last step — add a card for the pickup.",
+            metadata: { type: "post_booking_payment" },
+            createdAt: new Date(),
+          },
+        ];
+      });
+    }
+  }, [postBookingPhase]);
 
   // #4: Overscroll glow detection
   useEffect(() => {
@@ -811,9 +882,14 @@ export default function Home() {
   const showEmptyState = messages.length === 0 && !isSending;
 
   const handlePaymentSaved = useCallback(() => {
+    const isPostBooking = postBookingPhase === "payment";
+    const finalMsg = isPostBooking && postBookingData
+      ? `Locked in. Your laundry pickup is confirmed for ${postBookingData.date} at ${postBookingData.window.split("–")[0] || postBookingData.window}. We'll send you a reminder before we arrive.`
+      : PAYMENT_SAVED_MESSAGE;
+
     const successMsg: ChatMsg = {
       role: "assistant",
-      content: PAYMENT_SAVED_MESSAGE,
+      content: finalMsg,
       createdAt: new Date(),
     };
     setMessages((prev) => {
@@ -826,18 +902,24 @@ export default function Home() {
           msg.metadata?.type === "payment_collection" ||
           (msg.metadata?.type === "onboarding_collect" &&
             msg.metadata?.collectType === "payment");
-        return !(isLegacyPrompt || isPaymentCollectMeta);
+        const isPostBookingLocal =
+          msg.metadata?.type === "post_booking_name" ||
+          msg.metadata?.type === "post_booking_payment";
+        return !(isLegacyPrompt || isPaymentCollectMeta || isPostBookingLocal);
       });
 
       const last = withoutPaymentPrompt[withoutPaymentPrompt.length - 1];
-      if (last?.role === "assistant" && last.content === PAYMENT_SAVED_MESSAGE) {
+      if (last?.role === "assistant" && last.content === finalMsg) {
         return withoutPaymentPrompt;
       }
 
       return [...withoutPaymentPrompt, successMsg];
     });
     setOnboardingComplete(true);
-  }, []);
+    setPostBookingPhase(null);
+    setPostBookingData(null);
+    setCollectedFirstName(null);
+  }, [postBookingPhase, postBookingData]);
 
   const handleSend = useCallback(
     async (text?: string) => {
@@ -898,6 +980,23 @@ export default function Home() {
               date: response.booking.date,
               window: response.booking.window,
             });
+          }
+
+          // Post-booking gate: animation owns the screen for 5 seconds,
+          // then we collect name/payment sequentially.
+          const userData = historyQuery.data?.user;
+          const needsName = !userData?.firstName;
+          const needsPayment = !(userData as any)?.paymentMethodSaved;
+          if (isLaundryBooking && (needsName || needsPayment)) {
+            setPostBookingPhase("animating");
+            setPostBookingData({
+              service: response.booking.service,
+              date: response.booking.date,
+              window: response.booking.window,
+            });
+            setTimeout(() => {
+              setPostBookingPhase(needsName ? "name" : "payment");
+            }, 5000);
           }
         }
 
@@ -1031,6 +1130,33 @@ export default function Home() {
     }
   };
 
+  const handleNameSubmit = useCallback(async (firstName: string) => {
+    try {
+      await saveNameMutation.mutateAsync({ firstName });
+      setCollectedFirstName(firstName);
+      const userData = historyQuery.data?.user;
+      const needsPayment = !(userData as any)?.paymentMethodSaved;
+      if (needsPayment) {
+        setMessages((prev) => [
+          ...prev.filter((m) => m.metadata?.type !== "post_booking_name"),
+          {
+            role: "assistant" as const,
+            content: `Thanks, ${firstName}! Last step — add a card for the pickup.`,
+            metadata: { type: "post_booking_payment" },
+            createdAt: new Date(),
+          },
+        ]);
+        setPostBookingPhase("payment");
+      } else {
+        setPostBookingPhase(null);
+        setPostBookingData(null);
+      }
+      historyQuery.refetch();
+    } catch {
+      // Silently handle — name will be collected later
+    }
+  }, [saveNameMutation, historyQuery]);
+
   // handleSuggestedChipClick removed — suggested chip eliminated
 
   const getAvatarMood = (msgIndex: number): "idle" | "orbit" | "settle" | "recognize" | "confirm" => {
@@ -1120,7 +1246,15 @@ export default function Home() {
                 const isOnboardingCollect = msg.role === "assistant" && msg.metadata?.type === "onboarding_collect";
                 const isBooking = msg.role === "assistant" && msg.metadata?.type === "booking";
                 const isPaymentCollection = msg.role === "assistant" && msg.metadata?.type === "payment_collection";
-                const isRegularBubble = !(isOnboardingCollect || isBooking);
+                const isPostBookingName = msg.role === "assistant" && msg.metadata?.type === "post_booking_name";
+                const isPostBookingPayment = msg.role === "assistant" && msg.metadata?.type === "post_booking_payment";
+
+                // During post-booking animation, suppress server-inserted payment_collection messages
+                if (isPaymentCollection && postBookingPhase !== null) {
+                  return null;
+                }
+
+                const isRegularBubble = !(isOnboardingCollect || isBooking || isPostBookingName || isPostBookingPayment);
 
                 // Greeting beat stagger: 3-beat choreographed entrance
                 const isGreetingBeat = msg.metadata?.type === "system_greeting" && msg.metadata?.beat != null;
@@ -1224,6 +1358,40 @@ export default function Home() {
                           <PaymentMethodForm onSuccess={handlePaymentSaved} />
                         </Elements>
                       )}
+                    </div>
+                  )}
+
+                  {/* Post-booking name collection card */}
+                  {isPostBookingName && (
+                    <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
+                      <div className="bldg-avatar" style={{ visibility: "hidden" }}>
+                        <BldgLogo size="small" />
+                      </div>
+                      <div className="bldg-inline-card">
+                        <p className="bldg-inline-card-text">{msg.content}</p>
+                        <NameInputCard onSubmit={handleNameSubmit} loading={saveNameMutation.isPending} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Post-booking payment collection card */}
+                  {isPostBookingPayment && (
+                    <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
+                      <div className="bldg-avatar" style={{ visibility: "hidden" }}>
+                        <BldgLogo size="small" />
+                      </div>
+                      <div className="bldg-inline-card">
+                        <p className="bldg-inline-card-text">{msg.content}</p>
+                        {!stripePromise ? (
+                          <p className="bldg-inline-card-text" style={{ opacity: 0.5 }}>
+                            {stripeInitError || "Card setup is temporarily unavailable."}
+                          </p>
+                        ) : (
+                          <Elements stripe={stripePromise}>
+                            <PaymentMethodForm onSuccess={handlePaymentSaved} dark />
+                          </Elements>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
