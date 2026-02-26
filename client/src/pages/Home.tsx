@@ -25,6 +25,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { MicButton } from "@/components/MicButton";
 import BldgLogo from "@/components/BldgLogo";
+import WasherIcon from "@/components/WasherIcon";
 import TrustCard from "@/components/TrustCard";
 import ConfirmationCeremony from "@/components/ConfirmationCeremony";
 import { toast } from "sonner";
@@ -287,6 +288,93 @@ function ConfirmationCard({
     setShowFrequencySheet(false);
   };
 
+  const isLaundryCategory = category === "laundry" || category === "dry-cleaning";
+
+  if (isLaundryCategory) {
+    return (
+      <div className="washer-confirm-card">
+        <div className="washer-confirm-card-icon">
+          <WasherIcon state={isNew ? "confirmed" : "rest"} size={80} />
+        </div>
+        <div className="washer-confirm-card-status">
+          <span className={isNew ? "confirmation-ticker" : ""}>CONFIRMED</span>
+        </div>
+        <div className="washer-confirm-card-service">{booking.service}</div>
+        <p className="washer-confirm-card-date">{booking.date}</p>
+        <p className="washer-confirm-card-window">{booking.window}</p>
+        <div className="washer-confirm-card-actions">
+          {onModify && !showModifyOptions && (
+            <button
+              onClick={() => setShowModifyOptions(true)}
+              className="washer-confirm-card-modify tappable"
+            >
+              Modify time
+            </button>
+          )}
+          {showModifyOptions && (
+            <div className="confirmation-card-modify-options">
+              {MODIFY_TIME_OPTIONS.map((opt) => (
+                <button
+                  key={`${opt.date}-${opt.window}`}
+                  onClick={() => handleTimeSelect(opt.date, opt.window)}
+                  className="confirmation-card-time-option tappable"
+                >
+                  {opt.date} {opt.window}
+                </button>
+              ))}
+              <button
+                onClick={handleCancel}
+                className="confirmation-card-btn-cancel-buried tappable"
+              >
+                Cancel pickup
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="washer-confirm-card-footer">Fulfilled by Laundry Butler.</div>
+
+        <AnimatePresence>
+          {showFrequencySheet && (
+            <>
+              <motion.div
+                className="frequency-sheet-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowFrequencySheet(false)}
+              />
+              <motion.div
+                className="frequency-sheet"
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              >
+                <div className="frequency-sheet-handle" />
+                <h3 className="frequency-sheet-title">Pickup Frequency</h3>
+                <div className="frequency-sheet-options">
+                  {FREQUENCY_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setDraftFrequency(option.id)}
+                      className="frequency-sheet-option tappable"
+                    >
+                      <span>{option.label}</span>
+                      {draftFrequency === option.id ? <Check size={16} /> : null}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="frequency-sheet-save tappable" onClick={saveFrequency}>Save</button>
+                <button type="button" className="frequency-sheet-keep tappable" onClick={keepWeekly}>Keep weekly</button>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
   return (
     <div className={`confirmation-card ${isNew ? "confirmation-ceremony" : "confirmation-enter"}`}>
       <div className="confirmation-card-status">
@@ -307,9 +395,6 @@ function ConfirmationCard({
       <div className="confirmation-card-details">
         <p className="confirmation-card-date">{booking.date}</p>
         <p className="confirmation-card-window">{booking.window}</p>
-        {(category === "laundry" || category === "dry-cleaning") && (
-          <p className="confirmation-card-delivery">Back within 24 hours</p>
-        )}
       </div>
       {upgradeApplied && (
         <div className="confirmation-card-upgrade-applied">
@@ -326,7 +411,6 @@ function ConfirmationCard({
         </button>
       )}
 
-      {/* Modify Time — inline in the card */}
       {onModify && !showModifyOptions && (
         <button
           onClick={() => setShowModifyOptions(true)}
@@ -355,11 +439,7 @@ function ConfirmationCard({
         </div>
       )}
 
-      <div className="confirmation-card-footer">
-        {(category === "laundry" || category === "dry-cleaning")
-          ? "Fulfilled by Laundry Butler."
-          : `Fulfilled by BLDG.`}
-      </div>
+      <div className="confirmation-card-footer">Fulfilled by BLDG.</div>
 
       <AnimatePresence>
         {showFrequencySheet && (
@@ -480,7 +560,7 @@ export default function Home() {
   const [settlingMsgIndex, setSettlingMsgIndex] = useState<number | null>(null);
   const [recognizeActive, setRecognizeActive] = useState(false);
   const [confirmDotIndex, setConfirmDotIndex] = useState<number | null>(null);
-  const [laundryMode, setLaundryMode] = useState<false | "active" | "seal">(false);
+  const [laundryMode, setLaundryMode] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -827,7 +907,7 @@ export default function Home() {
       setTimeout(() => setRecognizeActive(false), 400);
 
       const isLaundrySend = content.toLowerCase().includes("laundry");
-      setLaundryMode(isLaundrySend ? "active" : false);
+      setLaundryMode(isLaundrySend);
 
       // #1: Trigger send animations
       setSendBtnCompress(true);
@@ -858,13 +938,18 @@ export default function Home() {
           createdAt: new Date(),
         };
 
-        // Trigger full-screen ceremony BEFORE adding the message
+        // Trigger full-screen ceremony for non-laundry bookings only.
+        // Laundry bookings use the inline washer confirmation card as their ceremony.
         if (response.booking) {
-          setCeremonyData({
-            service: response.booking.service,
-            date: response.booking.date,
-            window: response.booking.window,
-          });
+          const svc = response.booking.service.toLowerCase();
+          const isLaundryBooking = svc.includes("laundry") || svc.includes("wash & fold") || svc.includes("dry clean");
+          if (!isLaundryBooking) {
+            setCeremonyData({
+              service: response.booking.service,
+              date: response.booking.date,
+              window: response.booking.window,
+            });
+          }
         }
 
         setMessages((prev) => {
@@ -937,12 +1022,7 @@ export default function Home() {
         setMessages((prev) => [...prev, fallback]);
       } finally {
         setIsSending(false);
-        if (isLaundrySend) {
-          setLaundryMode("seal");
-          setTimeout(() => setLaundryMode(false), 500);
-        } else {
-          setLaundryMode(false);
-        }
+        setLaundryMode(false);
       }
     },
     [input, isSending, sendMutation, activeBookingsQuery, historyQuery]
@@ -1201,19 +1281,18 @@ export default function Home() {
                 );
               })}
 
-              {/* Typing indicator — mood changes based on what was sent */}
+              {/* Typing indicator */}
               {isSending && (
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
-                    <BldgLogo
-                      size={laundryMode ? "medium" : "small"}
-                      mood={
-                        recognizeActive   ? "recognize"
-                        : laundryMode === "active" ? "laundry"
-                        : laundryMode === "seal"   ? "laundry-seal"
-                        :                            "orbit"
-                      }
-                    />
+                    {laundryMode ? (
+                      <WasherIcon state="rest" size={32} />
+                    ) : (
+                      <BldgLogo
+                        size="small"
+                        mood={recognizeActive ? "recognize" : "orbit"}
+                      />
+                    )}
                   </div>
                   {!laundryMode && <div className="typing-shimmer" />}
                 </div>

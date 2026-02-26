@@ -1285,106 +1285,185 @@
     100% { transform: scale(1); opacity: 1; }
   }
 
-  /* ─── Laundry Projector Mode ─── */
-  /* Dot moves to upper-right, ring projects outward, clothes tumble inside */
+  /* ═══════════════════════════════════════════
+     WASHER CONFIRMATION — Radial mechanism
+     One-shot 900ms sequence on confirmed card mount.
+     Mechanical. Inevitable. Premium.
+     ═══════════════════════════════════════════ */
 
-  /* Phase 1 — Dot slides from center to upper-right (120ms) */
-  /* The dot element is positioned at its destination; animation slides FROM center */
-  .bldg-dot-project-sm {
-    animation: bldg-dot-project-sm 120ms cubic-bezier(0.33, 0, 0.67, 1) forwards;
-  }
-  .bldg-dot-project-med {
-    animation: bldg-dot-project-med 120ms cubic-bezier(0.33, 0, 0.67, 1) forwards;
-  }
-  .bldg-dot-project-hero {
-    animation: bldg-dot-project-hero 120ms cubic-bezier(0.33, 0, 0.67, 1) forwards;
+  .washer-icon {
+    display: block;
+    flex-shrink: 0;
   }
 
-  /* sm: 24px → center=12, dest=(17.28, 6.72), delta=(-5.28, 5.28) */
-  @keyframes bldg-dot-project-sm {
-    0%   { transform: translate(-5.28px, 5.28px); }
-    100% { transform: translate(0, 0); }
-  }
-  /* med: 32px → center=16, dest=(23.04, 8.96), delta=(-7.04, 7.04) */
-  @keyframes bldg-dot-project-med {
-    0%   { transform: translate(-7.04px, 7.04px); }
-    100% { transform: translate(0, 0); }
-  }
-  /* hero: 56px → center=28, dest=(40.32, 15.68), delta=(-12.32, 12.32) */
-  @keyframes bldg-dot-project-hero {
-    0%   { transform: translate(-12.32px, 12.32px); }
-    100% { transform: translate(0, 0); }
+  /* Phase A — Dot repositions: top-right (78,30) → bottom-left (22,70) over 120ms.
+     SVG transforms use user units matching the viewBox, not CSS px. */
+  .washer-confirmed .washer-dot {
+    animation: washer-dot-move 120ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   }
 
-  /* Dot at rest after projection (no animation, just holds position) */
-  .bldg-dot-projected-sm,
-  .bldg-dot-projected-med,
-  .bldg-dot-projected-hero {
-    transform: translate(0, 0);
+  @keyframes washer-dot-move {
+    0%   { transform: translate(0, 0); }
+    100% { transform: translate(-56px, 40px); }
   }
 
-  /* Phase 2 — Ring scales from 0→1, slight rotation (200ms, delayed 120ms) */
-  /* transform-origin is set inline to the dot's destination */
-  .bldg-ring-expand-sm,
-  .bldg-ring-expand-med,
-  .bldg-ring-expand-hero {
-    animation: bldg-ring-expand 200ms ease-out 120ms both;
+  /* Phase B — Bezel seal: micro scale pulse (120–320ms) */
+  .washer-confirmed .washer-bezel {
+    transform-origin: 50px 50px;
+    animation: washer-bezel-seal 200ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
   }
 
-  @keyframes bldg-ring-expand {
-    0%   { transform: scale(0) rotate(0deg); opacity: 0; }
-    40%  { opacity: 1; }
-    100% { transform: scale(1) rotate(8deg); opacity: 1; }
+  @keyframes washer-bezel-seal {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.04); }
+    100% { transform: scale(1); }
   }
 
-  /* Ring hold: static after expansion */
-  .bldg-ring-hold {
-    transform: scale(1) rotate(8deg);
+  /* Phase B — Highlight arc sweep (120–320ms): dashoffset animates to sweep ~70% */
+  .washer-confirmed .washer-highlight {
+    transform-origin: 50px 50px;
+    animation: washer-highlight-sweep 200ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
   }
 
-  /* Phase 3 — Clothes tumble inside ring (fade in at 320ms, continuous rotation) */
-  .bldg-wash-tumble {
-    opacity: 0;
-    animation:
-      bldg-wash-rotate 2s linear 320ms infinite,
-      bldg-wash-fade-in 200ms ease-out 320ms forwards;
+  @keyframes washer-highlight-sweep {
+    0%   { opacity: 0.3; transform: rotate(0deg); }
+    100% { opacity: 0.7; transform: rotate(65deg); }
   }
 
-  @keyframes bldg-wash-rotate {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+  /* Phase C — Clothes tumble: one full rotation (220–820ms) */
+  .washer-confirmed .washer-clothes {
+    transform-origin: 50px 50px;
+    animation: washer-clothes-rotate 600ms cubic-bezier(0.4, 0, 0.2, 1) 220ms both;
   }
 
-  @keyframes bldg-wash-fade-in {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+  @keyframes washer-clothes-rotate {
+    0%   { transform: rotate(0deg); opacity: 0.22; }
+    100% { transform: rotate(360deg); opacity: 0.22; }
   }
 
-  /* Phase 4 (Seal) — Tumble decelerates to stop */
-  .bldg-wash-settle {
-    opacity: 1;
-    animation: bldg-wash-decel 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  /* Phase C — Wave oscillation (220–820ms): subtle horizontal shift */
+  .washer-confirmed .washer-wave {
+    animation: washer-wave-drift 600ms ease-in-out 220ms both;
   }
 
-  @keyframes bldg-wash-decel {
-    0%   { transform: rotate(0deg); }
-    100% { transform: rotate(45deg); }
+  @keyframes washer-wave-drift {
+    0%   { transform: translateX(0); }
+    25%  { transform: translateX(-2px); }
+    50%  { transform: translateX(0); }
+    75%  { transform: translateX(2px); }
+    100% { transform: translateX(0); }
   }
 
-  /* Water wave — subtle oscillation while tumbling */
-  .bldg-water-wave {
-    opacity: 0;
-    animation: bldg-water-appear 200ms ease-out 320ms forwards;
+  /* Phase C — Bubbles float up and fade (220–820ms) */
+  .washer-confirmed .washer-bubbles {
+    animation: washer-bubbles-float 600ms cubic-bezier(0.2, 0.8, 0.2, 1) 220ms both;
   }
 
-  @keyframes bldg-water-appear {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+  @keyframes washer-bubbles-float {
+    0%   { transform: translateY(0); opacity: 0.16; }
+    100% { transform: translateY(-7px); opacity: 0.04; }
   }
 
-  /* Water settle — already a straight line via path data, just fade to full */
-  .bldg-water-settle {
-    opacity: 1;
+  /* Phase D — Settle/freeze: all animations have forwards fill-mode.
+     Dot stays at bottom-left. Highlight stays at sealed rotation.
+     Everything holds. No loop. */
+
+  /* ─── Washer Confirmation Card (dark glass) ─── */
+  .washer-confirm-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 300px;
+    width: 100%;
+    border-radius: 20px;
+    border: 1px solid rgba(201, 169, 110, 0.18);
+    background: linear-gradient(
+      145deg,
+      rgba(30, 28, 26, 0.95) 0%,
+      rgba(44, 40, 36, 0.92) 100%
+    );
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 28px 24px 20px;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 12px 40px rgba(0, 0, 0, 0.5);
+    animation: washer-card-enter 400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  @keyframes washer-card-enter {
+    0%   { opacity: 0; transform: scale(0.96); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  .washer-confirm-card-icon {
+    margin-bottom: 20px;
+  }
+
+  .washer-confirm-card-status {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2.2px;
+    text-transform: uppercase;
+    color: rgba(201, 169, 110, 0.85);
+    margin-bottom: 8px;
+  }
+
+  .washer-confirm-card-service {
+    font-size: 22px;
+    font-weight: 600;
+    color: #F5F0E8;
+    margin-bottom: 6px;
+    text-transform: capitalize;
+  }
+
+  .washer-confirm-card-date {
+    font-size: 15px;
+    font-weight: 400;
+    color: rgba(245, 240, 232, 0.75);
+    margin: 0;
+  }
+
+  .washer-confirm-card-window {
+    font-size: 15px;
+    font-weight: 400;
+    color: rgba(245, 240, 232, 0.55);
+    margin: 2px 0 0;
+  }
+
+  .washer-confirm-card-actions {
+    margin-top: 18px;
+    width: 100%;
+  }
+
+  .washer-confirm-card-modify {
+    width: 100%;
+    padding: 11px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(245, 240, 232, 0.12);
+    background: transparent;
+    color: rgba(245, 240, 232, 0.7);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .washer-confirm-card-modify:hover {
+    background: rgba(245, 240, 232, 0.06);
+    border-color: rgba(245, 240, 232, 0.2);
+  }
+
+  .washer-confirm-card-modify:active {
+    background: rgba(245, 240, 232, 0.1);
+  }
+
+  .washer-confirm-card-footer {
+    margin-top: 14px;
+    font-size: 11px;
+    color: rgba(245, 240, 232, 0.3);
+    letter-spacing: 0.04em;
   }
 
   /* Empty state with centered logo */
@@ -1961,16 +2040,13 @@
     .bldg-dot-settle-hero,
     .bldg-dot-recognize,
     .bldg-dot-confirm,
-    .bldg-dot-project-sm,
-    .bldg-dot-project-med,
-    .bldg-dot-project-hero,
-    .bldg-ring-expand-sm,
-    .bldg-ring-expand-med,
-    .bldg-ring-expand-hero,
-    .bldg-wash-tumble,
-    .bldg-wash-settle,
-    .bldg-water-wave,
-    .bldg-water-settle,
+    .washer-confirmed .washer-dot,
+    .washer-confirmed .washer-bezel,
+    .washer-confirmed .washer-highlight,
+    .washer-confirmed .washer-clothes,
+    .washer-confirmed .washer-wave,
+    .washer-confirmed .washer-bubbles,
+    .washer-confirm-card,
     .tile-ripple,
     .chip-stagger,
     .booking-chip-pulse,
@@ -2027,35 +2103,6 @@
 @keyframes ceremony-fade-out {
   0%   { background-color: rgba(250, 247, 242, 0.97); }
   100% { background-color: rgba(250, 247, 242, 0); }
-}
-
-/* ─── Ceremony logo (laundry projector) ─── */
-.ceremony-logo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -70%);
-  will-change: opacity;
-}
-
-.ceremony-logo--enter {
-  opacity: 0;
-  animation: ceremony-logo-in 300ms ease-out 100ms forwards;
-}
-
-.ceremony-logo--peak {
-  opacity: 1;
-  animation: ceremony-logo-out 300ms ease-in forwards;
-}
-
-@keyframes ceremony-logo-in {
-  from { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
-  to   { opacity: 1; transform: translate(-50%, -70%) scale(1); }
-}
-
-@keyframes ceremony-logo-out {
-  from { opacity: 1; }
-  to   { opacity: 0; }
 }
 
 /* ─── Ceremony text ─── */
