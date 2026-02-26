@@ -1090,7 +1090,7 @@ export default function Home() {
       showTyping(6200);
       hideTyping(7700);
       addMsg(
-        `Driver notified. You'll receive a text on ${postBookingData.date} between ${postBookingData.window} the moment he's on his way.`,
+        "Laundry, detailing, grooming\u2014all at your door. We bring the best of Los Angeles to you, exactly when you need it.",
         7700
       );
     } else {
