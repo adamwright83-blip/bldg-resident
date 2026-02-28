@@ -1288,13 +1288,13 @@ export const chatRouter = router({
                 };
 
                 console.log("[INTAKE] sending", JSON.stringify(intakePayload, null, 2));
+                console.log(`[INTAKE] hasSecret=${Boolean(sharedSecret)} len=${sharedSecret?.length ?? 0} headerName=x-app-shared-secret`);
 
                 const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
-                    ...(sharedSecret ? { "x-app-shared-secret": sharedSecret } : {}),
-                    ...(sharedSecret ? { "X-APP-SHARED-SECRET": sharedSecret } : {}),
+                    "x-app-shared-secret": sharedSecret || "",
                   },
                   body: JSON.stringify(intakePayload),
                 });
