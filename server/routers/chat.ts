@@ -1245,8 +1245,8 @@ export const chatRouter = router({
               `[ServiceRequest] Created #${sr.id}: ${serviceCategory} — ${bookingMeta.date} ${bookingMeta.window}`
             );
 
-            // Fire-and-forget: mirror booking into bldg-admin-api orders table
-            // so it shows up in admin.bldg.chat and driver.bldg.chat.
+            // Fire-and-forget: mirror booking into bldg-admin-api so it shows
+            // up in admin.bldg.chat and driver.bldg.chat.
             (async () => {
               try {
                 const adminApiUrl = (
@@ -1255,49 +1255,60 @@ export const chatRouter = router({
                 ).replace(/\/$/, "");
 
                 const sharedSecret = process.env.APP_SHARED_API_SECRET;
-                if (!sharedSecret) {
-                  console.warn("[AdminSync] APP_SHARED_API_SECRET not set — skipping order forward");
-                  return;
-                }
 
-                const serviceType =
-                  serviceCategory === "dry_cleaning" ? "dry_cleaning" : "wash_fold";
+                // Parse window into start/end for the admin API
+                // e.g. "7–10 AM" → pickupWindowStart="7:00 AM", pickupWindowEnd="10:00 AM"
+                const windowParts = bookingMeta.window.match(/(\d+(?::\d+)?)\s*[–\-]\s*(\d+(?::\d+)?)\s*(AM|PM)?/i);
+                const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
+                const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
 
-                const address = [user?.buildingSlug, user?.unit]
-                  .filter(Boolean)
-                  .join(", ") || "—";
+                const freshUser = await getBldgUserById(bldgUserId);
+                const serviceType = serviceCategory === "dry_cleaning" ? "dry_cleaning" : "wash_fold";
+                const address = user?.buildingSlug || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+
+                const intakePayload = {
+                  externalId: `bldg-sr-${sr.id}`,   // idempotency key — always the same for this booking
+                  source: "bldg-resident",
+                  status: "new",
+                  serviceType,
+                  pickupDate: bookingMeta.date,
+                  pickupWindow: bookingMeta.window,
+                  pickupWindowStart,
+                  pickupWindowEnd,
+                  address,
+                  buildingId: user?.buildingSlug || null,
+                  unit: freshUser?.unit || user?.unit || null,
+                  firstName: freshUser?.firstName || user?.firstName || "Resident",
+                  lastName: freshUser?.lastName || user?.lastName || "",
+                  customerPhone: freshUser?.phoneE164 || user?.phoneE164 || "",
+                  phone: freshUser?.phoneE164 || user?.phoneE164 || "",
+                  bldgUserId: bldgUserId ?? null,
+                  stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
+                  stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+                };
+
+                console.log("[INTAKE] sending", JSON.stringify(intakePayload, null, 2));
 
                 const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
-                    "x-app-shared-secret": sharedSecret,
+                    ...(sharedSecret ? { "x-app-shared-secret": sharedSecret } : {}),
+                    ...(sharedSecret ? { "X-APP-SHARED-SECRET": sharedSecret } : {}),
                   },
-                  body: JSON.stringify({
-                    source: "bldg-resident",
-                    serviceType,
-                    pickupDate: bookingMeta.date,
-                    pickupWindow: bookingMeta.window,
-                    address,
-                    unit: user?.unit || null,
-                    firstName: user?.firstName || "Resident",
-                    lastName: user?.lastName || "",
-                    phone: user?.phoneE164 || "",
-                    bldgUserId: bldgUserId ?? null,
-                    // Forward Stripe IDs so admin can charge without a separate lookup
-                    stripeCustomerId: user?.stripeCustomerId || null,
-                    stripePaymentMethodId: user?.stripePaymentMethodId || null,
-                  }),
+                  body: JSON.stringify(intakePayload),
                 });
 
-                if (fwdRes.ok) {
-                  console.log(`[AdminSync] Order forwarded to admin for service_request #${sr.id}`);
+                const responseText = await fwdRes.text().catch(() => "(no body)");
+                console.log(`[INTAKE] response status=${fwdRes.status} body=${responseText}`);
+
+                if (!fwdRes.ok) {
+                  console.warn(`[INTAKE] non-ok response for service_request #${sr.id}: ${fwdRes.status} ${responseText}`);
                 } else {
-                  const text = await fwdRes.text().catch(() => "");
-                  console.warn(`[AdminSync] Failed to forward order: ${fwdRes.status} ${text}`);
+                  console.log(`[INTAKE] order forwarded successfully for service_request #${sr.id}`);
                 }
               } catch (err) {
-                console.warn("[AdminSync] Error forwarding order to admin API:", err);
+                console.error("[INTAKE] fetch threw — full error:", err);
               }
             })();
 
@@ -1379,37 +1390,7 @@ export const chatRouter = router({
             }
           }
           
-          // Create pickup record in ops.bldg.chat (Laundry Butler admin)
-          // This runs for ALL bookings, not just new ones
-          if (serviceRequestId && bookingMeta) {
-            console.log("[OPS_INTEGRATION] Attempting to create pickup...");
-            console.log("[OPS_INTEGRATION] DEBUG: bldgUserId=", bldgUserId, "type:", typeof bldgUserId);
-            try {
-              // Re-fetch user to get latest profile data (may have been updated during onboarding)
-              const freshUser = await getBldgUserById(bldgUserId);
-              const payload = {
-                bldgUserId: effectiveUserId, // User ID for receipt notifications
-                phone: freshUser?.phoneE164 || user?.phoneE164 || "+13235559999",
-                firstName: freshUser?.firstName || user?.firstName || "Test",
-                lastName: freshUser?.lastName || user?.lastName || "Resident",
-                unit: freshUser?.unit || user?.unit || "1234",
-                specialInstructions: bookingMeta.notes,
-                serviceType: serviceCategory as any,
-                pickupDate: parseDisplayDateToISO(bookingMeta.date),
-                pickupWindow: bookingMeta.window,
-                stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || undefined,
-                stripePaymentMethodId: freshUser?.stripePaymentMethodId || undefined, // Payment method ID for charging
-              };
-              console.log("[OPS_INTEGRATION] Payload:", JSON.stringify(payload, null, 2));
-              
-              const opsResult = await createOpsPickup(payload);
-              console.log("[OPS_INTEGRATION] Result:", JSON.stringify(opsResult, null, 2));
-            } catch (error) {
-              console.error("[OPS_INTEGRATION] Failed:", error);
-            }
-          } else {
-            console.log("[OPS_INTEGRATION] Skipped - no service request ID or booking metadata");
-          }
+          // Intake forwarding is handled above in the fire-and-forget block (new bookings only).
         }
 
         // Store the assistant's response
