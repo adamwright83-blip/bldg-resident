@@ -1265,22 +1265,30 @@ export const chatRouter = router({
                 const freshUser = await getBldgUserById(bldgUserId);
                 const serviceType = serviceCategory === "dry_cleaning" ? "dry_cleaning" : "wash_fold";
 
-                // Map building slug to a real address string
+                // Map building slug → real street address
                 const BUILDING_ADDRESSES: Record<string, string> = {
-                  "opus-south": "10000 Santa Monica Blvd, Los Angeles, CA 90067",
-                  "opus-north": "10000 Santa Monica Blvd, Los Angeles, CA 90067",
-                  "opus":       "10000 Santa Monica Blvd, Los Angeles, CA 90067",
+                  "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
+                  "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
+                  "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
+                  "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
                 };
-                const buildingSlug = user?.buildingSlug || "";
+                const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
                 const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
 
-                // Guarantee non-empty required string fields
-                const firstName = ((freshUser?.firstName || user?.firstName || "").trim()) || "Resident";
-                const lastName  = ((freshUser?.lastName  || user?.lastName  || "").trim()) || "Resident";
+                const firstName = (freshUser?.firstName || user?.firstName || "").trim();
+                const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
                 const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
                 // Convert display date "Saturday, Feb 28" → ISO "2026-02-28"
                 const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
+
+                // Names are collected AFTER booking (name card appears post-confirmation).
+                // If missing here, log and skip — stripe.ts will send the complete record
+                // after payment (when firstName + lastName are guaranteed present).
+                if (!firstName || !lastName) {
+                  console.log(`[INTAKE] skipping at booking creation — names not yet collected (bldgUserId=${bldgUserId}, sr=${sr.id}). Will send from stripe.ts after payment.`);
+                  return;
+                }
 
                 const intakePayload = {
                   externalId: `bldg-sr-${sr.id}`,   // idempotency key — always the same for this booking

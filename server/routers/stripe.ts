@@ -13,6 +13,25 @@ import { jwtVerify } from "jose";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 
+/** Convert display date "Saturday, Feb 28" → ISO "2026-02-28" */
+function displayDateToISO(displayDate: string): string {
+  const match = displayDate.match(/([A-Za-z]+),\s+([A-Za-z]+)\s+(\d+)/);
+  if (!match) return displayDate;
+  const [, , monthStr, dayStr] = match;
+  const monthMap: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+  const month = monthMap[monthStr];
+  const day = parseInt(dayStr, 10);
+  if (month === undefined || isNaN(day)) return displayDate;
+  const now = new Date();
+  const date = new Date(now.getFullYear(), month, day);
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (date < todayMidnight) date.setFullYear(now.getFullYear() + 1);
+  return date.toISOString().split("T")[0];
+}
+
 async function getBldgUserIdFromRequest(req: any): Promise<number | null> {
   const cookieHeader = req.headers?.cookie;
   if (!cookieHeader) return null;
@@ -142,36 +161,84 @@ export const stripeRouter = router({
         console.error("[Onboarding] Failed to insert instructional images:", err);
       }
 
-      // ─── RE-FIRE OPS INTEGRATION — DISABLED ───
-      // Intake forwarding now happens once at booking creation in chat.ts.
-      // This re-fire block caused duplicate orders in the admin queue.
-      if (false) {
+      // ─── INTAKE FORWARD — send complete order to admin API after payment ───
+      // Names are guaranteed here (name card runs before payment card).
+      // Uses same externalId as the booking-creation attempt so the admin
+      // API can upsert/deduplicate using that key.
+      (async () => {
         try {
+          const adminApiUrl = (
+            process.env.ADMIN_API_URL ||
+            "https://bldg-admin-api-production.up.railway.app"
+          ).replace(/\/$/, "");
+
+          const sharedSecret = process.env.APP_SHARED_API_SECRET;
+
           const completedUser = await getBldgUserById(bldgUserId);
           const requests = await getServiceRequests(bldgUserId);
-          const pendingBookings = requests.filter((r: any) => r.status === "pending" || r.status === "confirmed");
+          const pendingBookings = requests.filter(
+            (r: any) => r.status === "pending" || r.status === "confirmed"
+          );
+
+          const BUILDING_ADDRESSES: Record<string, string> = {
+            "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
+            "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
+            "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
+            "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
+          };
+          const buildingSlug = completedUser?.buildingSlug || "";
+          const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+
+          const firstName = (completedUser?.firstName || "").trim() || "Resident";
+          const lastName  = (completedUser?.lastName  || "").trim() || "Resident";
+          const phone     = completedUser?.phoneE164 || "";
 
           for (const booking of pendingBookings) {
-            const payload = {
-              bldgUserId,
-              phone: completedUser?.phoneE164 || "+13235559999",
-              firstName: completedUser?.firstName || "Resident",
-              lastName: completedUser?.lastName || "",
-              unit: completedUser?.unit || "",
-              specialInstructions: undefined,
-              serviceType: booking.serviceType as any,
-              pickupDate: booking.scheduledDate || "",
+            const serviceType = booking.serviceType === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
+
+            // scheduledDate is stored as display string e.g. "Saturday, Feb 28"
+            const rawDate = booking.scheduledDate || "";
+            const pickupDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+              ? rawDate
+              : displayDateToISO(rawDate);
+
+            const intakePayload = {
+              externalId: `bldg-sr-${booking.id}`,
+              source: "bldg-resident",
+              status: "new",
+              serviceType,
+              pickupDate,
               pickupWindow: booking.scheduledWindow || "",
+              address,
+              buildingId: buildingSlug || null,
+              unit: completedUser?.unit || null,
+              firstName,
+              lastName,
+              phone,
+              bldgUserId,
               stripeCustomerId: customerId,
+              stripePaymentMethodId: completedUser?.stripePaymentMethodId || null,
             };
-            console.log("[OPS_INTEGRATION] Re-firing after registration complete:", JSON.stringify(payload, null, 2));
-            const opsResult = await createOpsPickup(payload);
-            console.log("[OPS_INTEGRATION] Re-fire result:", JSON.stringify(opsResult, null, 2));
+
+            console.log("[INTAKE] post-payment sending", JSON.stringify(intakePayload, null, 2));
+            console.log(`[INTAKE] hasSecret=${Boolean(sharedSecret)} len=${sharedSecret?.length ?? 0} headerName=x-app-shared-secret`);
+
+            const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-app-shared-secret": sharedSecret || "",
+              },
+              body: JSON.stringify(intakePayload),
+            });
+
+            const responseText = await fwdRes.text().catch(() => "(no body)");
+            console.log(`[INTAKE] post-payment response status=${fwdRes.status} body=${responseText}`);
           }
         } catch (err) {
-          console.error("[OPS_INTEGRATION] Re-fire after payment failed:", err);
+          console.error("[INTAKE] post-payment forward threw — full error:", err);
         }
-      }
+      })();
 
       // v2: after payment saved, ask for name if not captured yet
       const postPaymentUser = await getBldgUserById(bldgUserId);
