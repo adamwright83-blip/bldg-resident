@@ -142,33 +142,35 @@ export const stripeRouter = router({
         console.error("[Onboarding] Failed to insert instructional images:", err);
       }
 
-      // ─── RE-FIRE OPS INTEGRATION with complete user data ───
-      // Now that registration is complete (name, phone, card), re-send any
-      // pending bookings to ops.bldg.chat with the real user data.
-      try {
-        const completedUser = await getBldgUserById(bldgUserId);
-        const requests = await getServiceRequests(bldgUserId);
-        const pendingBookings = requests.filter((r: any) => r.status === "pending" || r.status === "confirmed");
+      // ─── RE-FIRE OPS INTEGRATION — DISABLED ───
+      // Intake forwarding now happens once at booking creation in chat.ts.
+      // This re-fire block caused duplicate orders in the admin queue.
+      if (false) {
+        try {
+          const completedUser = await getBldgUserById(bldgUserId);
+          const requests = await getServiceRequests(bldgUserId);
+          const pendingBookings = requests.filter((r: any) => r.status === "pending" || r.status === "confirmed");
 
-        for (const booking of pendingBookings) {
-          const payload = {
-            bldgUserId, // User ID for receipt notifications
-            phone: completedUser?.phoneE164 || "+13235559999",
-            firstName: completedUser?.firstName || "Resident",
-            lastName: completedUser?.lastName || "",
-            unit: completedUser?.unit || "",
-            specialInstructions: undefined,
-            serviceType: booking.serviceType as any,
-            pickupDate: booking.scheduledDate || "",
-            pickupWindow: booking.scheduledWindow || "",
-            stripeCustomerId: customerId,
-          };
-          console.log("[OPS_INTEGRATION] Re-firing after registration complete:", JSON.stringify(payload, null, 2));
-          const opsResult = await createOpsPickup(payload);
-          console.log("[OPS_INTEGRATION] Re-fire result:", JSON.stringify(opsResult, null, 2));
+          for (const booking of pendingBookings) {
+            const payload = {
+              bldgUserId,
+              phone: completedUser?.phoneE164 || "+13235559999",
+              firstName: completedUser?.firstName || "Resident",
+              lastName: completedUser?.lastName || "",
+              unit: completedUser?.unit || "",
+              specialInstructions: undefined,
+              serviceType: booking.serviceType as any,
+              pickupDate: booking.scheduledDate || "",
+              pickupWindow: booking.scheduledWindow || "",
+              stripeCustomerId: customerId,
+            };
+            console.log("[OPS_INTEGRATION] Re-firing after registration complete:", JSON.stringify(payload, null, 2));
+            const opsResult = await createOpsPickup(payload);
+            console.log("[OPS_INTEGRATION] Re-fire result:", JSON.stringify(opsResult, null, 2));
+          }
+        } catch (err) {
+          console.error("[OPS_INTEGRATION] Re-fire after payment failed:", err);
         }
-      } catch (err) {
-        console.error("[OPS_INTEGRATION] Re-fire after payment failed:", err);
       }
 
       // v2: after payment saved, ask for name if not captured yet

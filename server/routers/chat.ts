@@ -1264,24 +1264,39 @@ export const chatRouter = router({
 
                 const freshUser = await getBldgUserById(bldgUserId);
                 const serviceType = serviceCategory === "dry_cleaning" ? "dry_cleaning" : "wash_fold";
-                const address = user?.buildingSlug || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+
+                // Map building slug to a real address string
+                const BUILDING_ADDRESSES: Record<string, string> = {
+                  "opus-south": "10000 Santa Monica Blvd, Los Angeles, CA 90067",
+                  "opus-north": "10000 Santa Monica Blvd, Los Angeles, CA 90067",
+                  "opus":       "10000 Santa Monica Blvd, Los Angeles, CA 90067",
+                };
+                const buildingSlug = user?.buildingSlug || "";
+                const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+
+                // Guarantee non-empty required string fields
+                const firstName = ((freshUser?.firstName || user?.firstName || "").trim()) || "Resident";
+                const lastName  = ((freshUser?.lastName  || user?.lastName  || "").trim()) || "Resident";
+                const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
+
+                // Convert display date "Saturday, Feb 28" → ISO "2026-02-28"
+                const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
 
                 const intakePayload = {
                   externalId: `bldg-sr-${sr.id}`,   // idempotency key — always the same for this booking
                   source: "bldg-resident",
                   status: "new",
                   serviceType,
-                  pickupDate: bookingMeta.date,
+                  pickupDate: pickupDateISO,
                   pickupWindow: bookingMeta.window,
                   pickupWindowStart,
                   pickupWindowEnd,
                   address,
-                  buildingId: user?.buildingSlug || null,
+                  buildingId: buildingSlug || null,
                   unit: freshUser?.unit || user?.unit || null,
-                  firstName: freshUser?.firstName || user?.firstName || "Resident",
-                  lastName: freshUser?.lastName || user?.lastName || "",
-                  customerPhone: freshUser?.phoneE164 || user?.phoneE164 || "",
-                  phone: freshUser?.phoneE164 || user?.phoneE164 || "",
+                  firstName,
+                  lastName,
+                  phone,
                   bldgUserId: bldgUserId ?? null,
                   stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
                   stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
