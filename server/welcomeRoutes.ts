@@ -19,7 +19,15 @@ import { Router, Request, Response } from "express";
 import { jwtVerify, SignJWT } from "jose";
 import { parse as parseCookieHeader } from "cookie";
 import axios from "axios";
-import { upsertBldgUser, getBldgUserById, insertChatMessage, updateBldgUser } from "./db";
+import {
+  upsertBldgUser,
+  getBldgUserById,
+  insertChatMessage,
+  updateBldgUser,
+  getServiceRequests,
+  getServiceRequestByBldgUserAndOrderId,
+  updateServiceRequest,
+} from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
 
@@ -526,7 +534,7 @@ export function registerWelcomeRoutes(app: Router): void {
     }
   });
 
-  // POST /api/webhooks/receipt - Receipt notification webhook
+  // POST /api/webhooks/receipt - Receipt notification webhook (bldg-admin-api after charging card)
   app.post("/api/webhooks/receipt", async (req: Request, res: Response) => {
     try {
       const authHeader = req.headers.authorization;
@@ -553,17 +561,51 @@ export function registerWelcomeRoutes(app: Router): void {
         return res.status(400).json({ error: "Missing required fields: bldgUserId, receiptUrl, orderId" });
       }
 
+      const userId = Number(bldgUserId);
+      const orderIdNum = Number(orderId);
+      if (!Number.isFinite(userId) || !Number.isFinite(orderIdNum)) {
+        return res.status(400).json({ error: "bldgUserId and orderId must be numbers" });
+      }
+
+      const user = await getBldgUserById(userId);
+      if (!user) {
+        console.error("[ReceiptWebhook] User not found:", userId);
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      let booking = await getServiceRequestByBldgUserAndOrderId(userId, orderIdNum);
+      if (!booking) {
+        const requests = await getServiceRequests(userId, 50);
+        const pending = requests.filter((r) => r.status === "pending");
+        if (pending.length > 0) {
+          booking = pending[0];
+          console.warn(
+            `[ReceiptWebhook] No booking with orderId=${orderIdNum}; using most recent pending booking #${booking.id} for user ${userId}`
+          );
+        }
+      }
+      if (!booking) {
+        console.error("[ReceiptWebhook] No booking found for user:", userId, "orderId:", orderIdNum);
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      await updateServiceRequest(booking.id, {
+        receiptUrl: String(receiptUrl),
+        orderId: orderIdNum,
+        status: "paid",
+      });
+
       await insertChatMessage({
-        bldgUserId,
+        bldgUserId: userId,
         role: "assistant",
         content: `Order #${orderId} processed. View your digital receipt here: ${receiptUrl}`,
         metadata: {
-          orderId,
+          orderId: orderIdNum,
         },
       });
 
-      console.log(`[ReceiptWebhook] Receipt notification inserted for user ${bldgUserId}, order ${orderId}`);
-      return res.json({ ok: true, message: "Receipt notification sent" });
+      console.log(`[ReceiptWebhook] Updated booking #${booking.id} for user ${userId}, order ${orderIdNum}`);
+      return res.status(200).json({ ok: true });
     } catch (err) {
       console.error("[ReceiptWebhook] Error:", err);
       return res.status(500).json({ error: "Failed to process receipt webhook" });

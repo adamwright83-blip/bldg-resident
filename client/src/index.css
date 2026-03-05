@@ -2941,6 +2941,15 @@
     text-align: right;
   }
 
+  .vault-receipt-link {
+    color: #C9A96E;
+    text-decoration: none;
+  }
+
+  .vault-receipt-link:hover {
+    text-decoration: underline;
+  }
+
   .vault-detail-footer {
     margin-top: 20px;
     padding-top: 12px;

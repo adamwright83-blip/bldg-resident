@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { createStripeCustomer } from "../lib/stripeHelper";
-import { getBldgUserById, insertChatMessage, updateBldgUser, getServiceRequests, hasShownOnboarding, markOnboardingShown } from "../db";
+import { getBldgUserById, insertChatMessage, updateBldgUser, getServiceRequests, updateServiceRequest, hasShownOnboarding, markOnboardingShown } from "../db";
 import { getOnboardingMessage } from "./chat";
 import { createOpsPickup } from "../opsIntegration";
 import { getDb } from "../db";
@@ -234,6 +234,17 @@ export const stripeRouter = router({
 
             const responseText = await fwdRes.text().catch(() => "(no body)");
             console.log(`[INTAKE] post-payment response status=${fwdRes.status} body=${responseText}`);
+            if (fwdRes.ok) {
+              try {
+                const body = JSON.parse(responseText) as { orderId?: number };
+                if (body?.orderId != null && Number.isFinite(Number(body.orderId))) {
+                  await updateServiceRequest(booking.id, { orderId: Number(body.orderId) });
+                  console.log(`[INTAKE] stored orderId=${body.orderId} on service_request #${booking.id}`);
+                }
+              } catch (_) {
+                // ignore parse errors; admin may not return JSON or orderId
+              }
+            }
           }
         } catch (err) {
           console.error("[INTAKE] post-payment forward threw — full error:", err);

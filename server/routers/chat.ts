@@ -1329,6 +1329,15 @@ export const chatRouter = router({
                   console.warn(`[INTAKE] non-ok response for service_request #${sr.id}: ${fwdRes.status} ${responseText}`);
                 } else {
                   console.log(`[INTAKE] order forwarded successfully for service_request #${sr.id}`);
+                  try {
+                    const body = JSON.parse(responseText) as { orderId?: number };
+                    if (body?.orderId != null && Number.isFinite(Number(body.orderId))) {
+                      await updateServiceRequest(sr.id, { orderId: Number(body.orderId) });
+                      console.log(`[INTAKE] stored orderId=${body.orderId} on service_request #${sr.id}`);
+                    }
+                  } catch (_) {
+                    // ignore parse errors; admin may not return JSON or orderId
+                  }
                 }
               } catch (err) {
                 console.error("[INTAKE] fetch threw — full error:", err);

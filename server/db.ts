@@ -338,6 +338,30 @@ export async function getServiceRequests(
 }
 
 /**
+ * Get a service request by bldg user id and order id (for receipt webhook matching).
+ */
+export async function getServiceRequestByBldgUserAndOrderId(
+  bldgUserId: number,
+  orderId: number
+): Promise<ServiceRequest | undefined> {
+  const db = await getDb();
+  if (!db) {
+    return undefined;
+  }
+  const rows = await db
+    .select()
+    .from(serviceRequests)
+    .where(
+      and(
+        eq(serviceRequests.bldgUserId, bldgUserId),
+        eq(serviceRequests.orderId, orderId)
+      )
+    )
+    .limit(1);
+  return rows[0];
+}
+
+/**
  * Update a service request (for modify/cancel flows).
  */
 export async function updateServiceRequest(

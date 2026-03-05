@@ -91,6 +91,7 @@ export const serviceRequests = mysqlTable("service_requests", {
   ]).notNull(),
   status: mysqlEnum("status", [
     "pending",
+    "paid",
     "confirmed",
     "in-progress",
     "completed",
@@ -113,6 +114,9 @@ export const serviceRequests = mysqlTable("service_requests", {
   upgradePriceCents: int("upgradePriceCents"),
   upgradeLabel: varchar("upgradeLabel", { length: 255 }),
   paymentAdjustmentDueCents: int("paymentAdjustmentDueCents"),
+  // Receipt from bldg-admin after charge (webhook /api/webhooks/receipt)
+  receiptUrl: varchar("receiptUrl", { length: 512 }),
+  orderId: int("orderId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

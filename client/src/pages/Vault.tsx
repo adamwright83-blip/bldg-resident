@@ -276,6 +276,22 @@ export default function Vault({ onBack }: VaultProps) {
                     {formatDate(selectedRequest.createdAt)}
                   </span>
                 </div>
+                {selectedRequest.receiptUrl && (
+                  <div className="vault-detail-row">
+                    <span className="vault-detail-label">Receipt</span>
+                    <span className="vault-detail-value">
+                      <a
+                        href={selectedRequest.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="vault-receipt-link"
+                      >
+                        View receipt
+                        {selectedRequest.orderId != null ? ` · Order #${selectedRequest.orderId}` : ""}
+                      </a>
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="vault-detail-footer">
