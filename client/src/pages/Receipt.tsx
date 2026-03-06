@@ -22,12 +22,7 @@ function base64UrlDecode(str: string): string {
   const pad = base64.length % 4;
   const padded = pad ? base64 + "=".repeat(4 - pad) : base64;
   try {
-    return decodeURIComponent(
-      atob(padded)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
+    return atob(padded);
   } catch {
     return "";
   }
@@ -35,12 +30,13 @@ function base64UrlDecode(str: string): string {
 
 function decodeReceiptPayload(token: string): ReceiptPayload | null {
   if (!token || typeof token !== "string") return null;
-  const parts = token.trim().split(".");
-  if (parts.length !== 3) return null;
+  const trimmed = token.trim();
+  const parts = trimmed.split(".");
+  if (parts.length < 2) return null;
   try {
-    const json = base64UrlDecode(parts[1]);
-    if (!json) return null;
-    return JSON.parse(json) as ReceiptPayload;
+    const decoded = base64UrlDecode(parts[1]);
+    if (!decoded) return null;
+    return JSON.parse(decoded) as ReceiptPayload;
   } catch {
     return null;
   }
@@ -60,13 +56,34 @@ function isValidReceiptPayload(payload: ReceiptPayload | null): payload is Recei
 }
 
 export default function Receipt() {
-  const params = useParams<{ token: string }>();
-  const token = params?.token ?? "";
+  const params = useParams<{ token?: string }>();
+  const tokenFromParams = params?.token ?? "";
+  const tokenFromPath =
+    typeof window !== "undefined" && window.location.pathname.includes("/receipt/")
+      ? window.location.pathname.split("/receipt/")[1] ?? ""
+      : "";
+  const rawToken = decodeURIComponent((tokenFromParams || tokenFromPath || "").trim());
+  const token = rawToken.split("/")[0].split("?")[0].split("#")[0].trim();
 
-  const { payload, invalid } = useMemo(() => {
+  const { payload, invalid, invalidReason } = useMemo(() => {
+    console.log("[Receipt] token length:", token.length);
+    const parts = token.trim().split(".");
+    console.log("[Receipt] parts length:", parts.length);
     const decoded = decodeReceiptPayload(token);
-    if (isValidReceiptPayload(decoded)) return { payload: decoded, invalid: false };
-    return { payload: null, invalid: true };
+    console.log("[Receipt] decoded payload:", decoded);
+    if (decoded && decoded.orderId != null && !isExpired(decoded)) {
+      return { payload: decoded, invalid: false, invalidReason: null };
+    }
+    let reason: string;
+    if (!decoded) {
+      reason = "decode failed or null";
+    } else {
+      if (decoded.orderId == null) reason = "missing orderId";
+      else if (isExpired(decoded)) reason = "expired";
+      else reason = "unknown";
+    }
+    console.log("[Receipt] invalid reason:", reason);
+    return { payload: null, invalid: true, invalidReason: reason };
   }, [token]);
 
   if (invalid) {
