@@ -1,65 +1,72 @@
 /**
  * Receipt page — /receipt/:token
- * User-facing page for JWT-authenticated receipts. Fetches payload from GET /api/receipt/[token].
- * BLDG aesthetic: warm dark background, gold accents, DM Sans.
+ * Pure client-rendered: decode JWT payload in browser (no signature verification), render receipt.
+ * BLDG aesthetic: warm dark background, gold accents, centered card.
  */
 
 import { useParams } from "wouter";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 
 interface ReceiptPayload {
-  orderId: number;
-  customerId: string | number | null;
-  totalWeight: number | null;
-  finalAmount: number | null;
-  currency: string;
-  vendorName: string | null;
-  iat: number | null;
-  exp: number | null;
+  orderId?: number;
+  totalWeight?: number | null;
+  finalAmount?: number | null;
+  currency?: string;
+  vendorName?: string | null;
+  iat?: number | null;
+  exp?: number | null;
+}
+
+function base64UrlDecode(str: string): string {
+  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = base64.length % 4;
+  const padded = pad ? base64 + "=".repeat(4 - pad) : base64;
+  try {
+    return decodeURIComponent(
+      atob(padded)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+  } catch {
+    return "";
+  }
+}
+
+function decodeReceiptPayload(token: string): ReceiptPayload | null {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.trim().split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const json = base64UrlDecode(parts[1]);
+    if (!json) return null;
+    return JSON.parse(json) as ReceiptPayload;
+  } catch {
+    return null;
+  }
+}
+
+function isExpired(payload: ReceiptPayload): boolean {
+  const exp = payload.exp;
+  if (exp == null || typeof exp !== "number") return false;
+  return Math.floor(Date.now() / 1000) > exp;
+}
+
+function isValidReceiptPayload(payload: ReceiptPayload | null): payload is ReceiptPayload {
+  if (!payload || payload.orderId == null) return false;
+  if (isExpired(payload)) return false;
+  return true;
 }
 
 export default function Receipt() {
   const params = useParams<{ token: string }>();
   const token = params?.token ?? "";
-  const [payload, setPayload] = useState<ReceiptPayload | null>(null);
-  const [invalid, setInvalid] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!token) {
-      setInvalid(true);
-      setLoading(false);
-      return;
-    }
-    const base =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "";
-    fetch(`${base}/api/receipt/${encodeURIComponent(token)}`)
-      .then((res) => {
-        if (!res.ok) {
-          setInvalid(true);
-          return;
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data && data.orderId != null) setPayload(data);
-        else setInvalid(true);
-      })
-      .catch(() => setInvalid(true))
-      .finally(() => setLoading(false));
+  const { payload, invalid } = useMemo(() => {
+    const decoded = decodeReceiptPayload(token);
+    if (isValidReceiptPayload(decoded)) return { payload: decoded, invalid: false };
+    return { payload: null, invalid: true };
   }, [token]);
-
-  if (loading) {
-    return (
-      <div className="receipt-page" style={receiptPageStyle}>
-        <div className="receipt-card" style={cardStyle}>
-          <p style={mutedStyle}>Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (invalid) {
     return (
