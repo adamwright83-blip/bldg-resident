@@ -49,7 +49,8 @@ function decodeReceiptPayload(token: string): ReceiptPayload | null {
 function isExpired(payload: ReceiptPayload): boolean {
   const exp = payload.exp;
   if (exp == null || typeof exp !== "number") return false;
-  return Math.floor(Date.now() / 1000) > exp;
+  const now = Math.floor(Date.now() / 1000);
+  return exp < now;
 }
 
 function isValidReceiptPayload(payload: ReceiptPayload | null): payload is ReceiptPayload {
