@@ -40,6 +40,7 @@ const SERVICE_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "#C9A96E",
+  paid: "#7EB89A",
   confirmed: "#C9A96E",
   "in-progress": "#7EB89A",
   completed: "#7EB89A",
