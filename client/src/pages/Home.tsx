@@ -1446,9 +1446,9 @@ export default function Home() {
   };
 
   return (
-    // #6: Night mode class on app shell
-    <div className={`app-shell ${nightMode ? "night-mode" : ""}`}>
-      <div className="chat-container">
+    // #6: Night mode class on app shell; services-mode class swaps palette on shell + container
+    <div className={`app-shell ${nightMode ? "night-mode" : ""} ${servicesMode ? "services-shell" : ""}`}>
+      <div className={`chat-container ${servicesMode ? "services-container" : ""}`}>
       {/* Header */}
       <header className="chat-header">
         <div className="flex items-center gap-2">
@@ -1788,18 +1788,14 @@ export default function Home() {
 
         {/* Services pill — single instance; toggles Chat / Services mode */}
         {onboardingComplete === true && !isSending && (
-            <motion.button
-              type="button"
-              className={`services-pill ${servicesMode ? "services-pill-active" : ""}`}
-              onClick={() => setServicesMode(!servicesMode)}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.2 }}
-            >
-              <LayoutGrid size={14} />
-              <span>Services</span>
-            </motion.button>
+          <button
+            type="button"
+            className={`services-pill ${servicesMode ? "services-pill-active" : ""}`}
+            onClick={() => setServicesMode(!servicesMode)}
+          >
+            <LayoutGrid size={14} />
+            <span>Services</span>
+          </button>
         )}
 
         {/* Single composer — shared in both modes */}
