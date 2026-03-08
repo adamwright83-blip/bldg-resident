@@ -32,7 +32,6 @@ import HowItWorksCard from "@/components/HowItWorksCard";
 import TrustCard from "@/components/TrustCard";
 import ConfirmationCeremony from "@/components/ConfirmationCeremony";
 import { toast } from "sonner";
-import ServicesDrawer from "@/components/ServicesDrawer";
 import Vault from "@/pages/Vault";
 import AccountSheet from "@/components/AccountSheet";
 
@@ -632,7 +631,6 @@ export default function Home() {
   // Beats hidden until the sequential typing → reveal animation runs.
   const [revealedBeats, setRevealedBeats] = useState<Set<number>>(new Set());
   const greetingInitializedRef = useRef(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [servicesMode, setServicesMode] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
@@ -672,6 +670,18 @@ export default function Home() {
     }, 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  // Force body/html background when services mode activates — prevents dark bleed outside container
+  useEffect(() => {
+    const LIGHT = "#F5F0E8";
+    const DARK = "#2C2824";
+    document.body.style.background = servicesMode ? LIGHT : DARK;
+    document.documentElement.style.background = servicesMode ? LIGHT : DARK;
+    return () => {
+      document.body.style.background = "";
+      document.documentElement.style.background = "";
+    };
+  }, [servicesMode]);
 
   // Clear messages when session changes to prevent stale data
   useEffect(() => {
@@ -1446,11 +1456,20 @@ export default function Home() {
   };
 
   return (
-    // #6: Night mode class on app shell; services-mode class swaps palette on shell + container
-    <div className={`app-shell ${nightMode ? "night-mode" : ""} ${servicesMode ? "services-shell" : ""}`}>
-      <div className={`chat-container ${servicesMode ? "services-container" : ""}`}>
+    // #6: Night mode class on app shell; services-mode swaps palette
+    <div
+      className={`app-shell ${nightMode ? "night-mode" : ""} ${servicesMode ? "services-shell" : ""}`}
+      style={servicesMode ? { background: "#F5F0E8" } : undefined}
+    >
+      <div
+        className={`chat-container ${servicesMode ? "services-container" : ""}`}
+        style={servicesMode ? { background: "#F5F0E8" } : undefined}
+      >
       {/* Header */}
-      <header className="chat-header">
+      <header
+        className="chat-header"
+        style={servicesMode ? { background: "#F5F0E8", borderBottomColor: "rgba(90,83,74,0.2)", color: "#2C2824" } : undefined}
+      >
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAccountSheetOpen(true)}
@@ -1476,7 +1495,11 @@ export default function Home() {
       </header>
 
       {/* Messages Area — exactly one of: Services panel OR Chat (empty or thread) */}
-      <div ref={scrollContainerRef} className={`chat-messages ${servicesMode ? "services-mode-active" : ""}`}>
+      <div
+        ref={scrollContainerRef}
+        className={`chat-messages ${servicesMode ? "services-mode-active" : ""}`}
+        style={servicesMode ? { background: "#F5F0E8", color: "#2C2824" } : undefined}
+      >
         {servicesMode ? (
           /* ─── Services mode only: no chat layer ─── */
           <div className="services-mode-panel">
@@ -1737,7 +1760,10 @@ export default function Home() {
       </div>
 
       {/* Single bottom zone: pill + composer (chips/tiles only in Chat mode) */}
-      <div className="chat-bottom">
+      <div
+        className="chat-bottom"
+        style={servicesMode ? { background: "#F5F0E8", borderTopColor: "rgba(90,83,74,0.2)" } : undefined}
+      >
         {/* Welcome Chips — Chat mode only, empty state */}
         <AnimatePresence>
           {!servicesMode && !showTiles && !isSending && messages.length === 0 && (
@@ -1834,25 +1860,6 @@ export default function Home() {
           onComplete={() => setCeremonyData(null)}
         />
       )}
-
-      {/* Services Drawer — iOS bottom sheet */}
-      <ServicesDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        services={SERVICE_TILES.map((t) => ({
-          ...t,
-          subtitle: t.id === "vault" ? "History · Receipts · ID" : undefined,
-        }))}
-        onSelectService={(svc) => {
-          if (svc.id === "vault") {
-            setDrawerOpen(false);
-            setShowVault(true);
-            return;
-          }
-          handleSend(svc.prompt);
-        }}
-        disabled={isSending}
-      />
 
       {/* The Vault — full screen overlay */}
       <AnimatePresence>
