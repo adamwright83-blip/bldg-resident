@@ -15,7 +15,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home, ArrowRight } from "lucide-react";
+import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight } from "lucide-react";
 import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
@@ -155,7 +155,7 @@ const SERVICES_GRID: ServiceGridItem[] = [
   { id: "car-wash", label: "Car Wash", prompt: "Schedule car wash", icon: <CarIcon /> },
   { id: "handyman", label: "Handyman", prompt: "Schedule handyman", icon: <Wrench size={32} strokeWidth={1.5} /> },
   { id: "assembly", label: "Assembly", prompt: "Schedule furniture assembly", icon: <Puzzle size={32} strokeWidth={1.5} /> },
-  { id: "pet-sitting", label: "Pet Sitting", prompt: "Schedule pet sitting", icon: <Home size={32} strokeWidth={1.5} /> },
+  { id: "pet-sitting", label: "Pet Sitting", prompt: "Schedule pet sitting", icon: <HomeIcon size={32} strokeWidth={1.5} /> },
 ];
 
 // ─── Type definitions ───
