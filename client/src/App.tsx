@@ -6,7 +6,7 @@
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Route, Switch } from "wouter";
+import { useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import OnboardingFlow from "./components/onboarding/OnboardingFlow";
@@ -21,24 +21,23 @@ import {
 } from "@shared/buildingHostMap";
 
 function Router() {
-  return (
-    <Switch>
-      {/* Chat home — the primary interface */}
-      <Route path="/" component={Home} />
+  const [location] = useLocation();
 
-      {/* Laundry Butler handoff — redirects to /api/welcome server-side */}
-      <Route path="/welcome" component={Welcome} />
+  // Render exactly one page component. This avoids any ambiguity in route
+  // matching that could leave multiple Home instances mounted at once.
+  if (location.startsWith("/welcome")) {
+    return <Welcome />;
+  }
 
-      {/* Order receipt page — standalone for direct links */}
-      <Route path="/orders/:orderId" component={OrderReceipt} />
+  if (/^\/orders\/[^/]+/.test(location)) {
+    return <OrderReceipt />;
+  }
 
-      {/* Receipt page — JWT-authenticated order completion view */}
-      <Route path="/receipt/:token" component={Receipt} />
+  if (/^\/receipt\/[^/]+/.test(location)) {
+    return <Receipt />;
+  }
 
-      {/* Fallback — redirect to chat */}
-      <Route component={Home} />
-    </Switch>
-  );
+  return <Home />;
 }
 
 function App() {
