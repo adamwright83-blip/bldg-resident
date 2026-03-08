@@ -2670,13 +2670,18 @@
   /* ─── Services mode (inline panel) ─── */
   .chat-messages.services-mode-active {
     background: #F5F0E8;
+    width: 100%;
+    min-width: 0;
   }
 
   .services-mode-panel {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    min-width: 0;
     min-height: 100%;
     padding: var(--screen-pad);
+    box-sizing: border-box;
   }
 
   .services-mode-block {

@@ -1475,83 +1475,72 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Messages Area */}
+      {/* Messages Area — exactly one of: Services panel OR Chat (empty or thread) */}
       <div ref={scrollContainerRef} className={`chat-messages ${servicesMode ? "services-mode-active" : ""}`}>
-        {/* #4: Overscroll glow — only in Chat mode */}
-        {!servicesMode && (
-          <div className={`overscroll-glow ${showOverscrollGlow && messages.length > 0 ? "visible" : ""}`} />
-        )}
-
-        <AnimatePresence mode="wait">
-          {servicesMode ? (
-            /* ─── Services mode: compact upper block + flexible spacer ─── */
-            <motion.div
-              key="services-panel"
-              className="services-mode-panel"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <div className="services-mode-block">
-                <h2 className="services-mode-heading">What do you need handled?</h2>
-                <p className="services-mode-subcopy">Choose a service.</p>
-                <div className="services-mode-grid">
-                  {SERVICES_GRID.map((svc) => (
-                    <button
-                      key={svc.id}
-                      type="button"
-                      className="services-mode-card tappable"
-                      onClick={() => {
-                        setServicesMode(false);
-                        setInput(svc.prompt);
-                        requestAnimationFrame(() => inputRef.current?.focus());
-                      }}
-                    >
-                      <span className="services-mode-card-icon">{svc.icon}</span>
-                      <span className="services-mode-card-label">{svc.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="services-mode-ask-row"
-                  onClick={() => {
-                    setServicesMode(false);
-                    requestAnimationFrame(() => inputRef.current?.focus());
-                  }}
+        {servicesMode ? (
+          /* ─── Services mode only: no chat layer ─── */
+          <div className="services-mode-panel">
+            <div className="services-mode-block">
+              <h2 className="services-mode-heading">What do you need handled?</h2>
+              <p className="services-mode-subcopy">Choose a service.</p>
+              <div className="services-mode-grid">
+                {SERVICES_GRID.map((svc) => (
+                  <button
+                    key={svc.id}
+                    type="button"
+                    className="services-mode-card tappable"
+                    onClick={() => {
+                      setServicesMode(false);
+                      setInput(svc.prompt);
+                      requestAnimationFrame(() => inputRef.current?.focus());
+                    }}
+                  >
+                    <span className="services-mode-card-icon">{svc.icon}</span>
+                    <span className="services-mode-card-label">{svc.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="services-mode-ask-row"
+                onClick={() => {
+                  setServicesMode(false);
+                  requestAnimationFrame(() => inputRef.current?.focus());
+                }}
+              >
+                Need something more specific? Ask instead
+                <ArrowRight size={14} strokeWidth={2} className="services-mode-ask-arrow" />
+              </button>
+            </div>
+            <div className="services-mode-spacer" aria-hidden />
+          </div>
+        ) : (
+          /* ─── Chat mode only: overscroll glow + empty state OR message list ─── */
+          <>
+            <div className={`overscroll-glow ${showOverscrollGlow && messages.length > 0 ? "visible" : ""}`} />
+            <AnimatePresence mode="wait">
+              {showEmptyState ? (
+                <motion.div
+                  key="empty-state"
+                  className="chat-empty"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                  transition={{ duration: 0.3 }}
                 >
-                  Need something more specific? Ask instead
-                  <ArrowRight size={14} strokeWidth={2} className="services-mode-ask-arrow" />
-                </button>
-              </div>
-              <div className="services-mode-spacer" aria-hidden />
-            </motion.div>
-          ) : showEmptyState ? (
-            /* ─── State 1: Empty chat — centered large logo + greeting ─── */
-            <motion.div
-              key="empty-state"
-              className="chat-empty"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="chat-empty-inner">
-                {/* Hero logo — leaps to first message avatar position on first response */}
-                <BldgLogo size="hero" mood="breathe" layoutId="bldg-hero-logo" />
-                <p className="chat-empty-text">{emptyGreeting}</p>
-              </div>
-            </motion.div>
-          ) : (
-            /* ─── State 2: Active chat — avatar next to every BLDG message ─── */
-            <motion.div
-              key="active-state"
-              className="chat-message-list"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2, delay: 0.1 }}
-            >
+                  <div className="chat-empty-inner">
+                    <BldgLogo size="hero" mood="breathe" layoutId="bldg-hero-logo" />
+                    <p className="chat-empty-text">{emptyGreeting}</p>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="active-state"
+                  className="chat-message-list"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2, delay: 0.1 }}
+                >
               {messages.map((msg, i) => {
                 // Determine message type synchronously at render time (not in useEffect)
                 const isOnboardingCollect = msg.role === "assistant" && msg.metadata?.type === "onboarding_collect";
@@ -1740,17 +1729,18 @@ export default function Home() {
               )}
 
               <div ref={messagesEndRef} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
       </div>
 
-      {/* Tiles + Composer */}
+      {/* Single bottom zone: pill + composer (chips/tiles only in Chat mode) */}
       <div className="chat-bottom">
-
-        {/* #8: Welcome Chips with stagger entrance — ONLY in empty state */}
+        {/* Welcome Chips — Chat mode only, empty state */}
         <AnimatePresence>
-          {!showTiles && !isSending && messages.length === 0 && (
+          {!servicesMode && !showTiles && !isSending && messages.length === 0 && (
             <motion.div
               className="welcome-chips"
               initial={{ opacity: 0 }}
@@ -1771,9 +1761,9 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Service Tiles — #7: with ripple on tap */}
+        {/* Service Tiles — Chat mode only, empty state */}
         <AnimatePresence>
-          {showTiles && (
+          {!servicesMode && showTiles && (
             <motion.div
               className="chat-tiles"
               initial={{ opacity: 0, y: 8 }}
@@ -1796,9 +1786,8 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Services pill — toggles Chat / Services mode; anchored in bottom zone */}
-        <AnimatePresence>
-          {onboardingComplete === true && !isSending && (servicesMode || !showTiles) && (
+        {/* Services pill — single instance; toggles Chat / Services mode */}
+        {onboardingComplete === true && !isSending && (
             <motion.button
               type="button"
               className={`services-pill ${servicesMode ? "services-pill-active" : ""}`}
@@ -1811,10 +1800,9 @@ export default function Home() {
               <LayoutGrid size={14} />
               <span>Services</span>
             </motion.button>
-          )}
-        </AnimatePresence>
+        )}
 
-        {/* #1 + #2: Composer with exhale animation and breathing pulse */}
+        {/* Single composer — shared in both modes */}
         <div className={`chat-composer ${composerExhale ? "composer-exhale" : ""} ${isSending ? "composer-breathing" : ""}`}>
           <textarea
             ref={inputRef}
