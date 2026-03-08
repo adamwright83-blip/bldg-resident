@@ -1221,10 +1221,14 @@ export default function Home() {
 
           // Post-booking gate: animation owns the screen for 5 seconds,
           // then we collect name/payment sequentially.
+          // Only gate if the user is genuinely not yet onboarded.
+          // Use the local `onboardingComplete` state first (set synchronously by
+          // handlePaymentSaved) to avoid acting on a stale historyQuery cache.
           const userData = historyQuery.data?.user;
-          const needsName = !userData?.firstName;
-          const needsPayment = !(userData as any)?.paymentMethodSaved;
-          const shouldGate = isLaundryBooking && (needsName || needsPayment);
+          const alreadyOnboarded = onboardingComplete === true || (userData as any)?.paymentMethodSaved;
+          const needsName = !alreadyOnboarded && !userData?.firstName;
+          const needsPayment = !alreadyOnboarded && !(userData as any)?.paymentMethodSaved;
+          const shouldGate = isLaundryBooking && !alreadyOnboarded && (needsName || needsPayment);
           if (shouldGate) {
             setPostBookingPhase("animating");
             postBookingPhaseRef.current = "animating";
