@@ -186,7 +186,7 @@
   .app-shell {
     position: relative;
     min-height: 100vh;
-    background: var(--bg);
+    background: #F5F0E8;
   }
 
   .app-shell::before {
@@ -198,7 +198,7 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
     background-repeat: repeat;
     mix-blend-mode: overlay;
-    opacity: 0.12;
+    opacity: 0.05;
   }
 
   .app-shell::after {
@@ -209,7 +209,7 @@
     width: 520px;
     height: 520px;
     transform: translateX(-50%);
-    background: radial-gradient(circle, rgba(201, 169, 110, 0.09), transparent 60%);
+    background: radial-gradient(circle, rgba(201, 169, 110, 0.07), transparent 60%);
     filter: blur(40px);
     opacity: 1;
     pointer-events: none;
@@ -228,13 +228,13 @@
     height: 100dvh;
     display: flex;
     flex-direction: column;
-    background: transparent; /* Allow grain/glow to show through */
+    background: #F5F0E8;
     position: relative;
   }
 
   @media (min-width: 481px) {
     .chat-container {
-      box-shadow: 0 0 0 1px var(--border);
+      box-shadow: 0 0 0 1px rgba(90, 83, 74, 0.14);
     }
   }
 
@@ -244,8 +244,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px var(--screen-pad);
-    border-bottom: 1px solid var(--accent);
-    background: transparent; /* Allow grain/glow to show through */
+    border-bottom: 1px solid rgba(90, 83, 74, 0.18);
+    background: #F5F0E8;
     flex-shrink: 0;
     z-index: 10;
     padding-top: calc(12px + env(safe-area-inset-top));
@@ -292,13 +292,13 @@
     font-size: 20px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--text-primary);
+    color: #2C2824;
   }
 
   .chat-logo-dot {
     font-size: 20px;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #2C2824;
     margin-left: -2px;
     margin-right: -2px;
   }
@@ -306,7 +306,7 @@
   .chat-logo-suffix {
     font-size: 16px;
     font-weight: 400;
-    color: var(--text-secondary);
+    color: #5A534A;
     letter-spacing: -0.01em;
   }
 
@@ -319,18 +319,18 @@
     border-radius: 8px;
     border: none;
     background: transparent;
-    color: var(--text-secondary);
+    color: #5A534A;
     transition: background 0.15s, color 0.15s;
     text-decoration: none;
   }
 
   .chat-header-btn:hover {
-    background: var(--bg-elevated);
-    color: var(--text-primary);
+    background: rgba(201, 169, 110, 0.12);
+    color: #2C2824;
   }
 
   .chat-header-btn:active {
-    background: var(--bg-elevated-2);
+    background: rgba(201, 169, 110, 0.18);
   }
 
   /* ─── Messages Area ─── */
@@ -339,6 +339,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    background: #F5F0E8;
   }
 
   .chat-message-list {
@@ -375,16 +376,16 @@
   }
 
   .chat-bubble-user {
-    background: rgba(245, 240, 232, 0.14);
-    border: 1px solid rgba(245, 240, 232, 0.14);
-    color: var(--text-primary);
+    background: rgba(233, 223, 207, 0.95);
+    border: 1px solid rgba(201, 169, 110, 0.24);
+    color: #2C2824;
     border-radius: 20px 20px 6px 20px;
   }
 
   .chat-bubble-assistant {
-    background: var(--bg-elevated);
-    border: 1px solid #5A4F45;
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(90, 83, 74, 0.20);
+    color: #2C2824;
     border-radius: 20px 20px 20px 6px;
   }
 
@@ -421,7 +422,7 @@
   }
 
   .chat-bubble-md code {
-    background: var(--bg-elevated);
+    background: #EFE7DB;
     padding: 1px 4px;
     border-radius: 3px;
     font-size: 13px;
@@ -445,9 +446,9 @@
     border-radius: 20px;
     background: linear-gradient(
       90deg,
-      rgba(245,240,232,0.08) 25%,
-      rgba(245,240,232,0.18) 50%,
-      rgba(245,240,232,0.08) 75%
+      rgba(201, 169, 110, 0.08) 25%,
+      rgba(201, 169, 110, 0.18) 50%,
+      rgba(201, 169, 110, 0.08) 75%
     );
     background-size: 200% 100%;
     animation: shimmer 1.8s ease-in-out infinite;
@@ -2176,16 +2177,16 @@
 
   /* ─── 6. Night Ambient Shift ─── */
   .app-shell.night-mode::after {
-    background: radial-gradient(circle, rgba(140, 160, 200, 0.10), transparent 60%);
+    background: radial-gradient(circle, rgba(201, 169, 110, 0.07), transparent 60%);
   }
 
   .app-shell.night-mode::before {
-    opacity: 0.16;
+    opacity: 0.05;
   }
 
   .app-shell.night-mode {
-    --accent: #8CA0C8;
-    --accent-muted: rgba(140, 160, 200, 0.12);
+    --accent: #C9A96E;
+    --accent-muted: rgba(201, 169, 110, 0.15);
   }
 
   /* Smooth transition between day and night */
