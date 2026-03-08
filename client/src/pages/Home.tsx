@@ -15,7 +15,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check } from "lucide-react";
+import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home, ArrowRight } from "lucide-react";
 import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
@@ -139,6 +139,24 @@ const SERVICE_TILES: ServiceTile[] = [
   { id: "grooming", label: "Grooming", prompt: "Book grooming appointment", icon: <DogIcon /> },
   { id: "cleaning", label: "Cleaning", prompt: "Schedule cleaning service", icon: <CleaningIcon /> },
   { id: "vault", label: "The Vault", prompt: "", icon: <VaultIcon /> },
+];
+
+// ─── Services mode grid (8 cards; Pet Sitting distinct from Dog Grooming) ───
+interface ServiceGridItem {
+  id: string;
+  label: string;
+  prompt: string;
+  icon: React.ReactNode;
+}
+const SERVICES_GRID: ServiceGridItem[] = [
+  { id: "grooming", label: "Dog Grooming", prompt: "Book dog grooming appointment", icon: <DogIcon /> },
+  { id: "cleaning", label: "Cleaning", prompt: "Schedule cleaning service", icon: <CleaningIcon /> },
+  { id: "laundry", label: "Laundry", prompt: "Schedule laundry pickup", icon: <LaundryIcon /> },
+  { id: "dry-cleaning", label: "Dry Cleaning", prompt: "Schedule dry cleaning pickup", icon: <DryCleanIcon /> },
+  { id: "car-wash", label: "Car Wash", prompt: "Schedule car wash", icon: <CarIcon /> },
+  { id: "handyman", label: "Handyman", prompt: "Schedule handyman", icon: <Wrench size={32} strokeWidth={1.5} /> },
+  { id: "assembly", label: "Assembly", prompt: "Schedule furniture assembly", icon: <Puzzle size={32} strokeWidth={1.5} /> },
+  { id: "pet-sitting", label: "Pet Sitting", prompt: "Schedule pet sitting", icon: <Home size={32} strokeWidth={1.5} /> },
 ];
 
 // ─── Type definitions ───
@@ -615,6 +633,7 @@ export default function Home() {
   const [revealedBeats, setRevealedBeats] = useState<Set<number>>(new Set());
   const greetingInitializedRef = useRef(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [servicesMode, setServicesMode] = useState(false);
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
   const [sendBtnCompress, setSendBtnCompress] = useState(false);
@@ -1457,12 +1476,58 @@ export default function Home() {
       </header>
 
       {/* Messages Area */}
-      <div ref={scrollContainerRef} className="chat-messages">
-        {/* #4: Overscroll glow */}
-        <div className={`overscroll-glow ${showOverscrollGlow && messages.length > 0 ? "visible" : ""}`} />
+      <div ref={scrollContainerRef} className={`chat-messages ${servicesMode ? "services-mode-active" : ""}`}>
+        {/* #4: Overscroll glow — only in Chat mode */}
+        {!servicesMode && (
+          <div className={`overscroll-glow ${showOverscrollGlow && messages.length > 0 ? "visible" : ""}`} />
+        )}
 
         <AnimatePresence mode="wait">
-          {showEmptyState ? (
+          {servicesMode ? (
+            /* ─── Services mode: compact upper block + flexible spacer ─── */
+            <motion.div
+              key="services-panel"
+              className="services-mode-panel"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="services-mode-block">
+                <h2 className="services-mode-heading">What do you need handled?</h2>
+                <p className="services-mode-subcopy">Choose a service.</p>
+                <div className="services-mode-grid">
+                  {SERVICES_GRID.map((svc) => (
+                    <button
+                      key={svc.id}
+                      type="button"
+                      className="services-mode-card tappable"
+                      onClick={() => {
+                        setServicesMode(false);
+                        setInput(svc.prompt);
+                        requestAnimationFrame(() => inputRef.current?.focus());
+                      }}
+                    >
+                      <span className="services-mode-card-icon">{svc.icon}</span>
+                      <span className="services-mode-card-label">{svc.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="services-mode-ask-row"
+                  onClick={() => {
+                    setServicesMode(false);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                >
+                  Need something more specific? Ask instead
+                  <ArrowRight size={14} strokeWidth={2} className="services-mode-ask-arrow" />
+                </button>
+              </div>
+              <div className="services-mode-spacer" aria-hidden />
+            </motion.div>
+          ) : showEmptyState ? (
             /* ─── State 1: Empty chat — centered large logo + greeting ─── */
             <motion.div
               key="empty-state"
@@ -1731,12 +1796,13 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Services Drawer trigger — appears when tiles are hidden (after first message) */}
+        {/* Services pill — toggles Chat / Services mode; anchored in bottom zone */}
         <AnimatePresence>
-          {!showTiles && !isSending && onboardingComplete === true && (
+          {onboardingComplete === true && !isSending && (servicesMode || !showTiles) && (
             <motion.button
-              className="services-drawer-trigger"
-              onClick={() => setDrawerOpen(true)}
+              type="button"
+              className={`services-pill ${servicesMode ? "services-pill-active" : ""}`}
+              onClick={() => setServicesMode(!servicesMode)}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}

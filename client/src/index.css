@@ -2667,6 +2667,170 @@
     opacity: 0.7;
   }
 
+  /* ─── Services mode (inline panel) ─── */
+  .chat-messages.services-mode-active {
+    background: #F5F0E8;
+  }
+
+  .services-mode-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding: var(--screen-pad);
+  }
+
+  .services-mode-block {
+    flex-shrink: 0;
+  }
+
+  .services-mode-heading {
+    font-family: "DM Serif Display", Georgia, serif;
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: #2C2824;
+    margin: 0 0 4px 0;
+    letter-spacing: 0.02em;
+  }
+
+  .services-mode-subcopy {
+    font-size: 0.9375rem;
+    color: #5A534A;
+    margin: 0 0 20px 0;
+  }
+
+  .services-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .services-mode-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 102px;
+    padding: 16px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(90, 83, 74, 0.35);
+    background: rgba(255, 255, 255, 0.6);
+    color: #2C2824;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .services-mode-card:hover {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(90, 83, 74, 0.5);
+  }
+
+  .services-mode-card:active {
+    background: rgba(237, 232, 223, 0.9);
+  }
+
+  .services-mode-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: #5A534A;
+  }
+
+  .services-mode-card-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .services-mode-card-label {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-align: center;
+    line-height: 1.25;
+  }
+
+  .services-mode-ask-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 13px;
+    color: #7A7268;
+    cursor: pointer;
+    transition: color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .services-mode-ask-row:hover {
+    color: #5A534A;
+  }
+
+  .services-mode-ask-arrow {
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  .services-mode-spacer {
+    flex: 1;
+    min-height: 24px;
+  }
+
+  /* Services pill — toggle; active state in bottom zone */
+  .services-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    margin: 8px auto 8px;
+    border-radius: 20px;
+    border: 1px solid rgba(74, 69, 64, 0.4);
+    background: rgba(44, 40, 36, 0.6);
+    color: rgba(245, 240, 232, 0.6);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .services-pill:hover {
+    background: rgba(44, 40, 36, 0.8);
+    color: rgba(245, 240, 232, 0.8);
+    border-color: rgba(74, 69, 64, 0.6);
+  }
+
+  .services-pill-active {
+    background: rgba(201, 169, 110, 0.22);
+    border-color: rgba(201, 169, 110, 0.5);
+    color: #2C2824;
+  }
+
+  .services-pill-active:hover {
+    background: rgba(201, 169, 110, 0.28);
+    border-color: rgba(201, 169, 110, 0.6);
+    color: #2C2824;
+  }
+
+  .services-pill:active {
+    transform: scale(0.96);
+  }
+
+  .services-pill svg {
+    opacity: 0.85;
+  }
+
+  .services-pill-active svg {
+    opacity: 1;
+  }
+
   /* ─── The Vault ─── */
 
   .vault-container {
