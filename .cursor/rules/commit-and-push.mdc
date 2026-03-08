@@ -1,0 +1,13 @@
+---
+description: Always commit and push after completing a task
+alwaysApply: true
+---
+
+# Commit and Push After Every Task
+
+After completing any coding task, you must:
+
+1. **Commit** the changes with a clear, descriptive message
+2. **Push** to the remote repository
+
+Do this automatically without the user asking. Do not wait for explicit instruction to commit or push.

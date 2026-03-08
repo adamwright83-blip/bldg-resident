@@ -92,6 +92,62 @@ function parseDisplayDateToISO(displayDate: string): string {
   return date.toISOString().split('T')[0]; // "2026-02-17"
 }
 
+// ─── Admin intake success contract ───
+/** Resident app must only confirm booking when admin intake returns 200 + { ok: true, orderId } */
+const INTAKE_FAILURE_MESSAGE =
+  "Your request did not go through. Please try again in a moment.";
+
+async function postToAdminIntakeAndVerify(
+  adminApiUrl: string,
+  sharedSecret: string,
+  payload: object,
+  logPrefix: string
+): Promise<{ success: true; orderId: number } | { success: false; reason: string }> {
+  try {
+    console.log(`[INTAKE][${logPrefix}] POST attempted to admin intake`);
+    const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-app-shared-secret": sharedSecret || "",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await fwdRes.text().catch(() => "(no body)");
+    console.log(`[INTAKE][${logPrefix}] response status=${fwdRes.status} body=${responseText}`);
+
+    if (fwdRes.status !== 200) {
+      console.warn(`[INTAKE][${logPrefix}] response status not 200: ${fwdRes.status}`);
+      return { success: false, reason: `non_200:${fwdRes.status}` };
+    }
+
+    let body: { ok?: boolean; orderId?: number };
+    try {
+      body = JSON.parse(responseText) as { ok?: boolean; orderId?: number };
+    } catch {
+      console.warn(`[INTAKE][${logPrefix}] response body parse failed`);
+      return { success: false, reason: "parse_error" };
+    }
+
+    if (body?.ok !== true) {
+      console.warn(`[INTAKE][${logPrefix}] body.ok !== true`);
+      return { success: false, reason: "body_ok_false" };
+    }
+    const orderId = body?.orderId;
+    if (orderId == null || !Number.isFinite(Number(orderId))) {
+      console.warn(`[INTAKE][${logPrefix}] body.orderId missing or invalid`);
+      return { success: false, reason: "missing_orderId" };
+    }
+
+    console.log(`[BookingConfirm][${logPrefix}] admin intake verified orderId=${orderId}`);
+    return { success: true, orderId: Number(orderId) };
+  } catch (err) {
+    console.error(`[INTAKE][${logPrefix}] caught error:`, err);
+    return { success: false, reason: "fetch_error" };
+  }
+}
+
 // ─── Auth helper ───
 
 async function getBldgUserIdFromRequest(req: any): Promise<number | null> {
@@ -1006,7 +1062,7 @@ export const chatRouter = router({
         else if (LAUNDRY_SIMPLE.test(msg)) simpleService = "laundry";
 
         if (simpleService) {
-          console.log(`[FastPath] Detected simple "${simpleService}" intent — skipping LLM`);
+          console.log(`[ResidentBooking][FastPath] intent matched: ${simpleService}`);
           const dateTimeIntent = parseExplicitDateTime(input.content);
           const defaults = await getBookingDefaults(
             bldgUserId,
@@ -1014,6 +1070,7 @@ export const chatRouter = router({
             dateTimeIntent.dateOverride,
             dateTimeIntent.windowOverride
           );
+          console.log(`[ResidentBooking][FastPath] booking defaults resolved: ${defaults.date} ${defaults.window}`);
 
           // Detect same-day request in the user message
           const fpSameDay = detectSameDay(input.content);
@@ -1028,120 +1085,117 @@ export const chatRouter = router({
           // Duplicate booking guard
           const duplicate = await findDuplicateBooking(bldgUserId, simpleService);
           let serviceRequestId: number | null = null;
+          let intakeSuccess = false;
 
-          if (duplicate) {
-            serviceRequestId = duplicate.id;
-            console.log(`[FastPath] Duplicate detected for ${simpleService} — reusing #${duplicate.id}`);
+          const adminApiUrl = (
+            process.env.ADMIN_API_URL ||
+            "https://bldg-admin-api-production.up.railway.app"
+          ).replace(/\/$/, "");
+          const sharedSecret = process.env.APP_SHARED_API_SECRET || "";
+
+          const windowParts = defaults.window.match(/(\d+(?::\d+)?)\s*[–\-]\s*(\d+(?::\d+)?)\s*(AM|PM)?/i);
+          const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
+          const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
+
+          const freshUser = await getBldgUserById(bldgUserId);
+          const fpServiceType = simpleService === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
+
+          const BUILDING_ADDRESSES: Record<string, string> = {
+            "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
+            "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
+            "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
+            "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
+          };
+          const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
+          const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+
+          const firstName = (freshUser?.firstName || user?.firstName || "").trim();
+          const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
+          const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
+
+          if (!firstName || !lastName) {
+            console.log(`[INTAKE][FastPath] names not yet collected — cannot complete intake (bldgUserId=${bldgUserId})`);
           } else {
-            const sr = await createServiceRequest({
-              bldgUserId,
-              serviceType: simpleService as any,
-              status: "pending",
-              requestSummary: `${simpleService} — ${defaults.date} ${defaults.window}`,
-              scheduledDate: defaults.date,
-              scheduledWindow: defaults.window,
-              scheduledStartUtc: defaults.scheduled_start_utc,
-              scheduledEndUtc: defaults.scheduled_end_utc,
-              scheduledStartLocal: defaults.scheduled_start_local,
-              scheduledEndLocal: defaults.scheduled_end_local,
-              timezone: defaults.timezone,
-              requestJson: {
-                recurrence: defaults.recurrence,
-                ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
-              },
-            });
-            serviceRequestId = sr.id;
-            console.log(`[FastPath] Created service_request #${sr.id}: ${simpleService}`);
+            let sr: { id: number };
+            if (duplicate) {
+              sr = duplicate;
+              serviceRequestId = duplicate.id;
+              console.log(`[ResidentBooking][FastPath] duplicate detected — reusing #${duplicate.id}`);
+            } else {
+              sr = await createServiceRequest({
+                bldgUserId,
+                serviceType: simpleService as any,
+                status: "pending",
+                requestSummary: `${simpleService} — ${defaults.date} ${defaults.window}`,
+                scheduledDate: defaults.date,
+                scheduledWindow: defaults.window,
+                scheduledStartUtc: defaults.scheduled_start_utc,
+                scheduledEndUtc: defaults.scheduled_end_utc,
+                scheduledStartLocal: defaults.scheduled_start_local,
+                scheduledEndLocal: defaults.scheduled_end_local,
+                timezone: defaults.timezone,
+                requestJson: {
+                  recurrence: defaults.recurrence,
+                  ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
+                },
+              });
+              serviceRequestId = sr.id;
+              console.log(`[ResidentBooking][FastPath] local service_request created #${sr.id}: ${simpleService}`);
+            }
 
-            // Fire-and-forget: mirror booking into bldg-admin-api
-            (async () => {
-              try {
-                const adminApiUrl = (
-                  process.env.ADMIN_API_URL ||
-                  "https://bldg-admin-api-production.up.railway.app"
-                ).replace(/\/$/, "");
-                const sharedSecret = process.env.APP_SHARED_API_SECRET;
+            const pickupDateISO = parseDisplayDateToISO(defaults.date);
+            const fpSpecialInstructions = fpSameDay ? "Same-day requested." : undefined;
 
-                const windowParts = defaults.window.match(/(\d+(?::\d+)?)\s*[–\-]\s*(\d+(?::\d+)?)\s*(AM|PM)?/i);
-                const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
-                const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
+            const intakePayload = {
+              externalId: `bldg-sr-${sr.id}`,
+              source: "bldg-resident",
+              status: "new",
+              serviceType: fpServiceType,
+              pickupDate: pickupDateISO,
+              pickupWindow: defaults.window,
+              pickupWindowStart,
+              pickupWindowEnd,
+              address,
+              buildingId: buildingSlug || null,
+              unit: freshUser?.unit || user?.unit || null,
+              firstName,
+              lastName,
+              phone,
+              bldgUserId: bldgUserId ?? null,
+              stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
+              stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+              ...(fpSpecialInstructions ? { specialInstructions: fpSpecialInstructions } : {}),
+            };
 
-                const freshUser = await getBldgUserById(bldgUserId);
-                // Use hyphen-form comparison — simpleService is "dry-cleaning", not "dry_cleaning"
-                const fpServiceType = simpleService === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
+            console.log("[INTAKE][FastPath] sending", JSON.stringify(intakePayload, null, 2));
 
-                const BUILDING_ADDRESSES: Record<string, string> = {
-                  "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
-                  "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
-                  "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
-                  "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
-                };
-                const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
-                const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+            const intakeResult = await postToAdminIntakeAndVerify(
+              adminApiUrl,
+              sharedSecret,
+              intakePayload,
+              "FastPath"
+            );
 
-                const firstName = (freshUser?.firstName || user?.firstName || "").trim();
-                const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
-                const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
+            if (intakeResult.success) {
+              await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
+              console.log(`[BookingConfirm][FastPath] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
+              intakeSuccess = true;
+            }
+          }
 
-                const pickupDateISO = parseDisplayDateToISO(defaults.date);
-
-                if (!firstName || !lastName) {
-                  console.log(`[INTAKE][FastPath] skipping — names not yet collected (bldgUserId=${bldgUserId}, sr=${sr.id}). Will send from stripe.ts after payment.`);
-                  return;
-                }
-
-                const fpSpecialInstructions = fpSameDay ? "Same-day requested." : undefined;
-
-                const intakePayload = {
-                  externalId: `bldg-sr-${sr.id}`,
-                  source: "bldg-resident",
-                  status: "new",
-                  serviceType: fpServiceType,
-                  pickupDate: pickupDateISO,
-                  pickupWindow: defaults.window,
-                  pickupWindowStart,
-                  pickupWindowEnd,
-                  address,
-                  buildingId: buildingSlug || null,
-                  unit: freshUser?.unit || user?.unit || null,
-                  firstName,
-                  lastName,
-                  phone,
-                  bldgUserId: bldgUserId ?? null,
-                  stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
-                  stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
-                  ...(fpSpecialInstructions ? { specialInstructions: fpSpecialInstructions } : {}),
-                };
-
-                console.log("[INTAKE][FastPath] sending", JSON.stringify(intakePayload, null, 2));
-
-                const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-app-shared-secret": sharedSecret || "",
-                  },
-                  body: JSON.stringify(intakePayload),
-                });
-
-                const responseText = await fwdRes.text().catch(() => "(no body)");
-                console.log(`[INTAKE][FastPath] response status=${fwdRes.status} body=${responseText}`);
-
-                if (fwdRes.ok) {
-                  try {
-                    const body = JSON.parse(responseText) as { orderId?: number };
-                    if (body?.orderId != null && Number.isFinite(Number(body.orderId))) {
-                      await updateServiceRequest(sr.id, { orderId: Number(body.orderId) });
-                      console.log(`[INTAKE][FastPath] stored orderId=${body.orderId} on service_request #${sr.id}`);
-                    }
-                  } catch (_) {
-                    // ignore parse errors
-                  }
-                }
-              } catch (err) {
-                console.error("[INTAKE][FastPath] failed to forward booking:", err);
-              }
-            })();
+          if (!intakeSuccess) {
+            if (bldgUserId) {
+              await insertChatMessage({
+                bldgUserId,
+                role: "assistant",
+                content: INTAKE_FAILURE_MESSAGE,
+              });
+            }
+            return {
+              role: "assistant" as const,
+              content: INTAKE_FAILURE_MESSAGE,
+              booking: null,
+            };
           }
 
           const bookingMeta = {
@@ -1349,6 +1403,7 @@ export const chatRouter = router({
         // Only override dates if user didn't specify an explicit date
         let displayContent = stripBookingMetadata(rawContent);
         if (bookingMeta) {
+          console.log(`[ResidentBooking][LLM] intent matched: ${bookingMeta.service}`);
           try {
             const serviceCategory = normalizeServiceCategory(bookingMeta.service);
             
@@ -1375,6 +1430,7 @@ export const chatRouter = router({
               scheduled_end_local: defaults.scheduled_end_local,
               timezone: defaults.timezone,
             };
+            console.log(`[ResidentBooking][LLM] booking defaults resolved: ${bookingMeta.date} ${bookingMeta.window}`);
             
             // Only apply text replacement if NO explicit date was given
             if (!dateTimeIntent.hasExplicitDate) {
@@ -1402,6 +1458,9 @@ export const chatRouter = router({
         // If booking detected, create service request
         let serviceRequestId: number | null = null;
         let serviceCategory: string | null = null;
+        const isLaundryOrDryCleaning = (cat: string) =>
+          cat === "laundry" || cat === "dry-cleaning";
+
         if (bookingMeta) {
           const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
@@ -1412,13 +1471,15 @@ export const chatRouter = router({
             serviceCategory
           );
 
+          let sr: { id: number };
           if (duplicate) {
-            console.log(
-              `[ServiceRequest] Duplicate detected for ${serviceCategory} on ${bookingMeta.date} — skipping creation`
-            );
+            sr = duplicate;
             serviceRequestId = duplicate.id;
+            console.log(
+              `[ResidentBooking][LLM] duplicate detected — reusing #${duplicate.id} for ${serviceCategory}`
+            );
           } else {
-            const sr = await createServiceRequest({
+            sr = await createServiceRequest({
               bldgUserId: effectiveUserId,
               serviceType: serviceCategory as any,
               status: "pending",
@@ -1441,115 +1502,102 @@ export const chatRouter = router({
             serviceRequestId = sr.id;
 
             console.log(
-              `[ServiceRequest] Created #${sr.id}: ${serviceCategory} — ${bookingMeta.date} ${bookingMeta.window}`
+              `[ResidentBooking][LLM] local service_request created #${sr.id}: ${serviceCategory} — ${bookingMeta.date} ${bookingMeta.window}`
             );
+          }
 
-            // Fire-and-forget: mirror booking into bldg-admin-api so it shows
-            // up in admin.bldg.chat and driver.bldg.chat.
-            (async () => {
-              try {
-                const adminApiUrl = (
-                  process.env.ADMIN_API_URL ||
-                  "https://bldg-admin-api-production.up.railway.app"
-                ).replace(/\/$/, "");
+          // For laundry and dry-cleaning: MUST await admin intake and verify success before confirming
+          let intakeSuccess = true;
+          if (isLaundryOrDryCleaning(serviceCategory)) {
+            const adminApiUrl = (
+              process.env.ADMIN_API_URL ||
+              "https://bldg-admin-api-production.up.railway.app"
+            ).replace(/\/$/, "");
+            const sharedSecret = process.env.APP_SHARED_API_SECRET || "";
 
-                const sharedSecret = process.env.APP_SHARED_API_SECRET;
+            const windowParts = bookingMeta.window.match(/(\d+(?::\d+)?)\s*[–\-]\s*(\d+(?::\d+)?)\s*(AM|PM)?/i);
+            const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
+            const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
 
-                // Parse window into start/end for the admin API
-                // e.g. "7–10 AM" → pickupWindowStart="7:00 AM", pickupWindowEnd="10:00 AM"
-                const windowParts = bookingMeta.window.match(/(\d+(?::\d+)?)\s*[–\-]\s*(\d+(?::\d+)?)\s*(AM|PM)?/i);
-                const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
-                const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
+            const freshUser = await getBldgUserById(bldgUserId);
+            const serviceType = serviceCategory === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
 
-                const freshUser = await getBldgUserById(bldgUserId);
-                // Use hyphen-form comparison — serviceCategory is "dry-cleaning", not "dry_cleaning"
-                const serviceType = serviceCategory === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
+            const BUILDING_ADDRESSES: Record<string, string> = {
+              "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
+              "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
+              "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
+              "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
+            };
+            const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
+            const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
 
-                // Map building slug → real street address
-                const BUILDING_ADDRESSES: Record<string, string> = {
-                  "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
-                  "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
-                  "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
-                  "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
-                };
-                const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
-                const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+            const firstName = (freshUser?.firstName || user?.firstName || "").trim();
+            const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
+            const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
-                const firstName = (freshUser?.firstName || user?.firstName || "").trim();
-                const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
-                const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
+            const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
+            const llmSameDay = detectSameDay(input.content);
+            const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
 
-                // Convert display date "Saturday, Feb 28" → ISO "2026-02-28"
-                const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
+            if (!firstName || !lastName) {
+              console.log(`[INTAKE][LLM] names not yet collected — cannot complete intake (bldgUserId=${bldgUserId}, sr=${sr.id})`);
+              intakeSuccess = false;
+            } else {
+              const intakePayload = {
+                externalId: `bldg-sr-${sr.id}`,
+                source: "bldg-resident",
+                status: "new",
+                serviceType,
+                pickupDate: pickupDateISO,
+                pickupWindow: bookingMeta.window,
+                pickupWindowStart,
+                pickupWindowEnd,
+                address,
+                buildingId: buildingSlug || null,
+                unit: freshUser?.unit || user?.unit || null,
+                firstName,
+                lastName,
+                phone,
+                bldgUserId: bldgUserId ?? null,
+                stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
+                stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+                ...(llmSpecialInstructions ? { specialInstructions: llmSpecialInstructions } : {}),
+              };
 
-                // Detect same-day request from original user message
-                const llmSameDay = detectSameDay(input.content);
-                const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
+              console.log("[INTAKE][LLM] sending", JSON.stringify(intakePayload, null, 2));
 
-                // Names are collected AFTER booking (name card appears post-confirmation).
-                // If missing here, log and skip — stripe.ts will send the complete record
-                // after payment (when firstName + lastName are guaranteed present).
-                if (!firstName || !lastName) {
-                  console.log(`[INTAKE] skipping at booking creation — names not yet collected (bldgUserId=${bldgUserId}, sr=${sr.id}). Will send from stripe.ts after payment.`);
-                  return;
-                }
+              const intakeResult = await postToAdminIntakeAndVerify(
+                adminApiUrl,
+                sharedSecret,
+                intakePayload,
+                "LLM"
+              );
 
-                const intakePayload = {
-                  externalId: `bldg-sr-${sr.id}`,   // idempotency key — always the same for this booking
-                  source: "bldg-resident",
-                  status: "new",
-                  serviceType,
-                  pickupDate: pickupDateISO,
-                  pickupWindow: bookingMeta.window,
-                  pickupWindowStart,
-                  pickupWindowEnd,
-                  address,
-                  buildingId: buildingSlug || null,
-                  unit: freshUser?.unit || user?.unit || null,
-                  firstName,
-                  lastName,
-                  phone,
-                  bldgUserId: bldgUserId ?? null,
-                  stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
-                  stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
-                  ...(llmSpecialInstructions ? { specialInstructions: llmSpecialInstructions } : {}),
-                };
-
-                console.log("[INTAKE] sending", JSON.stringify(intakePayload, null, 2));
-                console.log(`[INTAKE] hasSecret=${Boolean(sharedSecret)} len=${sharedSecret?.length ?? 0} headerName=x-app-shared-secret`);
-
-                const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-app-shared-secret": sharedSecret || "",
-                  },
-                  body: JSON.stringify(intakePayload),
-                });
-
-                const responseText = await fwdRes.text().catch(() => "(no body)");
-                console.log(`[INTAKE] response status=${fwdRes.status} body=${responseText}`);
-
-                if (!fwdRes.ok) {
-                  console.warn(`[INTAKE] non-ok response for service_request #${sr.id}: ${fwdRes.status} ${responseText}`);
-                } else {
-                  console.log(`[INTAKE] order forwarded successfully for service_request #${sr.id}`);
-                  try {
-                    const body = JSON.parse(responseText) as { orderId?: number };
-                    if (body?.orderId != null && Number.isFinite(Number(body.orderId))) {
-                      await updateServiceRequest(sr.id, { orderId: Number(body.orderId) });
-                      console.log(`[INTAKE] stored orderId=${body.orderId} on service_request #${sr.id}`);
-                    }
-                  } catch (_) {
-                    // ignore parse errors; admin may not return JSON or orderId
-                  }
-                }
-              } catch (err) {
-                console.error("[INTAKE] fetch threw — full error:", err);
+              if (intakeResult.success) {
+                await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
+                console.log(`[BookingConfirm][LLM] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
+              } else {
+                intakeSuccess = false;
               }
-            })();
+            }
 
-            // Update preferences (skip for guest users)
+            if (!intakeSuccess) {
+              if (bldgUserId) {
+                await insertChatMessage({
+                  bldgUserId,
+                  role: "assistant",
+                  content: INTAKE_FAILURE_MESSAGE,
+                });
+              }
+              return {
+                role: "assistant" as const,
+                content: INTAKE_FAILURE_MESSAGE,
+                booking: null,
+              };
+            }
+          }
+
+          // Update preferences (skip for guest users)
             let driftRevealMessage: string | null = null;
             if (bldgUserId) {
               const { driftDetected, preferredDay, service } = await updatePreferencesFromBooking(
@@ -1626,9 +1674,6 @@ export const chatRouter = router({
               }
             }
           }
-          
-          // Intake forwarding is handled above in the fire-and-forget block (new bookings only).
-        }
 
         // For dry-cleaning LLM bookings with same-day intent, append acknowledgment to displayContent
         if (
