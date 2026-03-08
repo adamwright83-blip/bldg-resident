@@ -27,6 +27,7 @@ import { MicButton } from "@/components/MicButton";
 import BldgLogo from "@/components/BldgLogo";
 import WasherIcon from "@/components/WasherIcon";
 import LaundryConfirmCard from "@/components/LaundryConfirmCard";
+import DryCleaningConfirmCard from "@/components/DryCleaningConfirmCard";
 import HowItWorksCard from "@/components/HowItWorksCard";
 import TrustCard from "@/components/TrustCard";
 import ConfirmationCeremony from "@/components/ConfirmationCeremony";
@@ -290,7 +291,41 @@ function ConfirmationCard({
     setShowFrequencySheet(false);
   };
 
-  const isLaundryCategory = category === "laundry" || category === "dry-cleaning";
+  const isDryClean = category === "dry-cleaning";
+  const isLaundryCategory = category === "laundry" || isDryClean;
+
+  if (isDryClean) {
+    return (
+      <>
+        <DryCleaningConfirmCard
+          service={booking.service}
+          date={booking.date}
+          window={booking.window}
+          isNew={isNew}
+          onModify={onModify ? () => setShowModifyOptions(true) : undefined}
+        />
+        {showModifyOptions && (
+          <div className="confirmation-card-modify-options" style={{ marginTop: 8 }}>
+            {MODIFY_TIME_OPTIONS.map((opt) => (
+              <button
+                key={`${opt.date}-${opt.window}`}
+                onClick={() => handleTimeSelect(opt.date, opt.window)}
+                className="confirmation-card-time-option tappable"
+              >
+                {opt.date} {opt.window}
+              </button>
+            ))}
+            <button
+              onClick={handleCancel}
+              className="confirmation-card-btn-cancel-buried tappable"
+            >
+              Cancel pickup
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
 
   if (isLaundryCategory) {
     return (

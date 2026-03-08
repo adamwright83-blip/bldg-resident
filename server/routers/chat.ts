@@ -136,7 +136,7 @@ export function getOnboardingMessage(serviceCategory: string): string | null {
   }
 
   if (serviceCategory === "dry-cleaning") {
-    return `**How dry cleaning pickup works:**\n\nSame as laundry — leave your garments outside your door before the pickup window. We'll text you 10 min before arrival.\n\n**Standard turnaround:** 2 business days.\n**Rush (same-day or next-day):** +$2/garment surcharge.\n\nWe'll text you when your order is ready for delivery.`;
+    return `**How dry cleaning pickup works:**\n\n![Garments at door](https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/FADWzLDauMlhYQCv.png)\n\n**1. Leave your garments outside your door** before the pickup window.\n\n![Laundry handoff](https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/swuGJPvocTlnJKeu.png)\n\n**2. We'll text you 10 min before arrival.** You don't need to be home.\n\nStandard turnaround: 2 business days. We'll text you when your order is ready.`;
   }
 
   if (serviceCategory === "car-wash") {
@@ -987,6 +987,99 @@ export const chatRouter = router({
           // If it looks like a service request, fall through to normal LLM flow
         }
       }
+
+      // ─── FAST-PATH: simple service-only intents bypass the LLM ───
+      // Recognizes bare dry-cleaning (and laundry) phrases so they always produce
+      // a booking without going through the LLM, eliminating "I'm having a moment"
+      // fallbacks and misclassification.
+      {
+        const msg = input.content.trim().toLowerCase().replace(/[.,!?;]/g, "");
+        const DRY_CLEAN_SIMPLE = /^(dry[\s-]?clean(?:ing)?|dc)$/;
+        const LAUNDRY_SIMPLE = /^(laundry|wash|washandflold|wash\s*(&|and)\s*fold)$/;
+
+        let simpleService: "dry-cleaning" | "laundry" | null = null;
+        if (DRY_CLEAN_SIMPLE.test(msg)) simpleService = "dry-cleaning";
+        else if (LAUNDRY_SIMPLE.test(msg)) simpleService = "laundry";
+
+        if (simpleService) {
+          console.log(`[FastPath] Detected simple "${simpleService}" intent — skipping LLM`);
+          const dateTimeIntent = parseExplicitDateTime(input.content);
+          const defaults = await getBookingDefaults(
+            bldgUserId,
+            simpleService,
+            dateTimeIntent.dateOverride,
+            dateTimeIntent.windowOverride
+          );
+
+          // Display label for the service
+          const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
+          const confirmText = `${serviceLabel} booked for ${defaults.date}, ${defaults.window}.`;
+
+          // Duplicate booking guard
+          const duplicate = await findDuplicateBooking(bldgUserId, simpleService);
+          let serviceRequestId: number | null = null;
+
+          if (duplicate) {
+            serviceRequestId = duplicate.id;
+            console.log(`[FastPath] Duplicate detected for ${simpleService} — reusing #${duplicate.id}`);
+          } else {
+            const sr = await createServiceRequest({
+              bldgUserId,
+              serviceType: simpleService as any,
+              status: "pending",
+              requestSummary: `${simpleService} — ${defaults.date} ${defaults.window}`,
+              scheduledDate: defaults.date,
+              scheduledWindow: defaults.window,
+              scheduledStartUtc: defaults.scheduled_start_utc,
+              scheduledEndUtc: defaults.scheduled_end_utc,
+              scheduledStartLocal: defaults.scheduled_start_local,
+              scheduledEndLocal: defaults.scheduled_end_local,
+              timezone: defaults.timezone,
+              requestJson: { recurrence: defaults.recurrence },
+            });
+            serviceRequestId = sr.id;
+            console.log(`[FastPath] Created service_request #${sr.id}: ${simpleService}`);
+          }
+
+          const bookingMeta = {
+            service: serviceLabel,
+            date: defaults.date,
+            window: defaults.window,
+            recurrence: defaults.recurrence,
+            scheduled_start_utc: defaults.scheduled_start_utc,
+            scheduled_end_utc: defaults.scheduled_end_utc,
+            scheduled_start_local: defaults.scheduled_start_local,
+            scheduled_end_local: defaults.scheduled_end_local,
+            timezone: defaults.timezone,
+          };
+
+          if (bldgUserId) {
+            await insertChatMessage({
+              bldgUserId,
+              role: "assistant",
+              content: confirmText,
+              metadata: {
+                type: "booking",
+                serviceRequestId,
+                ...bookingMeta,
+              },
+            });
+          }
+
+          return {
+            role: "assistant" as const,
+            content: confirmText,
+            booking: {
+              serviceRequestId,
+              service: serviceLabel,
+              date: defaults.date,
+              window: defaults.window,
+              recurrence: defaults.recurrence,
+            },
+          };
+        }
+      }
+      // ─── END FAST-PATH ───
 
       // ─── POST-BOOKING COLLECTION FLOW (legacy steps 1-4) ───
       // Step 0 (NOT_STARTED) = fresh user, let them through to LLM/booking.
