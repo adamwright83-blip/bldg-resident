@@ -210,6 +210,57 @@ export function getOnboardingMessage(serviceCategory: string): string | null {
   return null;
 }
 
+const MANUAL_SERVICE_REQUESTS = [
+  { category: "grooming", label: "Dog Grooming", patterns: [/^dog\s+groom/i, /^groom/i] },
+  { category: "cleaning", label: "Cleaning", patterns: [/^cleaning/i, /^house\s+clean/i, /^apartment\s+clean/i] },
+  { category: "car-wash", label: "Car Wash", patterns: [/^car\s*wash/i] },
+  { category: "handyman", label: "Handyman", patterns: [/^handyman/i] },
+  { category: "assembly", label: "Assembly", patterns: [/^assembly/i, /^furniture\s+assembly/i] },
+  { category: "pet-sitting", label: "Pet Sitting", patterns: [/^pet\s+sitting/i, /^dog\s+sitting/i] },
+] as const;
+
+function extractManualServiceRequest(text: string): {
+  serviceCategory: string;
+  serviceLabel: string;
+  timing: string;
+  notes: string;
+} | null {
+  const raw = text.trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  const timingMatch = lower.match(/\b(asap|tomorrow|this week)\b/i);
+
+  for (const svc of MANUAL_SERVICE_REQUESTS) {
+    if (!svc.patterns.some((pattern) => pattern.test(normalized))) continue;
+
+    const timing = timingMatch?.[1]
+      ? timingMatch[1].toLowerCase() === "asap"
+        ? "ASAP"
+        : timingMatch[1].toLowerCase() === "this week"
+        ? "This week"
+        : "Tomorrow"
+      : "Requested timing not specified";
+
+    const sentenceParts = normalized
+      .split(".")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const notes = sentenceParts.slice(1).join(". ").trim();
+
+    return {
+      serviceCategory: svc.category,
+      serviceLabel: svc.label,
+      timing,
+      notes,
+    };
+  }
+
+  return null;
+}
+
 // ─── Post-booking collection handler ───
 
 /**
@@ -1237,6 +1288,47 @@ export const chatRouter = router({
         }
       }
       // ─── END FAST-PATH ───
+
+      // ─── MANUAL SERVICE ALERT PATH ───
+      // Unsupported/non-instant services should notify ops without creating
+      // a fake order or admin intake row.
+      {
+        const manualRequest = extractManualServiceRequest(input.content);
+        if (manualRequest) {
+          const residentName =
+            [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Resident";
+          const building = user.buildingSlug || "—";
+          const unit = user.unit || "—";
+
+          try {
+            await sendOwnerAlert({
+              serviceCategory: manualRequest.serviceLabel,
+              residentName,
+              building,
+              unit,
+              scheduledWindow: manualRequest.timing,
+              notes: manualRequest.notes || undefined,
+              action: "service_request",
+            });
+          } catch (err) {
+            console.error("[ownerNotify] Failed to send manual service alert:", err);
+          }
+
+          const acknowledgement = `${manualRequest.serviceLabel} request noted. We'll confirm timing shortly.`;
+
+          await insertChatMessage({
+            bldgUserId,
+            role: "assistant",
+            content: acknowledgement,
+          });
+
+          return {
+            role: "assistant" as const,
+            content: acknowledgement,
+            booking: null,
+          };
+        }
+      }
 
       // ─── POST-BOOKING COLLECTION FLOW (legacy steps 1-4) ───
       // Step 0 (NOT_STARTED) = fresh user, let them through to LLM/booking.

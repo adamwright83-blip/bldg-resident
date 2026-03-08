@@ -11,8 +11,10 @@ export type OwnerAlertPayload = {
   residentName: string;
   unit: string;
   scheduledWindow: string;
+  building?: string;
+  notes?: string;
   vendor?: string;
-  action: "booking_created" | "booking_modified" | "booking_cancelled";
+  action: "booking_created" | "booking_modified" | "booking_cancelled" | "service_request";
 };
 
 /**
@@ -37,13 +39,17 @@ export async function sendOwnerAlert(payload: OwnerAlertPayload): Promise<boolea
       ? "New booking"
       : action === "booking_modified"
       ? "Modified booking"
+      : action === "service_request"
+      ? "Service request"
       : "Cancelled booking";
 
   const title = `${actionLabel}: ${serviceCategory}`;
   const content = [
     `Resident: ${residentName} (Unit ${unit})`,
+    building ? `Building: ${building}` : null,
     `Service: ${serviceCategory}`,
     `Window: ${scheduledWindow}`,
+    notes ? `Notes: ${notes}` : null,
     vendor ? `Vendor: ${vendor}` : null,
   ]
     .filter(Boolean)

@@ -15,7 +15,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight } from "lucide-react";
+import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight, ArrowLeft } from "lucide-react";
 import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
@@ -146,17 +146,107 @@ interface ServiceGridItem {
   label: string;
   prompt: string;
   icon: React.ReactNode;
+  provider: string;
+  trustCopy: string;
 }
 const SERVICES_GRID: ServiceGridItem[] = [
-  { id: "grooming", label: "Dog Grooming", prompt: "Book dog grooming appointment", icon: <DogIcon /> },
-  { id: "cleaning", label: "Cleaning", prompt: "Schedule cleaning service", icon: <CleaningIcon /> },
-  { id: "laundry", label: "Laundry", prompt: "Schedule laundry pickup", icon: <LaundryIcon /> },
-  { id: "dry-cleaning", label: "Dry Cleaning", prompt: "Schedule dry cleaning pickup", icon: <DryCleanIcon /> },
-  { id: "car-wash", label: "Car Wash", prompt: "Schedule car wash", icon: <CarIcon /> },
-  { id: "handyman", label: "Handyman", prompt: "Schedule handyman", icon: <Wrench size={32} strokeWidth={1.5} /> },
-  { id: "assembly", label: "Assembly", prompt: "Schedule furniture assembly", icon: <Puzzle size={32} strokeWidth={1.5} /> },
-  { id: "pet-sitting", label: "Pet Sitting", prompt: "Schedule pet sitting", icon: <HomeIcon size={32} strokeWidth={1.5} /> },
+  {
+    id: "grooming",
+    label: "Dog Grooming",
+    prompt: "Book dog grooming appointment",
+    icon: <DogIcon />,
+    provider: "Current building provider",
+    trustCopy: "Handled through the building’s current grooming provider.",
+  },
+  {
+    id: "cleaning",
+    label: "Cleaning",
+    prompt: "Schedule cleaning service",
+    icon: <CleaningIcon />,
+    provider: "Current building provider",
+    trustCopy: "Handled through the building’s current cleaning provider.",
+  },
+  {
+    id: "laundry",
+    label: "Laundry",
+    prompt: "Schedule laundry pickup",
+    icon: <LaundryIcon />,
+    provider: "Laundry Butler",
+    trustCopy: "Handled through the building’s current laundry provider.",
+  },
+  {
+    id: "dry-cleaning",
+    label: "Dry Cleaning",
+    prompt: "Schedule dry cleaning pickup",
+    icon: <DryCleanIcon />,
+    provider: "Laundry Butler",
+    trustCopy: "Handled through the building’s current dry-cleaning provider.",
+  },
+  {
+    id: "car-wash",
+    label: "Car Wash",
+    prompt: "Schedule car wash",
+    icon: <CarIcon />,
+    provider: "Current building provider",
+    trustCopy: "Handled through the building’s current car-wash provider.",
+  },
+  {
+    id: "handyman",
+    label: "Handyman",
+    prompt: "Schedule handyman",
+    icon: <Wrench size={32} strokeWidth={1.5} />,
+    provider: "Current building provider",
+    trustCopy: "Handled through the building’s current handyman provider.",
+  },
+  {
+    id: "assembly",
+    label: "Assembly",
+    prompt: "Schedule furniture assembly",
+    icon: <Puzzle size={32} strokeWidth={1.5} />,
+    provider: "Current building provider",
+    trustCopy: "Handled through the building’s current assembly provider.",
+  },
+  {
+    id: "pet-sitting",
+    label: "Pet Sitting",
+    prompt: "Schedule pet sitting",
+    icon: <HomeIcon size={32} strokeWidth={1.5} />,
+    provider: "Current building provider",
+    trustCopy: "Handled through the building’s current pet-sitting provider.",
+  },
 ];
+
+type ServiceTimingChoice = "ASAP" | "Tomorrow" | "This week";
+const SERVICE_TIMING_CHOICES: ServiceTimingChoice[] = ["ASAP", "Tomorrow", "This week"];
+
+function formatServiceTiming(choice: ServiceTimingChoice): string {
+  if (choice === "ASAP") return "ASAP";
+  if (choice === "Tomorrow") return "tomorrow";
+  return "this week";
+}
+
+function buildServiceDraft(
+  service: ServiceGridItem,
+  timing: ServiceTimingChoice,
+  preferredTiming: string,
+  notes: string
+): string {
+  const sentences = [`${service.label} ${formatServiceTiming(timing)}.`];
+
+  if (service.id === "laundry" || service.id === "dry-cleaning") {
+    sentences.push("Pickup window 7–10 AM.");
+  }
+
+  if (preferredTiming.trim()) {
+    sentences.push(`Preferred timing: ${preferredTiming.trim().replace(/[.]+$/, "")}.`);
+  }
+
+  if (notes.trim()) {
+    sentences.push(`${notes.trim().replace(/[.]+$/, "")}.`);
+  }
+
+  return sentences.join(" ");
+}
 
 // ─── Type definitions ───
 
@@ -632,6 +722,10 @@ export default function Home() {
   const [revealedBeats, setRevealedBeats] = useState<Set<number>>(new Set());
   const greetingInitializedRef = useRef(false);
   const [servicesMode, setServicesMode] = useState(false);
+  const [selectedService, setSelectedService] = useState<ServiceGridItem | null>(null);
+  const [serviceTiming, setServiceTiming] = useState<ServiceTimingChoice>("ASAP");
+  const [servicePreferredTiming, setServicePreferredTiming] = useState("");
+  const [serviceNotes, setServiceNotes] = useState("");
   const [showVault, setShowVault] = useState(false);
   // #1: Send animation states
   const [sendBtnCompress, setSendBtnCompress] = useState(false);
@@ -1455,6 +1549,43 @@ export default function Home() {
     }
   };
 
+  const resetServiceDetail = useCallback(() => {
+    setSelectedService(null);
+    setServiceTiming("ASAP");
+    setServicePreferredTiming("");
+    setServiceNotes("");
+  }, []);
+
+  const handleServicesPillToggle = useCallback(() => {
+    if (servicesMode) {
+      resetServiceDetail();
+      setServicesMode(false);
+      return;
+    }
+    setServicesMode(true);
+  }, [servicesMode, resetServiceDetail]);
+
+  const openServiceDetail = useCallback((service: ServiceGridItem) => {
+    setSelectedService(service);
+    setServiceTiming("ASAP");
+    setServicePreferredTiming("");
+    setServiceNotes("");
+  }, []);
+
+  const handleAddServiceToChat = useCallback(() => {
+    if (!selectedService) return;
+    const draft = buildServiceDraft(
+      selectedService,
+      serviceTiming,
+      servicePreferredTiming,
+      serviceNotes
+    );
+    setInput(draft);
+    resetServiceDetail();
+    setServicesMode(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [selectedService, serviceTiming, servicePreferredTiming, serviceNotes, resetServiceDetail]);
+
   return (
     // #6: Night mode class on app shell; services-mode swaps palette
     <div
@@ -1501,42 +1632,116 @@ export default function Home() {
         style={servicesMode ? { background: "#F5F0E8", color: "#2C2824" } : undefined}
       >
         {servicesMode ? (
-          /* ─── Services mode only: no chat layer ─── */
-          <div className="services-mode-panel">
-            <div className="services-mode-block">
-              <h2 className="services-mode-heading">What do you need handled?</h2>
-              <p className="services-mode-subcopy">Choose a service.</p>
-              <div className="services-mode-grid">
-                {SERVICES_GRID.map((svc) => (
+          selectedService ? (
+            <div className="services-detail-panel">
+              <div className="services-detail-block">
+                <div className="services-detail-header">
                   <button
-                    key={svc.id}
                     type="button"
-                    className="services-mode-card tappable"
-                    onClick={() => {
-                      setServicesMode(false);
-                      setInput(svc.prompt);
-                      requestAnimationFrame(() => inputRef.current?.focus());
-                    }}
+                    className="services-detail-back tappable"
+                    onClick={resetServiceDetail}
                   >
-                    <span className="services-mode-card-icon">{svc.icon}</span>
-                    <span className="services-mode-card-label">{svc.label}</span>
+                    <ArrowLeft size={16} strokeWidth={1.8} />
+                    <span>Back</span>
                   </button>
-                ))}
+                  <h2 className="services-detail-title">{selectedService.label}</h2>
+                </div>
+
+                <div className="services-detail-card">
+                  <div className="services-detail-provider-label">Provider</div>
+                  <div className="services-detail-provider-value">{selectedService.provider}</div>
+                  <p className="services-detail-trust">{selectedService.trustCopy}</p>
+
+                  <div className="services-detail-section">
+                    <div className="services-detail-section-label">Timing</div>
+                    <div className="services-detail-timing-group" role="tablist" aria-label="Timing">
+                      {SERVICE_TIMING_CHOICES.map((choice) => (
+                        <button
+                          key={choice}
+                          type="button"
+                          className={`services-detail-timing-chip ${serviceTiming === choice ? "services-detail-timing-chip-active" : ""}`}
+                          onClick={() => setServiceTiming(choice)}
+                        >
+                          {choice}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="services-detail-section">
+                    <label className="services-detail-section-label" htmlFor="service-preferred-timing">
+                      Preferred timing (optional)
+                    </label>
+                    <input
+                      id="service-preferred-timing"
+                      type="text"
+                      value={servicePreferredTiming}
+                      onChange={(e) => setServicePreferredTiming(e.target.value)}
+                      className="services-detail-input"
+                      placeholder="Any timing preference?"
+                    />
+                  </div>
+
+                  <div className="services-detail-section">
+                    <label className="services-detail-section-label" htmlFor="service-notes">
+                      Anything we should know?
+                    </label>
+                    <textarea
+                      id="service-notes"
+                      value={serviceNotes}
+                      onChange={(e) => setServiceNotes(e.target.value)}
+                      className="services-detail-textarea"
+                      rows={4}
+                      placeholder="Optional notes"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="services-detail-cta tappable"
+                    onClick={handleAddServiceToChat}
+                  >
+                    Add to chat
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                className="services-mode-ask-row"
-                onClick={() => {
-                  setServicesMode(false);
-                  requestAnimationFrame(() => inputRef.current?.focus());
-                }}
-              >
-                Need something more specific? Ask instead
-                <ArrowRight size={14} strokeWidth={2} className="services-mode-ask-arrow" />
-              </button>
+              <div className="services-mode-spacer" aria-hidden />
             </div>
-            <div className="services-mode-spacer" aria-hidden />
-          </div>
+          ) : (
+            /* ─── Services mode only: no chat layer ─── */
+            <div className="services-mode-panel">
+              <div className="services-mode-block">
+                <h2 className="services-mode-heading">What do you need handled?</h2>
+                <p className="services-mode-subcopy">Choose a service.</p>
+                <div className="services-mode-grid">
+                  {SERVICES_GRID.map((svc) => (
+                    <button
+                      key={svc.id}
+                      type="button"
+                      className="services-mode-card tappable"
+                      onClick={() => openServiceDetail(svc)}
+                    >
+                      <span className="services-mode-card-icon">{svc.icon}</span>
+                      <span className="services-mode-card-label">{svc.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="services-mode-ask-row"
+                  onClick={() => {
+                    resetServiceDetail();
+                    setServicesMode(false);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                >
+                  Need something more specific? Ask instead
+                  <ArrowRight size={14} strokeWidth={2} className="services-mode-ask-arrow" />
+                </button>
+              </div>
+              <div className="services-mode-spacer" aria-hidden />
+            </div>
+          )
         ) : (
           /* ─── Chat mode only: overscroll glow + empty state OR message list ─── */
           <>
@@ -1817,7 +2022,7 @@ export default function Home() {
           <button
             type="button"
             className={`services-pill ${servicesMode ? "services-pill-active" : ""}`}
-            onClick={() => setServicesMode(!servicesMode)}
+            onClick={handleServicesPillToggle}
           >
             <LayoutGrid size={14} />
             <span>Services</span>
