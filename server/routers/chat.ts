@@ -136,7 +136,7 @@ export function getOnboardingMessage(serviceCategory: string): string | null {
   }
 
   if (serviceCategory === "dry-cleaning") {
-    return `**How dry cleaning pickup works:**\n\n![Garments at door](https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/FADWzLDauMlhYQCv.png)\n\n**1. Leave your garments outside your door** before the pickup window.\n\n![Laundry handoff](https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/swuGJPvocTlnJKeu.png)\n\n**2. We'll text you 10 min before arrival.** You don't need to be home.\n\nStandard turnaround: 2 business days. We'll text you when your order is ready.`;
+    return `**How dry cleaning pickup works:**\n\n![Garments at door](https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/FADWzLDauMlhYQCv.png)\n\n**1. Leave your garments outside your door** before the pickup window, or hand them directly to the driver.\n\n![Laundry handoff](https://files.manuscdn.com/user_upload_by_module/session_file/310419663029845795/swuGJPvocTlnJKeu.png)\n\n**2. You'll receive a text the moment your driver is on the way.**\n\nYour dry cleaning will be back in 2 business days. Need it faster? If we pick up before 8:30am, we can turn it same day — just say "same day" and it's done.\n\nNeed to leave garment notes? You can review them with the driver at pickup. You can also call or text us anytime via the icons top right.\n\nReceipts and service history live in Services → Vault.\n\nDry cleaning, detailing, grooming—all at your door. We bring the best of Los Angeles to you, exactly when you need it.`;
   }
 
   if (serviceCategory === "car-wash") {
@@ -988,6 +988,10 @@ export const chatRouter = router({
         }
       }
 
+      // ─── SAME-DAY DETECTION ───
+      // Detects "same day" / "same-day" anywhere in the user message.
+      const detectSameDay = (text: string): boolean => /same[\s-]?day/i.test(text);
+
       // ─── FAST-PATH: simple service-only intents bypass the LLM ───
       // Recognizes bare dry-cleaning (and laundry) phrases so they always produce
       // a booking without going through the LLM, eliminating "I'm having a moment"
@@ -1011,9 +1015,15 @@ export const chatRouter = router({
             dateTimeIntent.windowOverride
           );
 
-          // Display label for the service
+          // Detect same-day request in the user message
+          const fpSameDay = detectSameDay(input.content);
+
+          // Display label and customer-facing confirmation copy
           const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
-          const confirmText = `${serviceLabel} booked for ${defaults.date}, ${defaults.window}.`;
+          const confirmText =
+            fpSameDay && simpleService === "dry-cleaning"
+              ? `Dry Cleaning booked for ${defaults.date}, ${defaults.window}. Same-day requested. If we pick up before 8:30am, we'll process it for same-day return.`
+              : `${serviceLabel} booked for ${defaults.date}, ${defaults.window}.`;
 
           // Duplicate booking guard
           const duplicate = await findDuplicateBooking(bldgUserId, simpleService);
@@ -1035,10 +1045,103 @@ export const chatRouter = router({
               scheduledStartLocal: defaults.scheduled_start_local,
               scheduledEndLocal: defaults.scheduled_end_local,
               timezone: defaults.timezone,
-              requestJson: { recurrence: defaults.recurrence },
+              requestJson: {
+                recurrence: defaults.recurrence,
+                ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
+              },
             });
             serviceRequestId = sr.id;
             console.log(`[FastPath] Created service_request #${sr.id}: ${simpleService}`);
+
+            // Fire-and-forget: mirror booking into bldg-admin-api
+            (async () => {
+              try {
+                const adminApiUrl = (
+                  process.env.ADMIN_API_URL ||
+                  "https://bldg-admin-api-production.up.railway.app"
+                ).replace(/\/$/, "");
+                const sharedSecret = process.env.APP_SHARED_API_SECRET;
+
+                const windowParts = defaults.window.match(/(\d+(?::\d+)?)\s*[–\-]\s*(\d+(?::\d+)?)\s*(AM|PM)?/i);
+                const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
+                const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
+
+                const freshUser = await getBldgUserById(bldgUserId);
+                // Use hyphen-form comparison — simpleService is "dry-cleaning", not "dry_cleaning"
+                const fpServiceType = simpleService === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
+
+                const BUILDING_ADDRESSES: Record<string, string> = {
+                  "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
+                  "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
+                  "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
+                  "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
+                };
+                const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
+                const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+
+                const firstName = (freshUser?.firstName || user?.firstName || "").trim();
+                const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
+                const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
+
+                const pickupDateISO = parseDisplayDateToISO(defaults.date);
+
+                if (!firstName || !lastName) {
+                  console.log(`[INTAKE][FastPath] skipping — names not yet collected (bldgUserId=${bldgUserId}, sr=${sr.id}). Will send from stripe.ts after payment.`);
+                  return;
+                }
+
+                const fpSpecialInstructions = fpSameDay ? "Same-day requested." : undefined;
+
+                const intakePayload = {
+                  externalId: `bldg-sr-${sr.id}`,
+                  source: "bldg-resident",
+                  status: "new",
+                  serviceType: fpServiceType,
+                  pickupDate: pickupDateISO,
+                  pickupWindow: defaults.window,
+                  pickupWindowStart,
+                  pickupWindowEnd,
+                  address,
+                  buildingId: buildingSlug || null,
+                  unit: freshUser?.unit || user?.unit || null,
+                  firstName,
+                  lastName,
+                  phone,
+                  bldgUserId: bldgUserId ?? null,
+                  stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
+                  stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+                  ...(fpSpecialInstructions ? { specialInstructions: fpSpecialInstructions } : {}),
+                };
+
+                console.log("[INTAKE][FastPath] sending", JSON.stringify(intakePayload, null, 2));
+
+                const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-app-shared-secret": sharedSecret || "",
+                  },
+                  body: JSON.stringify(intakePayload),
+                });
+
+                const responseText = await fwdRes.text().catch(() => "(no body)");
+                console.log(`[INTAKE][FastPath] response status=${fwdRes.status} body=${responseText}`);
+
+                if (fwdRes.ok) {
+                  try {
+                    const body = JSON.parse(responseText) as { orderId?: number };
+                    if (body?.orderId != null && Number.isFinite(Number(body.orderId))) {
+                      await updateServiceRequest(sr.id, { orderId: Number(body.orderId) });
+                      console.log(`[INTAKE][FastPath] stored orderId=${body.orderId} on service_request #${sr.id}`);
+                    }
+                  } catch (_) {
+                    // ignore parse errors
+                  }
+                }
+              } catch (err) {
+                console.error("[INTAKE][FastPath] failed to forward booking:", err);
+              }
+            })();
           }
 
           const bookingMeta = {
@@ -1329,6 +1432,9 @@ export const chatRouter = router({
               timezone: bookingMeta.timezone,
               requestJson: {
                 recurrence: bookingMeta.recurrence,
+                ...(detectSameDay(input.content) && serviceCategory === "dry-cleaning"
+                  ? { requestedSameDay: true }
+                  : {}),
               },
             });
 
@@ -1356,7 +1462,8 @@ export const chatRouter = router({
                 const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : bookingMeta.window;
 
                 const freshUser = await getBldgUserById(bldgUserId);
-                const serviceType = serviceCategory === "dry_cleaning" ? "dry_cleaning" : "wash_fold";
+                // Use hyphen-form comparison — serviceCategory is "dry-cleaning", not "dry_cleaning"
+                const serviceType = serviceCategory === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
 
                 // Map building slug → real street address
                 const BUILDING_ADDRESSES: Record<string, string> = {
@@ -1374,6 +1481,10 @@ export const chatRouter = router({
 
                 // Convert display date "Saturday, Feb 28" → ISO "2026-02-28"
                 const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
+
+                // Detect same-day request from original user message
+                const llmSameDay = detectSameDay(input.content);
+                const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
 
                 // Names are collected AFTER booking (name card appears post-confirmation).
                 // If missing here, log and skip — stripe.ts will send the complete record
@@ -1401,6 +1512,7 @@ export const chatRouter = router({
                   bldgUserId: bldgUserId ?? null,
                   stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
                   stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+                  ...(llmSpecialInstructions ? { specialInstructions: llmSpecialInstructions } : {}),
                 };
 
                 console.log("[INTAKE] sending", JSON.stringify(intakePayload, null, 2));
@@ -1516,6 +1628,17 @@ export const chatRouter = router({
           }
           
           // Intake forwarding is handled above in the fire-and-forget block (new bookings only).
+        }
+
+        // For dry-cleaning LLM bookings with same-day intent, append acknowledgment to displayContent
+        if (
+          bookingMeta &&
+          serviceCategory === "dry-cleaning" &&
+          detectSameDay(input.content)
+        ) {
+          displayContent = displayContent
+            ? `${displayContent}\n\nSame-day requested. If we pick up before 8:30am, we'll process it for same-day return.`
+            : `Same-day requested. If we pick up before 8:30am, we'll process it for same-day return.`;
         }
 
         // Store the assistant's response
