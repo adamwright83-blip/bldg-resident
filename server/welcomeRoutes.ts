@@ -350,10 +350,13 @@ export function registerWelcomeRoutes(app: Router): void {
       const firstName = payload.firstName as string | undefined;
       const orderId = payload.orderId as string | undefined;
       const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
+      const payloadBuilding = payload.buildingSlug as string | undefined;
       const buildingSlug =
-        hostBuilding?.slug ??
-        (payload.buildingSlug as string | undefined) ??
-        "3545";
+        hostBuilding?.slug ?? payloadBuilding ?? "3545";
+
+      if (!hostBuilding?.slug && payloadBuilding == null) {
+        console.warn("[Welcome] No building context from host or JWT; defaulting buildingSlug to 3545");
+      }
 
       if (!phone || !orderId) {
         console.error("[Welcome] JWT missing required fields (phone, orderId)");

@@ -12,16 +12,18 @@ Tower identity is **address-number based**. The canonical tower numbers are **35
 
 3. **From OTP**: Client sends **buildingSlug** in the body; it is stored on the user. It may be a tower number (3545, …) or a legacy slug (opusla, opus-south, …). Intake normalizes to tower when building the payload.
 
-4. **From welcome handoff**: JWT may contain **buildingSlug**; host is preferred, then payload, then fallback **3545**.
+4. **From welcome handoff**: JWT may contain **buildingSlug**; host is preferred, then payload, then fallback **3545** (see below).
 
 ## Canonical mapping table (implemented)
 
+Addresses are exact from building records; no inferred city/state/ZIP.
+
 | Tower ID | Full address (intake payload) |
 |----------|-------------------------------|
-| 3545     | 3545 Wilshire Blvd, Los Angeles, CA 90048 |
-| 3650     | 3650 6th St, Los Angeles, CA 90014       |
-| 2160     | 2160 Century Pk E, Los Angeles, CA 90067 |
-| 2170     | 2170 Century Pk E, Los Angeles, CA 90067 |
+| 3545     | 3545 Wilshire Blvd |
+| 3650     | 3650 6th St |
+| 2160     | 2160 Century Pk E |
+| 2170     | 2170 Century Pk E |
 
 Legacy slugs normalize to tower ID:
 
@@ -37,9 +39,19 @@ Legacy slugs normalize to tower ID:
 
 | Tower | buildingId | address |
 |-------|------------|---------|
-| 3545  | `3545`     | `3545 Wilshire Blvd, Los Angeles, CA 90048` |
-| 3650  | `3650`     | `3650 6th St, Los Angeles, CA 90014` |
-| 2160  | `2160`     | `2160 Century Pk E, Los Angeles, CA 90067` |
-| 2170  | `2170`     | `2170 Century Pk E, Los Angeles, CA 90067` |
+| 3545  | `3545`     | `3545 Wilshire Blvd` |
+| 3650  | `3650`     | `3650 6th St` |
+| 2160  | `2160`     | `2160 Century Pk E` |
+| 2170  | `2170`     | `2170 Century Pk E` |
+
+Unknown tower: `address` is sent as `Address unknown` (no guessed address).
 
 Source of truth: `shared/intakeBuilding.ts` (`TOWER_ADDRESSES`, `LEGACY_SLUG_TO_TOWER`) and `shared/buildingHostMap.ts` (host → slug = tower number).
+
+## Default `3545` usage (audit)
+
+| Location | Usage | Intentional? |
+|----------|--------|---------------|
+| **server/welcomeRoutes.ts** (handoff) | When `hostBuilding?.slug` and JWT `buildingSlug` are both missing, `buildingSlug` is set to `"3545"`. | **Real default**: Allows handoff to complete when user lands without tower context (e.g. app.bldg.chat link with no host/payload). A warning is logged: `[Welcome] No building context from host or JWT; defaulting buildingSlug to 3545`. Consider replacing with hard failure or explicit missing-building handling if silent misrouting is unacceptable. |
+| shared/buildingHostMap.ts | Map entry for subdomain `3545` → slug `3545`. | Not a default; defines the 3545 tower. |
+| shared/intakeBuilding.ts | Legacy slug `opusla` (and `opus-south`) resolve to tower `3545`. | Not a default; normalization of legacy identifiers. |

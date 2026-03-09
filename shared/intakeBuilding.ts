@@ -15,12 +15,12 @@
 export const TOWER_IDS = ["3545", "3650", "2160", "2170"] as const;
 export type TowerId = (typeof TOWER_IDS)[number];
 
-/** Full address by tower ID (for driver/admin intake payload). */
+/** Full address by tower ID (for driver/admin intake payload). Exact strings from building records; no inferred city/state/ZIP. */
 const TOWER_ADDRESSES: Record<string, string> = {
-  "3545": "3545 Wilshire Blvd, Los Angeles, CA 90048",
-  "3650": "3650 6th St, Los Angeles, CA 90014",
-  "2160": "2160 Century Pk E, Los Angeles, CA 90067",
-  "2170": "2170 Century Pk E, Los Angeles, CA 90067",
+  "3545": "3545 Wilshire Blvd",
+  "3650": "3650 6th St",
+  "2160": "2160 Century Pk E",
+  "2170": "2170 Century Pk E",
 };
 
 /** Legacy slugs (onboarding, old DB) → canonical tower ID. */
@@ -32,7 +32,8 @@ const LEGACY_SLUG_TO_TOWER: Record<string, string> = {
   "cpe-south": "2170",
 };
 
-const FALLBACK_ADDRESS = "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+/** Used when tower is unknown (no guessed address; avoids silent misrouting). */
+const FALLBACK_ADDRESS = "Address unknown";
 
 /**
  * Resolve any session/onboarding building slug to the canonical tower ID
