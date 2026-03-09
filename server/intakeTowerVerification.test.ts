@@ -4,7 +4,7 @@
  * 1. Each known tower (3545, 3650, 2160, 2170) resolves to correct buildingId and exact address.
  * 2. Legacy slugs normalize to the correct tower and address.
  * 3. Unknown slug yields "Address unknown" (no guessed address).
- * 4. Payload shape supports firstName-only (lastName optional).
+ * 4. Payload shape (buildingId, address, firstName, lastName).
  *
  * Manual checks (run against live/staging):
  * - Where the order lands on admin/driver side per tower.
@@ -53,7 +53,7 @@ describe("Intake tower verification", () => {
       }
     );
 
-    it("firstName-only: payload has buildingId and address from buildingSlug only", () => {
+    it("payload has buildingId and address from buildingSlug", () => {
       const buildingSlug = "3650";
       const buildingId = resolveIntakeBuildingKey(buildingSlug);
       const address = getAddressForIntakeKey(buildingId);
@@ -61,12 +61,12 @@ describe("Intake tower verification", () => {
         buildingId: buildingId || null,
         address,
         firstName: "Alex",
-        lastName: ("" as string).trim(),
+        lastName: "Smith",
       };
       expect(payload.buildingId).toBe("3650");
       expect(payload.address).toBe("3650 6th St");
       expect(payload.firstName).toBe("Alex");
-      expect(payload.lastName).toBe("");
+      expect(payload.lastName).toBe("Smith");
     });
   });
 

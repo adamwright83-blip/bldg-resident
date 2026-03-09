@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../_core/trpc";
 import { createStripeCustomer } from "../lib/stripeHelper";
-import { getBldgUserById, insertChatMessage, updateBldgUser, getServiceRequests, updateServiceRequest, hasShownOnboarding, markOnboardingShown } from "../db";
+import { getBldgUserById, insertChatMessage, updateBldgUser, getServiceRequests, updateServiceRequest, createServiceRequest, hasShownOnboarding, markOnboardingShown } from "../db";
 import { getOnboardingMessage } from "./chat";
 import { createOpsPickup } from "../opsIntegration";
 import { getDb } from "../db";
@@ -162,6 +162,36 @@ export const stripeRouter = router({
         console.error("[Onboarding] Failed to insert instructional images:", err);
       }
 
+      // ─── DEFERRED BOOKING: execute tutorial pending intent if any ───
+      const completedUser = await getBldgUserById(bldgUserId);
+      const pendingIntent = (completedUser as any)?.pendingBookingIntentJson;
+      if (pendingIntent && typeof pendingIntent === "object") {
+        console.log("[TUTORIAL] executing deferred booking");
+        try {
+          const sr = await createServiceRequest({
+            bldgUserId,
+            serviceType: (pendingIntent.serviceType === "dry-cleaning" ? "dry-cleaning" : "laundry") as any,
+            status: "pending",
+            requestSummary: `${pendingIntent.serviceType} — ${pendingIntent.date} ${pendingIntent.timeWindow}`,
+            scheduledDate: pendingIntent.date,
+            scheduledWindow: pendingIntent.timeWindow,
+            scheduledStartUtc: pendingIntent.scheduled_start_utc ?? null,
+            scheduledEndUtc: pendingIntent.scheduled_end_utc ?? null,
+            scheduledStartLocal: pendingIntent.scheduled_start_local ?? null,
+            scheduledEndLocal: pendingIntent.scheduled_end_local ?? null,
+            timezone: pendingIntent.timezone ?? "America/Los_Angeles",
+            requestJson: {
+              recurrence: pendingIntent.recurrence ?? null,
+              ...(pendingIntent.sameDay ? { requestedSameDay: true } : {}),
+            },
+          });
+          await updateBldgUser(bldgUserId, { pendingBookingIntentJson: null } as any);
+          console.log(`[TUTORIAL] created service_request #${sr.id} from pending intent`);
+        } catch (err) {
+          console.error("[TUTORIAL] Failed to create deferred booking:", err);
+        }
+      }
+
       // ─── INTAKE FORWARD — send complete order to admin API after payment ───
       // Names are guaranteed here (name card runs before payment card).
       // Uses same externalId as the booking-creation attempt so the admin
@@ -175,19 +205,19 @@ export const stripeRouter = router({
 
           const sharedSecret = process.env.APP_SHARED_API_SECRET;
 
-          const completedUser = await getBldgUserById(bldgUserId);
+          const completedUserForIntake = await getBldgUserById(bldgUserId);
           const requests = await getServiceRequests(bldgUserId);
           const pendingBookings = requests.filter(
             (r: any) => r.status === "pending" || r.status === "confirmed"
           );
 
-          const sessionSlug = completedUser?.buildingSlug || "";
+          const sessionSlug = completedUserForIntake?.buildingSlug || "";
           const intakeBuildingKey = resolveIntakeBuildingKey(sessionSlug);
           const address = getAddressForIntakeKey(intakeBuildingKey);
 
-          const firstName = (completedUser?.firstName || "").trim() || "Resident";
-          const lastName  = ((completedUser?.lastName ?? "") || "").trim() || "Resident";
-          const phone     = completedUser?.phoneE164 || "";
+          const firstName = (completedUserForIntake?.firstName || "").trim() || "Resident";
+          const lastName  = ((completedUserForIntake?.lastName ?? "") || "").trim() || "Resident";
+          const phone     = completedUserForIntake?.phoneE164 || "";
 
           for (const booking of pendingBookings) {
             const serviceType = booking.serviceType === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
@@ -207,13 +237,13 @@ export const stripeRouter = router({
               pickupWindow: booking.scheduledWindow || "",
               address,
               buildingId: intakeBuildingKey || null,
-              unit: completedUser?.unit || null,
+              unit: completedUserForIntake?.unit || null,
               firstName,
               lastName,
               phone,
               bldgUserId,
               stripeCustomerId: customerId,
-              stripePaymentMethodId: completedUser?.stripePaymentMethodId || null,
+              stripePaymentMethodId: completedUserForIntake?.stripePaymentMethodId || null,
             };
 
             console.log("[INTAKE] post-payment sending", JSON.stringify(intakePayload, null, 2));

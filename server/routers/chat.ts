@@ -1124,6 +1124,57 @@ export const chatRouter = router({
           );
           console.log(`[ResidentBooking][FastPath] booking defaults resolved: ${defaults.date} ${defaults.window}`);
 
+          const freshUser = await getBldgUserById(bldgUserId);
+          const tutorialMode =
+            !(freshUser?.firstName ?? user?.firstName)?.trim() ||
+            !(freshUser?.lastName ?? user?.lastName)?.trim() ||
+            !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved);
+
+          if (tutorialMode) {
+            const fpSameDay = detectSameDay(input.content);
+            const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
+            const confirmText =
+              fpSameDay && simpleService === "dry-cleaning"
+                ? `Dry Cleaning booked for ${defaults.date}, ${defaults.window}. Same-day requested. If we pick up before 8:30am, we'll process it for same-day return.`
+                : `${serviceLabel} booked for ${defaults.date}, ${defaults.window}.`;
+            const pendingIntent = {
+              serviceType: simpleService,
+              timeWindow: defaults.window,
+              date: defaults.date,
+              recurrence: defaults.recurrence,
+              scheduled_start_utc: defaults.scheduled_start_utc,
+              scheduled_end_utc: defaults.scheduled_end_utc,
+              scheduled_start_local: defaults.scheduled_start_local,
+              scheduled_end_local: defaults.scheduled_end_local,
+              timezone: defaults.timezone,
+              sameDay: fpSameDay && simpleService === "dry-cleaning",
+            };
+            await updateBldgUser(bldgUserId, {
+              pendingBookingIntentJson: pendingIntent as any,
+            } as any);
+            console.log("[TUTORIAL] storing pending booking intent");
+            const namePrompt = "What name should we use for pickups?";
+            if (bldgUserId) {
+              await insertChatMessage({
+                bldgUserId,
+                role: "assistant",
+                content: `${confirmText}\n\n${namePrompt}`,
+                metadata: { type: "awaiting_name", tutorial: true, service: serviceLabel, date: defaults.date, window: defaults.window, recurrence: defaults.recurrence },
+              });
+            }
+            return {
+              role: "assistant" as const,
+              content: `${confirmText}\n\n${namePrompt}`,
+              booking: {
+                serviceRequestId: 0,
+                service: serviceLabel,
+                date: defaults.date,
+                window: defaults.window,
+                recurrence: defaults.recurrence,
+              },
+            };
+          }
+
           // Detect same-day request in the user message
           const fpSameDay = detectSameDay(input.content);
 
@@ -1150,7 +1201,6 @@ export const chatRouter = router({
           const pickupWindowStart = windowParts ? `${windowParts[1]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
           const pickupWindowEnd   = windowParts ? `${windowParts[2]} ${windowParts[3] || "AM"}`.trim() : defaults.window;
 
-          const freshUser = await getBldgUserById(bldgUserId);
           const fpServiceType = simpleService === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
 
           const sessionSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
@@ -1158,16 +1208,13 @@ export const chatRouter = router({
           const address = getAddressForIntakeKey(intakeBuildingKey);
 
           const firstName = (freshUser?.firstName || user?.firstName || "").trim();
-          const lastName  = ((freshUser?.lastName ?? user?.lastName ?? "") || "").trim();
+          const lastName  = (freshUser?.lastName ?? user?.lastName ?? "")?.trim() ?? "";
           const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
-          if (!firstName) {
-            intakeFailureReason = "missing_firstName";
-            console.warn(`[INTAKE][FastPath] skipped: missing firstName (bldgUserId=${bldgUserId})`);
+          if (!firstName || !lastName || !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved)) {
+            intakeFailureReason = !firstName ? "missing_firstName" : !lastName ? "missing_lastName" : "missing_paymentMethod";
+            console.warn(`[INTAKE][FastPath] blocked: ${intakeFailureReason} (bldgUserId=${bldgUserId})`);
           } else {
-            if (!lastName) {
-              console.log(`[INTAKE][FastPath] proceeding with first name only (no lastName)`);
-            }
             let sr: { id: number };
             if (duplicate) {
               sr = duplicate;
@@ -1211,7 +1258,7 @@ export const chatRouter = router({
               buildingId: intakeBuildingKey || null,
               unit: freshUser?.unit || user?.unit || null,
               firstName,
-              lastName: (lastName || "").trim(),
+              lastName,
               phone,
               bldgUserId: bldgUserId ?? null,
               stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
@@ -1562,6 +1609,53 @@ export const chatRouter = router({
           const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
+          const freshUserForTutorial = await getBldgUserById(bldgUserId);
+          const tutorialMode =
+            !(freshUserForTutorial?.firstName ?? user?.firstName)?.trim() ||
+            !(freshUserForTutorial?.lastName ?? user?.lastName)?.trim() ||
+            !(freshUserForTutorial?.paymentMethodSaved ?? user?.paymentMethodSaved);
+
+          if (isLaundryOrDryCleaning(serviceCategory) && tutorialMode) {
+            const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
+            const confirmText = `${serviceLabel} booked for ${bookingMeta.date}, ${bookingMeta.window}.`;
+            const pendingIntent = {
+              serviceType: serviceCategory,
+              timeWindow: bookingMeta.window,
+              date: bookingMeta.date,
+              recurrence: bookingMeta.recurrence,
+              scheduled_start_utc: bookingMeta.scheduled_start_utc,
+              scheduled_end_utc: bookingMeta.scheduled_end_utc,
+              scheduled_start_local: bookingMeta.scheduled_start_local,
+              scheduled_end_local: bookingMeta.scheduled_end_local,
+              timezone: bookingMeta.timezone,
+              sameDay: detectSameDay(input.content) && serviceCategory === "dry-cleaning",
+            };
+            await updateBldgUser(bldgUserId, {
+              pendingBookingIntentJson: pendingIntent as any,
+            } as any);
+            console.log("[TUTORIAL] storing pending booking intent");
+            const llmNamePrompt = "What name should we use for pickups?";
+            if (bldgUserId) {
+              await insertChatMessage({
+                bldgUserId,
+                role: "assistant",
+                content: `${confirmText}\n\n${llmNamePrompt}`,
+                metadata: { type: "awaiting_name", tutorial: true, service: serviceLabel, date: bookingMeta.date, window: bookingMeta.window, recurrence: bookingMeta.recurrence },
+              });
+            }
+            return {
+              role: "assistant" as const,
+              content: `${confirmText}\n\n${llmNamePrompt}`,
+              booking: {
+                serviceRequestId: 0,
+                service: serviceLabel,
+                date: bookingMeta.date,
+                window: bookingMeta.window,
+                recurrence: bookingMeta.recurrence ?? null,
+              },
+            };
+          }
+
           // Duplicate booking guardrail
           const duplicate = await findDuplicateBooking(
             bldgUserId,
@@ -1625,21 +1719,18 @@ export const chatRouter = router({
             const address = getAddressForIntakeKey(intakeBuildingKey);
 
             const firstName = (freshUser?.firstName || user?.firstName || "").trim();
-            const lastName  = ((freshUser?.lastName ?? user?.lastName ?? "") || "").trim();
+            const lastName  = (freshUser?.lastName ?? user?.lastName ?? "")?.trim() ?? "";
             const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
             const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
             const llmSameDay = detectSameDay(input.content);
             const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
 
-            if (!firstName) {
-              llmIntakeFailureReason = "missing_firstName";
-              console.warn(`[INTAKE][LLM] skipped: missing firstName (bldgUserId=${bldgUserId}, sr=${sr.id})`);
+            if (!firstName || !lastName || !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved)) {
+              llmIntakeFailureReason = !firstName ? "missing_firstName" : !lastName ? "missing_lastName" : "missing_paymentMethod";
               intakeSuccess = false;
+              console.warn(`[INTAKE][LLM] blocked: ${llmIntakeFailureReason} (bldgUserId=${bldgUserId}, sr=${sr.id})`);
             } else {
-              if (!lastName) {
-                console.log(`[INTAKE][LLM] proceeding with first name only (no lastName)`);
-              }
               const intakePayload = {
                 externalId: `bldg-sr-${sr.id}`,
                 source: "bldg-resident",
@@ -1653,7 +1744,7 @@ export const chatRouter = router({
                 buildingId: intakeBuildingKey || null,
                 unit: freshUser?.unit || user?.unit || null,
                 firstName,
-                lastName: (lastName || "").trim(),
+                lastName,
                 phone,
                 bldgUserId: bldgUserId ?? null,
                 stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,

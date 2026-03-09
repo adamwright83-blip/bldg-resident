@@ -49,6 +49,8 @@ export const bldgUsers = mysqlTable("bldg_users", {
   otpCode: varchar("otpCode", { length: 6 }),
   otpExpiresAt: timestamp("otpExpiresAt"),
   otpAttempts: int("otpAttempts").default(0),
+  /** Tutorial: pending laundry/dry-cleaning intent stored until onboarding completes. */
+  pendingBookingIntentJson: json("pendingBookingIntentJson"),
 });
 
 export type BldgUser = typeof bldgUsers.$inferSelect;
