@@ -55,3 +55,18 @@ Source of truth: `shared/intakeBuilding.ts` (`TOWER_ADDRESSES`, `LEGACY_SLUG_TO_
 | **server/welcomeRoutes.ts** (handoff) | When `hostBuilding?.slug` and JWT `buildingSlug` are both missing, `buildingSlug` is set to `"3545"`. | **Real default**: Allows handoff to complete when user lands without tower context (e.g. app.bldg.chat link with no host/payload). A warning is logged: `[Welcome] No building context from host or JWT; defaulting buildingSlug to 3545`. Consider replacing with hard failure or explicit missing-building handling if silent misrouting is unacceptable. |
 | shared/buildingHostMap.ts | Map entry for subdomain `3545` → slug `3545`. | Not a default; defines the 3545 tower. |
 | shared/intakeBuilding.ts | Legacy slug `opusla` (and `opus-south`) resolve to tower `3545`. | Not a default; normalization of legacy identifiers. |
+
+## E2E / manual verification
+
+Automated tests in `server/intakeTowerVerification.test.ts` cover: correct `buildingId` and address per tower, legacy slug normalization, unknown → "Address unknown", and firstName-only payload shape.
+
+**Manual checks (run against live/staging):**
+
+1. **Per-tower resident**  
+   For each tower (3545, 3650, 2160, 2170), use a resident whose `buildingSlug` is that tower (e.g. visit `3545.bldg.chat` or set user’s `buildingSlug`). Send a laundry booking. In server logs, confirm the intake payload has the correct `buildingId` and exact `address` from the table above. Confirm firstName-only users (no lastName) still succeed.
+
+2. **Admin / driver landing**  
+   After each booking, confirm in the admin/driver app that the order appears under the correct tower/building for 3545, 3650, 2160, and 2170. If any tower lands in the wrong place, note the exact intake payload and where it landed before changing code.
+
+3. **app.bldg.chat no-context**  
+   Trigger the welcome handoff with no tower context (e.g. request to `app.bldg.chat` with a handoff JWT that has no `buildingSlug`). Confirm the server log line: `[Welcome] No building context from host or JWT; defaulting buildingSlug to 3545`.
