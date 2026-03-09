@@ -1353,8 +1353,10 @@ export default function Home() {
           const alreadyOnboarded = onboardingComplete === true || (userData as any)?.paymentMethodSaved;
           const needsName = !alreadyOnboarded && !userData?.firstName;
           const needsPayment = !alreadyOnboarded && !(userData as any)?.paymentMethodSaved;
-          const shouldGate = isLaundryBooking && !alreadyOnboarded && (needsName || needsPayment);
+          const isTutorialBooking = response.booking.serviceRequestId === 0;
+          const shouldGate = isLaundryBooking && (isTutorialBooking || (!alreadyOnboarded && (needsName || needsPayment)));
           if (shouldGate) {
+            setServicesMode(false);
             setPostBookingPhase("animating");
             postBookingPhaseRef.current = "animating";
             setPostBookingData({
@@ -1443,7 +1445,7 @@ export default function Home() {
         setLaundryMode(false);
       }
     },
-    [input, isSending, sendMutation, activeBookingsQuery, historyQuery]
+    [input, isSending, sendMutation, activeBookingsQuery, historyQuery, onboardingComplete]
   );
 
   // #7: Tile tap with ripple
