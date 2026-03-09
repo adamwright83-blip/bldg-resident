@@ -1131,6 +1131,24 @@ export const chatRouter = router({
             !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved);
 
           if (tutorialMode) {
+            // Duplicate guard: if pending intent already exists for same service, don't overwrite
+            const existingPending = (freshUser as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
+            if (existingPending?.serviceType === simpleService) {
+              const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
+              const confirmText = `${serviceLabel} booked for ${existingPending.date ?? defaults.date}, ${existingPending.window ?? defaults.window}.`;
+              return {
+                role: "assistant" as const,
+                content: confirmText,
+                booking: {
+                  serviceRequestId: 0,
+                  service: serviceLabel,
+                  date: existingPending.date ?? defaults.date,
+                  window: existingPending.window ?? defaults.window,
+                  recurrence: existingPending.recurrence ?? defaults.recurrence,
+                },
+              };
+            }
+
             const fpSameDay = detectSameDay(input.content);
             const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
             const confirmText =
@@ -1615,6 +1633,23 @@ export const chatRouter = router({
             !(freshUserForTutorial?.paymentMethodSaved ?? user?.paymentMethodSaved);
 
           if (isLaundryOrDryCleaning(serviceCategory) && tutorialMode) {
+            const existingPending = (freshUserForTutorial as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
+            if (existingPending?.serviceType === serviceCategory) {
+              const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
+              const confirmText = `${serviceLabel} booked for ${existingPending.date ?? bookingMeta.date}, ${existingPending.window ?? bookingMeta.window}.`;
+              return {
+                role: "assistant" as const,
+                content: confirmText,
+                booking: {
+                  serviceRequestId: 0,
+                  service: serviceLabel,
+                  date: existingPending.date ?? bookingMeta.date,
+                  window: existingPending.window ?? bookingMeta.window,
+                  recurrence: existingPending.recurrence ?? bookingMeta.recurrence ?? null,
+                },
+              };
+            }
+
             const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
             const confirmText = `${serviceLabel} booked for ${bookingMeta.date}, ${bookingMeta.window}.`;
             const pendingIntent = {

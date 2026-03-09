@@ -1289,6 +1289,8 @@ export default function Home() {
         console.warn("[Chat] Blocked send while session is not ready");
         return;
       }
+      // Block duplicate sends during post-booking animation/collection
+      if (postBookingPhaseRef.current !== null) return;
 
       setInput("");
       setIsSending(true);
@@ -2039,15 +2041,15 @@ export default function Home() {
             placeholder={gravityPlaceholder}
             className="chat-input"
             rows={1}
-            disabled={isSending}
+            disabled={isSending || postBookingPhase !== null}
           />
           <MicButton
             onTranscript={(text) => setInput(text)}
-            disabled={isSending}
+            disabled={isSending || postBookingPhase !== null}
           />
           <button
             onClick={() => handleSend()}
-            disabled={!input.trim() || isSending}
+            disabled={!input.trim() || isSending || postBookingPhase !== null}
             className={`chat-send-btn ${sendBtnCompress ? "send-btn-compress" : ""}`}
           >
             {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
