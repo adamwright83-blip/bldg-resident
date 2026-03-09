@@ -39,6 +39,7 @@ import { sendOwnerAlert } from "../ownerNotify";
 import { createOpsPickup } from "../opsIntegration";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
+import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const CONTEXT_WINDOW = 20;
@@ -1137,6 +1138,7 @@ export const chatRouter = router({
           const duplicate = await findDuplicateBooking(bldgUserId, simpleService);
           let serviceRequestId: number | null = null;
           let intakeSuccess = false;
+          let intakeFailureReason: string | null = null;
 
           const adminApiUrl = (
             process.env.ADMIN_API_URL ||
@@ -1151,22 +1153,21 @@ export const chatRouter = router({
           const freshUser = await getBldgUserById(bldgUserId);
           const fpServiceType = simpleService === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
 
-          const BUILDING_ADDRESSES: Record<string, string> = {
-            "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
-            "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
-            "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
-            "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
-          };
-          const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
-          const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+          const sessionSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
+          const intakeBuildingKey = resolveIntakeBuildingKey(sessionSlug);
+          const address = getAddressForIntakeKey(intakeBuildingKey);
 
           const firstName = (freshUser?.firstName || user?.firstName || "").trim();
-          const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
+          const lastName  = ((freshUser?.lastName ?? user?.lastName ?? "") || "").trim();
           const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
-          if (!firstName || !lastName) {
-            console.log(`[INTAKE][FastPath] names not yet collected — cannot complete intake (bldgUserId=${bldgUserId})`);
+          if (!firstName) {
+            intakeFailureReason = "missing_firstName";
+            console.warn(`[INTAKE][FastPath] skipped: missing firstName (bldgUserId=${bldgUserId})`);
           } else {
+            if (!lastName) {
+              console.log(`[INTAKE][FastPath] proceeding with first name only (no lastName)`);
+            }
             let sr: { id: number };
             if (duplicate) {
               sr = duplicate;
@@ -1207,10 +1208,10 @@ export const chatRouter = router({
               pickupWindowStart,
               pickupWindowEnd,
               address,
-              buildingId: buildingSlug || null,
+              buildingId: intakeBuildingKey || null,
               unit: freshUser?.unit || user?.unit || null,
               firstName,
-              lastName,
+              lastName: (lastName || "").trim(),
               phone,
               bldgUserId: bldgUserId ?? null,
               stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
@@ -1231,10 +1232,14 @@ export const chatRouter = router({
               await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
               console.log(`[BookingConfirm][FastPath] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
               intakeSuccess = true;
+            } else {
+              intakeFailureReason = (intakeResult as { reason: string }).reason;
+              console.warn(`[INTAKE][FastPath] intake failed: reason=${intakeFailureReason}`);
             }
           }
 
           if (!intakeSuccess) {
+            console.warn(`[INTAKE][FastPath] returning generic response: reason=${intakeFailureReason ?? "unknown"}`);
             if (bldgUserId) {
               await insertChatMessage({
                 bldgUserId,
@@ -1600,6 +1605,7 @@ export const chatRouter = router({
 
           // For laundry and dry-cleaning: MUST await admin intake and verify success before confirming
           let intakeSuccess = true;
+          let llmIntakeFailureReason: string | null = null;
           if (isLaundryOrDryCleaning(serviceCategory)) {
             const adminApiUrl = (
               process.env.ADMIN_API_URL ||
@@ -1614,27 +1620,26 @@ export const chatRouter = router({
             const freshUser = await getBldgUserById(bldgUserId);
             const serviceType = serviceCategory === "dry-cleaning" ? "dry_cleaning" : "wash_fold";
 
-            const BUILDING_ADDRESSES: Record<string, string> = {
-              "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
-              "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
-              "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
-              "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
-            };
-            const buildingSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
-            const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+            const sessionSlug = freshUser?.buildingSlug || user?.buildingSlug || "";
+            const intakeBuildingKey = resolveIntakeBuildingKey(sessionSlug);
+            const address = getAddressForIntakeKey(intakeBuildingKey);
 
             const firstName = (freshUser?.firstName || user?.firstName || "").trim();
-            const lastName  = (freshUser?.lastName  || user?.lastName  || "").trim();
+            const lastName  = ((freshUser?.lastName ?? user?.lastName ?? "") || "").trim();
             const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
             const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
             const llmSameDay = detectSameDay(input.content);
             const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
 
-            if (!firstName || !lastName) {
-              console.log(`[INTAKE][LLM] names not yet collected — cannot complete intake (bldgUserId=${bldgUserId}, sr=${sr.id})`);
+            if (!firstName) {
+              llmIntakeFailureReason = "missing_firstName";
+              console.warn(`[INTAKE][LLM] skipped: missing firstName (bldgUserId=${bldgUserId}, sr=${sr.id})`);
               intakeSuccess = false;
             } else {
+              if (!lastName) {
+                console.log(`[INTAKE][LLM] proceeding with first name only (no lastName)`);
+              }
               const intakePayload = {
                 externalId: `bldg-sr-${sr.id}`,
                 source: "bldg-resident",
@@ -1645,10 +1650,10 @@ export const chatRouter = router({
                 pickupWindowStart,
                 pickupWindowEnd,
                 address,
-                buildingId: buildingSlug || null,
+                buildingId: intakeBuildingKey || null,
                 unit: freshUser?.unit || user?.unit || null,
                 firstName,
-                lastName,
+                lastName: (lastName || "").trim(),
                 phone,
                 bldgUserId: bldgUserId ?? null,
                 stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
@@ -1669,11 +1674,14 @@ export const chatRouter = router({
                 await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
                 console.log(`[BookingConfirm][LLM] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
               } else {
+                llmIntakeFailureReason = (intakeResult as { reason: string }).reason;
                 intakeSuccess = false;
+                console.warn(`[INTAKE][LLM] intake failed: reason=${llmIntakeFailureReason}`);
               }
             }
 
             if (!intakeSuccess) {
+              console.warn(`[INTAKE][LLM] returning generic response: reason=${llmIntakeFailureReason ?? "unknown"}`);
               if (bldgUserId) {
                 await insertChatMessage({
                   bldgUserId,

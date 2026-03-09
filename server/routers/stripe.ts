@@ -10,6 +10,7 @@ import { bldgUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { parse as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
+import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 
@@ -180,17 +181,12 @@ export const stripeRouter = router({
             (r: any) => r.status === "pending" || r.status === "confirmed"
           );
 
-          const BUILDING_ADDRESSES: Record<string, string> = {
-            "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
-            "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
-            "cpe-north":  "2160 Century Park E, Los Angeles, CA 90067",
-            "cpe-south":  "2170 Century Park E, Los Angeles, CA 90067",
-          };
-          const buildingSlug = completedUser?.buildingSlug || "";
-          const address = BUILDING_ADDRESSES[buildingSlug] || "10000 Santa Monica Blvd, Los Angeles, CA 90067";
+          const sessionSlug = completedUser?.buildingSlug || "";
+          const intakeBuildingKey = resolveIntakeBuildingKey(sessionSlug);
+          const address = getAddressForIntakeKey(intakeBuildingKey);
 
           const firstName = (completedUser?.firstName || "").trim() || "Resident";
-          const lastName  = (completedUser?.lastName  || "").trim() || "Resident";
+          const lastName  = ((completedUser?.lastName ?? "") || "").trim() || "Resident";
           const phone     = completedUser?.phoneE164 || "";
 
           for (const booking of pendingBookings) {
@@ -210,7 +206,7 @@ export const stripeRouter = router({
               pickupDate,
               pickupWindow: booking.scheduledWindow || "",
               address,
-              buildingId: buildingSlug || null,
+              buildingId: intakeBuildingKey || null,
               unit: completedUser?.unit || null,
               firstName,
               lastName,
