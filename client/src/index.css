@@ -3347,26 +3347,22 @@
   .bldg-inline-card {
     width: 100%;
     max-width: 320px;
-    background: rgba(255, 255, 255, 0.035);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    border: 1px solid rgba(201, 169, 110, 0.13);
+    background: #1A1A18;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     padding: 24px;
-    box-shadow:
-      0 4px 40px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(201, 169, 110, 0.06);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   }
 
   .bldg-inline-card-text {
-    color: rgba(255, 255, 255, 0.75);
+    color: #FAF8F5;
     font-size: 15px;
     font-weight: 300;
     line-height: 1.5;
     margin-bottom: 20px;
   }
 
-  /* ─── Name form ─── */
+  /* ─── Name form (dark card) ─── */
 
   .bldg-name-form {
     display: flex;
@@ -3375,7 +3371,7 @@
   }
 
   .bldg-name-label {
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(250, 248, 245, 0.5);
     font-size: 16px;
     font-weight: 400;
   }
@@ -3388,33 +3384,33 @@
 
   .bldg-name-input {
     width: 100%;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid rgba(201, 169, 110, 0.3);
-    padding: 12px 0 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 12px 14px;
     font-size: 16px;
     font-family: var(--font);
-    color: rgba(255, 255, 255, 0.92);
+    color: #FAF8F5;
     outline: none;
     transition: border-color 0.2s;
   }
 
   .bldg-name-input::placeholder {
-    color: rgba(255, 255, 255, 0.3);
+    color: rgba(250, 248, 245, 0.35);
   }
 
   .bldg-name-input:focus {
-    border-bottom-color: rgba(201, 169, 110, 0.6);
+    border-color: rgba(255, 255, 255, 0.25);
   }
 
   .bldg-name-submit {
     width: 100%;
     padding: 14px;
     margin-top: 4px;
-    background: rgba(201, 169, 110, 0.15);
-    border: 1px solid rgba(201, 169, 110, 0.4);
+    background: #C9A961;
+    border: none;
     border-radius: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    color: #1A1A18;
     font-family: var(--font);
     font-size: 14px;
     font-weight: 500;
@@ -3424,7 +3420,7 @@
   }
 
   .bldg-name-submit:hover:not(:disabled) {
-    background: rgba(201, 169, 110, 0.25);
+    background: #d4b56e;
   }
 
   .bldg-name-submit:active:not(:disabled) {
@@ -3445,7 +3441,7 @@
 
   .bldg-pay-field {
     background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(201, 169, 110, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     padding: 14px 12px;
   }
@@ -3454,31 +3450,31 @@
     width: 100%;
     margin-bottom: 16px;
     background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(201, 169, 110, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     padding: 14px 12px;
     font-size: 16px;
     font-family: var(--font);
-    color: rgba(255, 255, 255, 0.92);
+    color: #FAF8F5;
     outline: none;
     transition: border-color 0.2s;
   }
 
   .bldg-pay-zip::placeholder {
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(250, 248, 245, 0.35);
   }
 
   .bldg-pay-zip:focus {
-    border-color: rgba(201, 169, 110, 0.5);
+    border-color: rgba(255, 255, 255, 0.25);
   }
 
   .bldg-pay-btn {
     width: 100%;
     padding: 14px;
-    background: rgba(201, 169, 110, 0.15);
-    border: 1px solid rgba(201, 169, 110, 0.4);
+    background: #C9A961;
+    border: none;
     border-radius: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    color: #1A1A18;
     font-family: var(--font);
     font-size: 14px;
     font-weight: 500;
@@ -3488,7 +3484,7 @@
   }
 
   .bldg-pay-btn:hover:not(:disabled) {
-    background: rgba(201, 169, 110, 0.25);
+    background: #d4b56e;
   }
 
   .bldg-pay-btn:active:not(:disabled) {

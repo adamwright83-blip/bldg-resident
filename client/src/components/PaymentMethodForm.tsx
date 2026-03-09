@@ -117,9 +117,9 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
     ? {
         base: {
           fontSize: "16px",
-          color: "rgba(255,255,255,0.92)",
+          color: "#FAF8F5",
           fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-          "::placeholder": { color: "rgba(255,255,255,0.35)" },
+          "::placeholder": { color: "rgba(250,248,245,0.35)" },
         },
         invalid: { color: "#f87171" },
       }
@@ -222,19 +222,15 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
             {dark && (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: '5px', marginTop: '14px', opacity: 0.32,
+                gap: '5px', marginTop: '14px',
+                color: 'rgba(250,248,245,0.25)',
+                fontSize: '11px',
+                letterSpacing: '0.04em',
+                fontFamily: 'DM Sans, sans-serif',
               }}>
-                <Lock size={10} color="rgba(255,255,255,0.9)" />
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em', fontFamily: 'DM Sans, sans-serif' }}>
-                  Secured by
-                </span>
-                <span style={{
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.9)',
-                  fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-                  letterSpacing: '-0.01em',
-                }}>
+                <Lock size={10} />
+                <span>Secured by</span>
+                <span style={{ fontWeight: 600, fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                   Stripe
                 </span>
               </div>

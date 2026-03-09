@@ -1365,7 +1365,8 @@ export default function Home() {
               window: response.booking.window,
             });
             setTimeout(() => {
-              setPostBookingPhase(needsName ? "name" : "payment");
+              const showNameFirst = isTutorialBooking || needsName;
+              setPostBookingPhase(showNameFirst ? "name" : "payment");
             }, 7000);
           }
         }
