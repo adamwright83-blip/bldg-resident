@@ -1153,18 +1153,17 @@ export const chatRouter = router({
               pendingBookingIntentJson: pendingIntent as any,
             } as any);
             console.log("[TUTORIAL] storing pending booking intent");
-            const namePrompt = "What name should we use for pickups?";
             if (bldgUserId) {
               await insertChatMessage({
                 bldgUserId,
                 role: "assistant",
-                content: `${confirmText}\n\n${namePrompt}`,
-                metadata: { type: "awaiting_name", tutorial: true, service: serviceLabel, date: defaults.date, window: defaults.window, recurrence: defaults.recurrence },
+                content: confirmText,
+                metadata: { type: "booking", tutorial: true, service: serviceLabel, date: defaults.date, window: defaults.window, recurrence: defaults.recurrence },
               });
             }
             return {
               role: "assistant" as const,
-              content: `${confirmText}\n\n${namePrompt}`,
+              content: confirmText,
               booking: {
                 serviceRequestId: 0,
                 service: serviceLabel,
@@ -1634,18 +1633,17 @@ export const chatRouter = router({
               pendingBookingIntentJson: pendingIntent as any,
             } as any);
             console.log("[TUTORIAL] storing pending booking intent");
-            const llmNamePrompt = "What name should we use for pickups?";
             if (bldgUserId) {
               await insertChatMessage({
                 bldgUserId,
                 role: "assistant",
-                content: `${confirmText}\n\n${llmNamePrompt}`,
-                metadata: { type: "awaiting_name", tutorial: true, service: serviceLabel, date: bookingMeta.date, window: bookingMeta.window, recurrence: bookingMeta.recurrence },
+                content: confirmText,
+                metadata: { type: "booking", tutorial: true, service: serviceLabel, date: bookingMeta.date, window: bookingMeta.window, recurrence: bookingMeta.recurrence },
               });
             }
             return {
               role: "assistant" as const,
-              content: `${confirmText}\n\n${llmNamePrompt}`,
+              content: confirmText,
               booking: {
                 serviceRequestId: 0,
                 service: serviceLabel,
