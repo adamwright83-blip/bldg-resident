@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Lock, Settings, LogOut } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLogoutUrl } from "@/const";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -7,10 +8,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 interface AccountSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenVault?: () => void;
 }
 
-export default function AccountSheet({ isOpen, onClose }: AccountSheetProps) {
-  const { user, logout } = useAuth();
+export default function AccountSheet({ isOpen, onClose, onOpenVault }: AccountSheetProps) {
+  const { logout } = useAuth();
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   const handleSignOut = async () => {
@@ -18,6 +20,11 @@ export default function AccountSheet({ isOpen, onClose }: AccountSheetProps) {
     onClose();
     await logout();
     window.location.href = getLogoutUrl();
+  };
+
+  const handleVault = () => {
+    onClose();
+    onOpenVault?.();
   };
 
   return (
@@ -37,12 +44,12 @@ export default function AccountSheet({ isOpen, onClose }: AccountSheetProps) {
         )}
       </AnimatePresence>
 
-      {/* Bottom Sheet */}
+      {/* Bottom Sheet - dark card treatment */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             key="sheet"
-            className="fixed bottom-0 left-0 right-0 bg-background rounded-t-2xl shadow-lg z-50 max-h-[80vh] overflow-y-auto"
+            className="fixed bottom-0 left-0 right-0 profile-menu-sheet z-50 max-h-[80vh] overflow-y-auto"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -50,46 +57,37 @@ export default function AccountSheet({ isOpen, onClose }: AccountSheetProps) {
           >
             {/* Handle bar */}
             <div className="flex justify-center pt-3 pb-2">
-              <div className="w-12 h-1 bg-border rounded-full" />
+              <div className="w-12 h-1 profile-menu-handle rounded-full" />
             </div>
 
-            {/* Content */}
-            <div className="px-6 pb-8">
-              {/* Header */}
-              <div className="mb-8">
-                <h2 className="text-lg font-semibold text-foreground">Account</h2>
-                {user?.name && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {user.name}
-                  </p>
-                )}
-              </div>
-
-              {/* Account Info */}
-              <div className="space-y-4 mb-8">
-                {user?.email && (
-                  <div className="flex justify-between items-center py-3 border-b border-border">
-                    <span className="text-sm text-muted-foreground">Email</span>
-                    <span className="text-sm text-foreground font-medium">{user.email}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-border my-6" />
-
-              {/* Danger Zone */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  Danger Zone
-                </p>
-                <button
-                  onClick={() => setShowSignOutConfirm(true)}
-                  className="w-full py-3 px-4 text-center text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors text-sm font-medium"
-                >
-                  Sign out
-                </button>
-              </div>
+            {/* Content - dark card */}
+            <div className="profile-menu-card">
+              <button
+                type="button"
+                className="profile-menu-item"
+                onClick={handleVault}
+              >
+                <Lock size={18} className="profile-menu-icon-vault" />
+                <span>Vault</span>
+              </button>
+              <div className="profile-menu-divider" />
+              <button
+                type="button"
+                className="profile-menu-item profile-menu-item-disabled"
+                onClick={() => {}}
+              >
+                <Settings size={18} className="profile-menu-icon" />
+                <span>Settings</span>
+              </button>
+              <div className="profile-menu-divider" />
+              <button
+                type="button"
+                className="profile-menu-item profile-menu-item-logout"
+                onClick={() => setShowSignOutConfirm(true)}
+              >
+                <LogOut size={18} className="profile-menu-icon" />
+                <span>Log out</span>
+              </button>
             </div>
           </motion.div>
         )}

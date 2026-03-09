@@ -2087,7 +2087,14 @@ export default function Home() {
       </AnimatePresence>
 
       {/* Account Sheet */}
-      <AccountSheet isOpen={accountSheetOpen} onClose={() => setAccountSheetOpen(false)} />
+      <AccountSheet
+        isOpen={accountSheetOpen}
+        onClose={() => setAccountSheetOpen(false)}
+        onOpenVault={() => {
+          setAccountSheetOpen(false);
+          setShowVault(true);
+        }}
+      />
     </div>
   );
 }
