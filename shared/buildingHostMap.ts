@@ -4,27 +4,28 @@ export interface BuildingHostRecord {
   displayName: string;
 }
 
-// Numeric subdomain -> internal building slug mapping.
-// Keep this list neutral (no branded subdomains in URL).
+// Numeric subdomain (3545.bldg.chat, etc.) -> tower identity.
+// Tower identity is address-number based; slug is the canonical tower number
+// used for intake and stored as buildingSlug.
 export const BUILDING_HOST_MAP: Record<string, BuildingHostRecord> = {
   "3545": {
     token: "3545",
-    slug: "opus-south",
+    slug: "3545",
     displayName: "3545",
   },
   "3650": {
     token: "3650",
-    slug: "opus-north",
+    slug: "3650",
     displayName: "3650",
   },
   "2160": {
     token: "2160",
-    slug: "cpe-north",
+    slug: "2160",
     displayName: "2160",
   },
   "2170": {
     token: "2170",
-    slug: "cpe-south",
+    slug: "2170",
     displayName: "2170",
   },
 };

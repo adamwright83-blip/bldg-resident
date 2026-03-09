@@ -353,7 +353,7 @@ export function registerWelcomeRoutes(app: Router): void {
       const buildingSlug =
         hostBuilding?.slug ??
         (payload.buildingSlug as string | undefined) ??
-        "opusla";
+        "3545";
 
       if (!phone || !orderId) {
         console.error("[Welcome] JWT missing required fields (phone, orderId)");

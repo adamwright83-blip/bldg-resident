@@ -1,40 +1,58 @@
 /**
- * Intake building resolution: maps session/onboarding slugs to the building key
- * and address expected by the admin intake API. Use address-based or neutral
- * keys; avoid building-name branding in user-facing copy.
+ * Intake building resolution: tower identity is address-number based (3545, 3650, 2160, 2170).
+ * Full addresses feed the driver/admin app. Legacy slugs normalize to these tower identities.
  *
- * Session slugs (e.g. from onboarding) may differ from admin intake keys;
- * this module is the single place to resolve that mapping.
+ * Canonical mapping (source of truth):
+ * - 3545.bldg.chat = south tower = 3545 Wilshire Blvd
+ * - 3650.bldg.chat = north tower = 3650 6th St
+ * - 2170.bldg.chat = south tower = 2170 Century Pk E
+ * - 2160.bldg.chat = north tower = 2160 Century Pk E
+ *
+ * No branded building names in user-facing copy; internal keys are tower numbers.
  */
 
-/** Map session/onboarding slug -> intake building key (must match admin API / vendor_service_coverage). */
-const SLUG_TO_INTAKE_KEY: Record<string, string> = {
-  opusla: "opus_la",
+/** Canonical tower IDs (first-class). */
+export const TOWER_IDS = ["3545", "3650", "2160", "2170"] as const;
+export type TowerId = (typeof TOWER_IDS)[number];
+
+/** Full address by tower ID (for driver/admin intake payload). */
+const TOWER_ADDRESSES: Record<string, string> = {
+  "3545": "3545 Wilshire Blvd, Los Angeles, CA 90048",
+  "3650": "3650 6th St, Los Angeles, CA 90014",
+  "2160": "2160 Century Pk E, Los Angeles, CA 90067",
+  "2170": "2170 Century Pk E, Los Angeles, CA 90067",
 };
 
-/** Address by intake building key. Fallback used when key is unknown. */
-const INTAKE_ADDRESSES: Record<string, string> = {
-  opus_la: "12655 Bluff Creek Dr, Los Angeles, CA 90094",
-  "opus-south": "3545 S Figueroa St, Los Angeles, CA 90007",
-  "opus-north": "3650 S Figueroa St, Los Angeles, CA 90007",
-  "cpe-north": "2160 Century Park E, Los Angeles, CA 90067",
-  "cpe-south": "2170 Century Park E, Los Angeles, CA 90067",
+/** Legacy slugs (onboarding, old DB) → canonical tower ID. */
+const LEGACY_SLUG_TO_TOWER: Record<string, string> = {
+  opusla: "3545",
+  "opus-south": "3545",
+  "opus-north": "3650",
+  "cpe-north": "2160",
+  "cpe-south": "2170",
 };
 
 const FALLBACK_ADDRESS = "10000 Santa Monica Blvd, Los Angeles, CA 90067";
 
 /**
- * Resolve session/onboarding building slug to the intake building key used
- * for address lookup and buildingId in the admin intake payload.
+ * Resolve any session/onboarding building slug to the canonical tower ID
+ * used for buildingId and address in the admin intake payload.
+ * Tower numbers (3545, 3650, 2160, 2170) pass through; legacy slugs normalize to tower.
  */
 export function resolveIntakeBuildingKey(slug: string): string {
-  const normalized = (slug || "").trim().toLowerCase();
-  return (SLUG_TO_INTAKE_KEY[normalized] ?? normalized) || "";
+  const raw = (slug || "").trim();
+  const lower = raw.toLowerCase();
+  // First-class: already a known tower number
+  if (TOWER_ADDRESSES[raw]) return raw;
+  // Legacy slug → tower
+  const tower = LEGACY_SLUG_TO_TOWER[lower];
+  if (tower) return tower;
+  return raw || "";
 }
 
 /**
- * Get the full address for an intake building key (after resolving slug).
+ * Full address for the given tower ID (after resolving slug with resolveIntakeBuildingKey).
  */
 export function getAddressForIntakeKey(intakeKey: string): string {
-  return INTAKE_ADDRESSES[intakeKey] ?? FALLBACK_ADDRESS;
+  return TOWER_ADDRESSES[intakeKey] ?? FALLBACK_ADDRESS;
 }
