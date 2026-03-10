@@ -15,7 +15,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight, ArrowLeft } from "lucide-react";
+import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight, ArrowLeft, MoreHorizontal } from "lucide-react";
 import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
@@ -151,22 +151,6 @@ interface ServiceGridItem {
 }
 const SERVICES_GRID: ServiceGridItem[] = [
   {
-    id: "grooming",
-    label: "Dog Grooming",
-    prompt: "Book dog grooming appointment",
-    icon: <DogIcon />,
-    provider: "Current building provider",
-    trustCopy: "Handled through the building’s current grooming provider.",
-  },
-  {
-    id: "cleaning",
-    label: "Cleaning",
-    prompt: "Schedule cleaning service",
-    icon: <CleaningIcon />,
-    provider: "Current building provider",
-    trustCopy: "Handled through the building’s current cleaning provider.",
-  },
-  {
     id: "laundry",
     label: "Laundry",
     prompt: "Schedule laundry pickup",
@@ -191,28 +175,20 @@ const SERVICES_GRID: ServiceGridItem[] = [
     trustCopy: "Handled through the building’s current car-wash provider.",
   },
   {
-    id: "handyman",
-    label: "Handyman",
-    prompt: "Schedule handyman",
-    icon: <Wrench size={32} strokeWidth={1.5} />,
+    id: "grooming",
+    label: "Dog Grooming",
+    prompt: "Book dog grooming appointment",
+    icon: <DogIcon />,
     provider: "Current building provider",
-    trustCopy: "Handled through the building’s current handyman provider.",
+    trustCopy: "Handled through the building’s current grooming provider.",
   },
   {
-    id: "assembly",
-    label: "Assembly",
-    prompt: "Schedule furniture assembly",
-    icon: <Puzzle size={32} strokeWidth={1.5} />,
-    provider: "Current building provider",
-    trustCopy: "Handled through the building’s current assembly provider.",
-  },
-  {
-    id: "pet-sitting",
-    label: "Pet Sitting",
-    prompt: "Schedule pet sitting",
-    icon: <HomeIcon size={32} strokeWidth={1.5} />,
-    provider: "Current building provider",
-    trustCopy: "Handled through the building’s current pet-sitting provider.",
+    id: "other",
+    label: "Other",
+    prompt: "",
+    icon: <MoreHorizontal size={32} strokeWidth={1.5} />,
+    provider: "",
+    trustCopy: "",
   },
 ];
 
@@ -1571,11 +1547,23 @@ export default function Home() {
   }, [servicesMode, resetServiceDetail]);
 
   const openServiceDetail = useCallback((service: ServiceGridItem) => {
+    if (service.id === "other") {
+      resetServiceDetail();
+      setServicesMode(false);
+      setInput("");
+      requestAnimationFrame(() => {
+        if (inputRef.current) {
+          inputRef.current.placeholder = "Tell us what you need...";
+          inputRef.current.focus();
+        }
+      });
+      return;
+    }
     setSelectedService(service);
     setServiceTiming("ASAP");
     setServicePreferredTiming("");
     setServiceNotes("");
-  }, []);
+  }, [resetServiceDetail]);
 
   const handleAddServiceToChat = useCallback(() => {
     if (!selectedService) return;

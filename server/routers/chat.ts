@@ -211,16 +211,15 @@ export function getOnboardingMessage(serviceCategory: string): string | null {
   return null;
 }
 
-const MANUAL_SERVICE_REQUESTS = [
-  { category: "grooming", label: "Dog Grooming", patterns: [/^dog\s+groom/i, /^groom/i] },
-  { category: "cleaning", label: "Cleaning", patterns: [/^cleaning/i, /^house\s+clean/i, /^apartment\s+clean/i] },
-  { category: "car-wash", label: "Car Wash", patterns: [/^car\s*wash/i] },
-  { category: "handyman", label: "Handyman", patterns: [/^handyman/i] },
-  { category: "assembly", label: "Assembly", patterns: [/^assembly/i, /^furniture\s+assembly/i] },
-  { category: "pet-sitting", label: "Pet Sitting", patterns: [/^pet\s+sitting/i, /^dog\s+sitting/i] },
+const COORDINATED_SERVICES = [
+  { category: "car-wash", label: "Car Wash", patterns: [/car\s*wash/i, /auto\s*detail/i, /detailing/i] },
+  { category: "grooming", label: "Dog Grooming", patterns: [/dog\s+groom/i, /groom/i, /pet\s+groom/i] },
+  { category: "other", label: "Other", patterns: [] },
 ] as const;
 
-function extractManualServiceRequest(text: string): {
+const MANUAL_SERVICE_REQUESTS = COORDINATED_SERVICES;
+
+function extractCoordinatedServiceRequest(text: string): {
   serviceCategory: string;
   serviceLabel: string;
   timing: string;
@@ -233,7 +232,8 @@ function extractManualServiceRequest(text: string): {
   const lower = normalized.toLowerCase();
   const timingMatch = lower.match(/\b(asap|tomorrow|this week)\b/i);
 
-  for (const svc of MANUAL_SERVICE_REQUESTS) {
+  for (const svc of COORDINATED_SERVICES) {
+    if (svc.patterns.length === 0) continue;
     if (!svc.patterns.some((pattern) => pattern.test(normalized))) continue;
 
     const timing = timingMatch?.[1]
@@ -260,6 +260,10 @@ function extractManualServiceRequest(text: string): {
   }
 
   return null;
+}
+
+function extractManualServiceRequest(text: string) {
+  return extractCoordinatedServiceRequest(text);
 }
 
 // ─── Post-booking collection handler ───
@@ -632,14 +636,18 @@ When a resident requests a service, you respond with a completed booking (date +
 **WHAT YOU CAN DO:**
 - Laundry pickup (Fluff & Fold) — instant booking
 - Dry cleaning — instant booking
-- Car wash / Auto detailing — request only (requires manual coordination)
-- Grooming — request only (requires manual coordination)
-- Cleaning — request only (requires manual coordination)
-- Amenities (placeholder booking)
+- Car wash / Auto detailing — coordinated request (ops coordinates with vendor)
+- Dog Grooming — coordinated request (ops coordinates with vendor)
+- Other requests — coordinated request (anything the resident needs that we can try to arrange)
 
 **DISCOVERY RESPONSE:**
 If the resident asks "what can I do?", "help", or "what is this?", respond:
-"Say the word and it is done. Laundry, dry cleaning, car wash, grooming, cleaning. I book it instantly. No menus, no forms. You tell me what you need, I handle the rest."
+"Say the word and it is done. Laundry, dry cleaning, car wash, grooming — and anything else you need. I book it instantly or coordinate it for you. No menus, no forms."
+
+**PAYMENT METHOD INTENT DETECTION:**
+If the resident expresses intent to add, update, or manage their payment method — for example: "add card", "update payment", "add payment method", "pay for laundry", "how do I pay", "update my card", "I need to add my card", or any similar phrasing — you MUST respond with this exact marker:
+[PAYMENT_INTENT: trigger]
+Do NOT respond conversationally to payment-related requests. Do NOT say "Payment happens automatically after delivery" or similar generic text. Always produce the marker so the system can check their payment status and show the appropriate UI.
 
 **CURRENT DATE & TIME CONTEXT:**
 Today is ${today}. The current time is ${hour}:00 (24-hour format). Use this to validate date requests.
@@ -845,10 +853,8 @@ You: "Done. $30 — five dress shirts at $6 each. Pickup booked.
 [RECURRENCE: none]
 [EXPLICIT_DATE: no]"
 
-**NON-INSTANT SERVICES (car wash, grooming):**
-These services require manual coordination. Do NOT produce booking markers ([SERVICE:], [DATE:], etc.) for car wash or grooming. Instead, respond with a soft acknowledgment:
-- Car wash: "Car wash request received. I'm coordinating with our detailing partner and will confirm your window shortly."
-- Grooming: "Grooming request noted. I'm checking availability with our grooming partners and will confirm timing shortly."
+**COORDINATED SERVICES (car wash, dog grooming, other):**
+These services require manual coordination with vendors. Do NOT produce booking markers ([SERVICE:], [DATE:], etc.) for car wash, grooming, or other requests. The system will detect these intents and create a coordinated request record automatically.
 Only laundry and dry cleaning get instant confirmation with booking markers.
 
 MODIFY FLOW:
@@ -981,6 +987,10 @@ function parseBookingMetadata(content: string): BookingMetadata | null {
   };
 }
 
+function hasPaymentIntent(content: string): boolean {
+  return /\[PAYMENT_INTENT:\s*.+?\]/i.test(content);
+}
+
 function stripBookingMetadata(content: string): string {
   return content
     .replace(/\[SERVICE:\s*.+?\]/g, "")
@@ -989,6 +999,7 @@ function stripBookingMetadata(content: string): string {
     .replace(/\[WINDOW:\s*.+?\]/g, "")
     .replace(/\[RECURRENCE:\s*.+?\]/g, "")
     .replace(/\[NOTES:\s*.+?\]/g, "")
+    .replace(/\[PAYMENT_INTENT:\s*.+?\]/g, "")
     .trim();
 }
 
@@ -1093,6 +1104,31 @@ export const chatRouter = router({
             };
           }
           // If it looks like a service request, fall through to normal LLM flow
+        }
+      }
+
+      // ─── PAYMENT INTENT FAST-PATH ───
+      // If user says "yes" after a payment_update_offer, show the card element
+      {
+        const recentMsgs = await getChatHistory(bldgUserId, 3);
+        const lastAssist = recentMsgs.filter(m => m.role === "assistant").pop();
+        if (lastAssist?.metadata && (lastAssist.metadata as any).type === "payment_update_offer") {
+          const affirmative = /^(yes|yeah|yep|sure|ok|okay|update|y)\b/i.test(input.content.trim());
+          if (affirmative) {
+            const updateMsg = "Looks like we need to grab a card for your account.\nAdd one below and you\u2019re good to go \u2014 takes 10 seconds.";
+            await insertChatMessage({
+              bldgUserId,
+              role: "assistant",
+              content: updateMsg,
+              metadata: { type: "payment_collection", bldgUserId },
+            });
+            return {
+              role: "assistant" as const,
+              content: updateMsg,
+              booking: null,
+              collectStep: "payment",
+            };
+          }
         }
       }
 
@@ -1358,32 +1394,51 @@ export const chatRouter = router({
       }
       // ─── END FAST-PATH ───
 
-      // ─── MANUAL SERVICE ALERT PATH ───
-      // Unsupported/non-instant services should notify ops without creating
-      // a fake order or admin intake row.
+      // ─── COORDINATED SERVICE PATH ───
+      // Car Wash, Dog Grooming, and Other create a coordinated request record
+      // and return a clear acknowledgment. No instant-booking pipeline.
       {
-        const manualRequest = extractManualServiceRequest(input.content);
-        if (manualRequest) {
+        const coordRequest = extractCoordinatedServiceRequest(input.content);
+        if (coordRequest) {
           const residentName =
             [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Resident";
-          const building = user.buildingSlug || "—";
-          const unit = user.unit || "—";
+          const building = user.buildingSlug || "\u2014";
+          const unit = user.unit || "\u2014";
+          const buildingKey = resolveIntakeBuildingKey(user.buildingSlug || "");
+          const buildingLabel = getAddressForIntakeKey(buildingKey);
+
+          const sr = await createServiceRequest({
+            bldgUserId,
+            serviceType: coordRequest.serviceCategory as any,
+            status: "new" as any,
+            requestSummary: `${coordRequest.serviceLabel} \u2014 ${coordRequest.timing}${coordRequest.notes ? ". " + coordRequest.notes : ""}`,
+            scheduledDate: null,
+            scheduledWindow: coordRequest.timing !== "Requested timing not specified" ? coordRequest.timing : null,
+            requestJson: { notes: coordRequest.notes || null },
+            buildingId: buildingKey || null,
+            buildingLabel: buildingLabel || null,
+            residentName,
+            residentPhone: user.phoneE164 || null,
+            source: "BLDG.chat",
+          });
+
+          console.log(`[CoordinatedService] Created request #${sr.id}: ${coordRequest.serviceCategory} for user ${bldgUserId}`);
 
           try {
             await sendOwnerAlert({
-              serviceCategory: manualRequest.serviceLabel,
+              serviceCategory: coordRequest.serviceLabel,
               residentName,
               building,
               unit,
-              scheduledWindow: manualRequest.timing,
-              notes: manualRequest.notes || undefined,
+              scheduledWindow: coordRequest.timing,
+              notes: coordRequest.notes || undefined,
               action: "service_request",
             });
           } catch (err) {
-            console.error("[ownerNotify] Failed to send manual service alert:", err);
+            console.error("[ownerNotify] Failed to send coordinated service alert:", err);
           }
 
-          const acknowledgement = `${manualRequest.serviceLabel} request noted. We'll confirm timing shortly.`;
+          const acknowledgement = `${coordRequest.serviceLabel} request received.\nWe\u2019re checking availability and will text you shortly.`;
 
           await insertChatMessage({
             bldgUserId,
@@ -1557,6 +1612,41 @@ export const chatRouter = router({
           typeof response.choices[0]?.message?.content === "string"
             ? response.choices[0].message.content
             : "I'm having trouble responding right now. Try again in a moment.";
+
+        // ─── PAYMENT INTENT DETECTION ───
+        if (hasPaymentIntent(rawContent)) {
+          const freshPaymentUser = await getBldgUserById(bldgUserId);
+          const hasCard = !!freshPaymentUser?.paymentMethodSaved;
+          const cardLast4 = freshPaymentUser?.cardLast4;
+
+          let paymentResponse: string;
+          let paymentMetaType: string;
+
+          if (hasCard) {
+            paymentResponse = `Your card on file ending in ${cardLast4 || "****"} is all set. We\u2019ll charge it automatically when your order is processed. Want to update it?`;
+            paymentMetaType = "payment_update_offer";
+          } else {
+            paymentResponse = "Looks like we need to grab a card for your account.\nAdd one below and you\u2019re good to go \u2014 takes 10 seconds.";
+            paymentMetaType = "payment_collection";
+          }
+
+          await insertChatMessage({
+            bldgUserId,
+            role: "assistant",
+            content: paymentResponse,
+            metadata: {
+              type: paymentMetaType,
+              bldgUserId,
+            },
+          });
+
+          return {
+            role: "assistant" as const,
+            content: paymentResponse,
+            booking: null,
+            collectStep: !hasCard ? "payment" : undefined,
+          };
+        }
 
         // Parse booking metadata
         let bookingMeta = parseBookingMetadata(rawContent);

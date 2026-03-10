@@ -48,3 +48,36 @@ export async function createStripeCustomer(params: {
   console.log("[Stripe] Customer created:", customer.id, "card ending in", last4);
   return { customerId: customer.id, last4 };
 }
+
+/**
+ * Replace the default payment method on an existing Stripe customer.
+ * Attaches the new PM, sets it as default, and detaches the old one.
+ */
+export async function replacePaymentMethod(params: {
+  customerId: string;
+  newPaymentMethodId: string;
+  oldPaymentMethodId?: string | null;
+}): Promise<{ last4: string }> {
+  const { customerId, newPaymentMethodId, oldPaymentMethodId } = params;
+
+  await stripe.paymentMethods.attach(newPaymentMethodId, { customer: customerId });
+
+  await stripe.customers.update(customerId, {
+    invoice_settings: { default_payment_method: newPaymentMethodId },
+  });
+
+  const pm = await stripe.paymentMethods.retrieve(newPaymentMethodId);
+  const last4 = pm.card?.last4 || "****";
+
+  if (oldPaymentMethodId) {
+    try {
+      await stripe.paymentMethods.detach(oldPaymentMethodId);
+      console.log("[Stripe] Detached old PM:", oldPaymentMethodId);
+    } catch (err) {
+      console.warn("[Stripe] Failed to detach old PM:", err);
+    }
+  }
+
+  console.log("[Stripe] Replaced PM on customer", customerId, "→ ending in", last4);
+  return { last4 };
+}
