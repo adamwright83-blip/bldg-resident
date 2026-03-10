@@ -25,11 +25,17 @@ MySQL 8.0 must be running. Start with `sudo mysqld --user=mysql --daemonize` and
 A `.env` file at the repo root is loaded by `dotenv/config` in the server. Key variables:
 - `DATABASE_URL` — MySQL connection string (required for DB features)
 - `JWT_SECRET` — session cookie signing
-- `STRIPE_SECRET_KEY` — **must be set** (even a placeholder) or the server crashes at import time (`server/lib/stripeHelper.ts` throws on missing key)
+- `STRIPE_SECRET_KEY` — **must be set** or the server crashes at import time (`server/lib/stripeHelper.ts` throws on missing key). Injected via Cursor Cloud secrets.
+- `ANTHROPIC_API_KEY` — required for AI chat responses; without it the chat returns "I'm having a moment" fallback. Injected via Cursor Cloud secrets.
 - `OTP_BYPASS_CODE` — set to `123456` for dev to skip real SMS OTP
-- `ANTHROPIC_API_KEY` — required for AI chat responses; without it the chat returns "I'm having a moment" fallback
 
 Vitest does NOT auto-load `.env`. Export env vars in the shell or pass them inline when running tests.
+
+### Service architecture
+
+- **Instant booking** (laundry, dry cleaning): creates a `service_request` + forwards to admin intake API.
+- **Coordinated services** (car wash, dog grooming, other): creates a `service_request` with `status=new` and `source=BLDG.chat`; ops handles vendor coordination outside the chat flow.
+- **Payment flow**: AI detects payment intent via `[PAYMENT_INTENT: trigger]` marker; card replacement uses `replacePaymentMethod` (one card per customer).
 
 ### Gotchas
 
