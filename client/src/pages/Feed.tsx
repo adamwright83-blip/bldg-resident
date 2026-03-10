@@ -37,12 +37,9 @@ export default function FeedPage() {
           <MessageCircle size={28} strokeWidth={1.5} color="var(--text-tertiary)" />
         </div>
 
-        <div className="flex flex-col items-center gap-2 text-center" style={{ maxWidth: 260 }}>
+        <div className="flex flex-col items-center gap-2 text-center" style={{ maxWidth: 280 }}>
           <span style={{ fontSize: 17, fontWeight: 500, color: "var(--text-primary)" }}>
-            Your building's conversation starts here.
-          </span>
-          <span style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-            Share a recommendation, ask a question, or say hello.
+            No one's shared their space yet. Be the first.
           </span>
         </div>
 

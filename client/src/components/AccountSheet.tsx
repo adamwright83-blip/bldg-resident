@@ -9,9 +9,10 @@ interface AccountSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenVault?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export default function AccountSheet({ isOpen, onClose, onOpenVault }: AccountSheetProps) {
+export default function AccountSheet({ isOpen, onClose, onOpenVault, onOpenSettings }: AccountSheetProps) {
   const { logout } = useAuth();
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
@@ -25,6 +26,11 @@ export default function AccountSheet({ isOpen, onClose, onOpenVault }: AccountSh
   const handleVault = () => {
     onClose();
     onOpenVault?.();
+  };
+
+  const handleSettings = () => {
+    onClose();
+    onOpenSettings?.();
   };
 
   return (
@@ -73,8 +79,8 @@ export default function AccountSheet({ isOpen, onClose, onOpenVault }: AccountSh
               <div className="profile-menu-divider" />
               <button
                 type="button"
-                className="profile-menu-item profile-menu-item-disabled"
-                onClick={() => {}}
+                className="profile-menu-item"
+                onClick={handleSettings}
               >
                 <Settings size={18} className="profile-menu-icon" />
                 <span>Settings</span>

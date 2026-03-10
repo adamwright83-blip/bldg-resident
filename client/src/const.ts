@@ -69,3 +69,6 @@ export const getLoginUrl = () => {
 };
 
 export const getLogoutUrl = () => getAppHomeUrl();
+
+/** Support: open SMS to building management (resident app). */
+export const SUPPORT_PHONE_SMS = "sms:+13238074661";

@@ -33,6 +33,7 @@ import TrustCard from "@/components/TrustCard";
 import ConfirmationCeremony from "@/components/ConfirmationCeremony";
 import { toast } from "sonner";
 import Vault from "@/pages/Vault";
+import Settings from "@/pages/Settings";
 import AccountSheet from "@/components/AccountSheet";
 
 const STRIPE_PUBLISHABLE_FALLBACK =
@@ -702,6 +703,7 @@ export default function Home() {
   const [servicePreferredTiming, setServicePreferredTiming] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
   const [showVault, setShowVault] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   // #1: Send animation states
   const [sendBtnCompress, setSendBtnCompress] = useState(false);
   const [composerExhale, setComposerExhale] = useState(false);
@@ -1935,8 +1937,7 @@ export default function Home() {
                 );
               })}
 
-              {/* Typing indicator — shown for real AI generation (isSending)
-                  AND for locally-simulated typing before injected messages */}
+              {/* Thinking indicator — pulsing dots while waiting for AI response or local typing */}
               {(isSending || (localTypingActive && postBookingPhase !== "animating")) && (
                 <div className="chat-bubble-row chat-bubble-row-assistant message-enter">
                   <div className="bldg-avatar avatar-presence-glow">
@@ -1949,7 +1950,13 @@ export default function Home() {
                       />
                     )}
                   </div>
-                  {!laundryMode && <div className="typing-shimmer" />}
+                  <div className="chat-bubble chat-bubble-assistant chat-thinking-dots">
+                    <div className="chat-typing-indicator">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2078,6 +2085,27 @@ export default function Home() {
         )}
       </AnimatePresence>
 
+      {/* Settings — full screen overlay */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 300 }}
+            style={{ position: "fixed", inset: 0, zIndex: 900 }}
+          >
+            <Settings
+              onBack={() => setShowSettings(false)}
+              onPaymentSaved={() => {
+                void utils.chat.getVaultProfile.invalidate();
+                toast(PAYMENT_SAVED_MESSAGE);
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Account Sheet */}
       <AccountSheet
         isOpen={accountSheetOpen}
@@ -2085,6 +2113,10 @@ export default function Home() {
         onOpenVault={() => {
           setAccountSheetOpen(false);
           setShowVault(true);
+        }}
+        onOpenSettings={() => {
+          setAccountSheetOpen(false);
+          setShowSettings(true);
         }}
       />
     </div>

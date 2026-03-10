@@ -170,7 +170,9 @@ export default function Vault({ onBack }: VaultProps) {
         {isLoading ? (
           <div className="vault-empty">Loading...</div>
         ) : allBookings.length === 0 ? (
-          <div className="vault-empty">No bookings yet.</div>
+          <div className="vault-empty vault-empty-centered">
+            Your first receipt will appear here after your order is processed.
+          </div>
         ) : (
           allBookings.map((req: any) => (
             <button

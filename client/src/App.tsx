@@ -15,6 +15,8 @@ import Home from "./pages/Home";
 import Welcome from "./pages/Welcome";
 import OrderReceipt from "./pages/OrderReceipt";
 import Receipt from "./pages/Receipt";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 import {
   extractNumericHostToken,
   resolveBuildingFromHostname,
@@ -27,6 +29,14 @@ function Router() {
   // matching that could leave multiple Home instances mounted at once.
   if (location.startsWith("/welcome")) {
     return <Welcome />;
+  }
+
+  if (location === "/terms") {
+    return <Terms />;
+  }
+
+  if (location === "/privacy") {
+    return <Privacy />;
   }
 
   if (/^\/orders\/[^/]+/.test(location)) {
