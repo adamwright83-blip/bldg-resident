@@ -645,7 +645,7 @@ If the resident asks "what can I do?", "help", or "what is this?", respond:
 **PAYMENT METHOD INTENT DETECTION:**
 If the resident expresses intent to add, update, or manage their payment method — for example: "add card", "update payment", "add payment method", "pay for laundry", "how do I pay", "update my card", "I need to add my card", or any similar phrasing — you MUST respond with this exact marker:
 [PAYMENT_INTENT: trigger]
-Do NOT respond conversationally to payment-related requests. Do NOT say "Payment happens automatically after delivery" or similar generic text. Always produce the marker so the system can check their payment status and show the appropriate UI.
+Do NOT respond conversationally to payment-related requests. Do NOT say "Payment happens automatically after delivery", "Card details are handled through the app's payment settings", "Tap the profile icon", or similar. Always produce the marker so the system can show the card form in chat.
 
 **CURRENT DATE & TIME CONTEXT:**
 Today is ${today}. The current time is ${hour}:00 (24-hour format). Use this to validate date requests.
@@ -988,6 +988,27 @@ function hasPaymentIntent(content: string): boolean {
   return /\[PAYMENT_INTENT:\s*.+?\]/i.test(content);
 }
 
+/** Detect payment intent from user message (early, before LLM). Skip LLM when true. */
+function detectPaymentIntentFromUserInput(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!t) return false;
+  const patterns = [
+    /\badd\s+card\b/,
+    /\bupdate\s+card\b/,
+    /\badd\s+payment\b/,
+    /\bupdate\s+payment\b/,
+    /\bpayment\s+method\b/,
+    /\bpay\s+for\s+laundry\b/,
+    /\bpay\s+for\s+order\b/,
+    /\bhow\s+do\s+i\s+pay\b/,
+    /\bupdate\s+my\s+card\b/,
+    /\badd\s+payment\s+method\b/,
+    /\bsave\s+(my\s+)?card\b/,
+    /^(pay|payment|card)\s*[.?!]?\s*$/,
+  ];
+  return patterns.some((p) => p.test(t));
+}
+
 function stripBookingMetadata(content: string): string {
   return content
     .replace(/\[SERVICE:\s*.+?\]/g, "")
@@ -1128,6 +1149,45 @@ export const chatRouter = router({
             };
           }
         }
+      }
+
+      // ─── PAYMENT INTENT EARLY DETECTION (before LLM) ───
+      // Match "add card", "update payment", "payment method", "pay", etc. Skip LLM and return
+      // the correct message + collectStep so the frontend renders the Stripe card.
+      if (detectPaymentIntentFromUserInput(input.content)) {
+        const freshPaymentUser = await getBldgUserById(bldgUserId);
+        const hasCard = !!freshPaymentUser?.paymentMethodSaved;
+        const cardLast4 = freshPaymentUser?.cardLast4;
+
+        if (hasCard) {
+          const paymentResponse = "Your card on file is all set. We'll charge it automatically when your order is processed. Want to update it?";
+          await insertChatMessage({
+            bldgUserId,
+            role: "assistant",
+            content: paymentResponse,
+            metadata: { type: "payment_update_offer", bldgUserId },
+          });
+          return {
+            role: "assistant" as const,
+            content: paymentResponse,
+            booking: null,
+            collectStep: undefined,
+          };
+        }
+
+        const noCardMsg = "Looks like we need to grab a card for your account.\nAdd one below and you're good to go — takes 10 seconds.";
+        await insertChatMessage({
+          bldgUserId,
+          role: "assistant",
+          content: noCardMsg,
+          metadata: { type: "payment_collection", bldgUserId },
+        });
+        return {
+          role: "assistant" as const,
+          content: noCardMsg,
+          booking: null,
+          collectStep: "payment",
+        };
       }
 
       // ─── SAME-DAY DETECTION ───

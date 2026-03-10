@@ -41,8 +41,7 @@ const stripePublishableKey =
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
 const stripeInitError = stripePublishableKey ? null : "Stripe publishable key is unavailable.";
 const stripePromise = stripeInitError ? null : loadStripe(stripePublishableKey);
-const PAYMENT_SAVED_MESSAGE =
-  "You're all set. Your card on file won't be charged until your order is picked up and undergoes intake.";
+const PAYMENT_SAVED_MESSAGE = "Card saved. You're all set.";
 
 // ─── Service tile definitions ───
 
@@ -1256,7 +1255,8 @@ export default function Home() {
     } else {
       setTimeout(() => historyQuery.refetch(), 300);
     }
-  }, [postBookingPhase, postBookingData, historyQuery]);
+    void utils.chat.getVaultProfile.invalidate();
+  }, [postBookingPhase, postBookingData, historyQuery, utils]);
 
   const handleSend = useCallback(
     async (text?: string) => {
