@@ -98,6 +98,11 @@ export const serviceRequests = mysqlTable("service_requests", {
     "in-progress",
     "completed",
     "cancelled",
+    "new",
+    "contacting-vendor",
+    "awaiting-vendor",
+    "scheduled",
+    "closed",
   ])
     .default("pending")
     .notNull(),
@@ -119,6 +124,12 @@ export const serviceRequests = mysqlTable("service_requests", {
   // Receipt from bldg-admin after charge (webhook /api/webhooks/receipt)
   receiptUrl: varchar("receiptUrl", { length: 512 }),
   orderId: int("orderId"),
+  // Coordinated service request fields (Car Wash, Dog Grooming, Other)
+  buildingId: varchar("buildingId", { length: 20 }),
+  buildingLabel: varchar("buildingLabel", { length: 100 }),
+  residentName: varchar("residentName", { length: 200 }),
+  residentPhone: varchar("residentPhone", { length: 20 }),
+  source: varchar("source", { length: 50 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
