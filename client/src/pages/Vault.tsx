@@ -1,17 +1,51 @@
 // ============================================
-// The Vault — Resident ID, Booking History, Receipts
+// The Vault — Resident ID, Tabs (Active / History / Receipts), Coordinated timeline
 // Premium dark UI matching BLDG.chat warm brown palette
 // ============================================
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Shield, Clock, ChevronRight, Package, Shirt, Car, Dog, SprayCan, X } from "lucide-react";
+import { ArrowLeft, Shield, Clock, ChevronRight, Package, Shirt, Car, Dog, SprayCan, X, FileText, CheckCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 // ─── Types ───
 
 interface VaultProps {
   onBack: () => void;
+}
+
+type VaultTab = "active" | "history" | "receipts";
+
+// Status sets for tabs (existing schema enum values only)
+const ACTIVE_STATUSES = new Set([
+  "pending",
+  "paid",
+  "confirmed",
+  "in-progress",
+  "scheduled",
+  "contacting-vendor",
+  "awaiting-vendor",
+  "new",
+]);
+const HISTORY_STATUSES = new Set(["completed", "closed"]);
+const CANCELLED_STATUS = "cancelled";
+
+// Coordinated services get the progress timeline
+const COORDINATED_SERVICE_TYPES = new Set(["car-wash", "grooming"]);
+
+// Timeline step order for coordinated services (existing statuses only)
+const TIMELINE_STEPS = [
+  { key: "received", label: "Request received", statuses: new Set(["new", "pending"]) },
+  { key: "contacting", label: "Contacting vendor", statuses: new Set(["contacting-vendor", "awaiting-vendor"]) },
+  { key: "scheduled", label: "Scheduled", statuses: new Set(["scheduled"]) },
+  { key: "completed", label: "Completed", statuses: new Set(["completed", "closed"]) },
+] as const;
+
+function getTimelineStepIndex(status: string): number {
+  for (let i = 0; i < TIMELINE_STEPS.length; i++) {
+    if (TIMELINE_STEPS[i].statuses.has(status)) return i;
+  }
+  return -1;
 }
 
 // ─── Helpers ───
@@ -45,6 +79,11 @@ const STATUS_COLORS: Record<string, string> = {
   "in-progress": "#7EB89A",
   completed: "#7EB89A",
   cancelled: "#9E8E82",
+  new: "#C9A96E",
+  "contacting-vendor": "#C9A96E",
+  "awaiting-vendor": "#C9A96E",
+  scheduled: "#C9A96E",
+  closed: "#7EB89A",
 };
 
 function formatBuildingName(slug: string | null | undefined): string {
@@ -81,34 +120,97 @@ function formatDate(date: string | Date | null | undefined): string {
 
 export default function Vault({ onBack }: VaultProps) {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<VaultTab>("active");
 
-  // Fetch user profile for Vault
   const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
   const user = profileData?.user || null;
 
-  // Fetch booking history
   const { data: requestsData, isLoading } = trpc.chat.getRequests.useQuery();
   const requests = requestsData?.requests || [];
 
-  // All bookings in one list, newest first
-  const allBookings = [...requests].sort(
-    (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  const sortedRequests = useMemo(
+    () => [...requests].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [requests]
+  );
+
+  const activeItems = useMemo(
+    () => sortedRequests.filter((r: any) => ACTIVE_STATUSES.has(r.status)),
+    [sortedRequests]
+  );
+  const historyItems = useMemo(() => {
+    const completed = sortedRequests.filter((r: any) => HISTORY_STATUSES.has(r.status));
+    const cancelled = sortedRequests.filter((r: any) => r.status === CANCELLED_STATUS);
+    return [...completed, ...cancelled];
+  }, [sortedRequests]);
+  const receiptItems = useMemo(
+    () => sortedRequests.filter((r: any) => r.receiptUrl && String(r.receiptUrl).trim()),
+    [sortedRequests]
   );
 
   const memberSince = user?.createdAt ? formatDate(user.createdAt) : "—";
 
+  const emptyMessage: Record<VaultTab, string> = {
+    active: "No active services right now.",
+    history: "Your completed services will appear here.",
+    receipts: "Your first receipt will appear here after your order is processed.",
+  };
+
+  const currentItems =
+    activeTab === "active" ? activeItems : activeTab === "history" ? historyItems : receiptItems;
+  const isEmpty = currentItems.length === 0;
+
+  function renderRow(req: any, showReceiptAction?: boolean) {
+    return (
+      <button
+        key={req.id}
+        className="vault-booking-row"
+        onClick={() => setSelectedRequest(req)}
+      >
+        <span className="vault-booking-icon">
+          {SERVICE_ICONS[req.serviceType] || <Package size={16} />}
+        </span>
+        <div className="vault-booking-info">
+          <span className="vault-booking-service">
+            {SERVICE_LABELS[req.serviceType] || req.serviceType}
+          </span>
+          <span className="vault-booking-date">
+            {req.scheduledDate || formatDate(req.createdAt)}
+            {req.scheduledWindow ? ` · ${req.scheduledWindow}` : ""}
+          </span>
+        </div>
+        {showReceiptAction && req.receiptUrl ? (
+          <a
+            href={req.receiptUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="vault-receipt-link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Open receipt
+          </a>
+        ) : (
+          <span
+            className="vault-booking-status"
+            style={{ color: STATUS_COLORS[req.status] || "#9E8E82" }}
+          >
+            {req.status === CANCELLED_STATUS ? "Cancelled" : req.status}
+          </span>
+        )}
+        <ChevronRight size={14} className="vault-booking-chevron" />
+      </button>
+    );
+  }
+
   return (
     <div className="vault-container">
-      {/* Header */}
       <div className="vault-header">
         <button className="vault-back" onClick={onBack}>
           <ArrowLeft size={20} />
         </button>
         <span className="vault-title">The Vault</span>
-        <div style={{ width: 36 }} /> {/* Spacer for centering */}
+        <div style={{ width: 36 }} />
       </div>
 
-      {/* Resident ID Card */}
       <motion.div
         className="vault-id-card"
         initial={{ opacity: 0, y: 12 }}
@@ -153,31 +255,72 @@ export default function Vault({ onBack }: VaultProps) {
         </div>
       </motion.div>
 
-      {/* All Bookings */}
+      {/* Tabs */}
+      <div className="vault-tabs">
+        <button
+          type="button"
+          className={`vault-tab ${activeTab === "active" ? "vault-tab-active" : ""}`}
+          onClick={() => setActiveTab("active")}
+        >
+          <Clock size={14} />
+          <span>Active</span>
+          {activeItems.length > 0 && (
+            <span className="vault-tab-count">{activeItems.length}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`vault-tab ${activeTab === "history" ? "vault-tab-active" : ""}`}
+          onClick={() => setActiveTab("history")}
+        >
+          <CheckCircle size={14} />
+          <span>History</span>
+          {historyItems.length > 0 && (
+            <span className="vault-tab-count">{historyItems.length}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`vault-tab ${activeTab === "receipts" ? "vault-tab-active" : ""}`}
+          onClick={() => setActiveTab("receipts")}
+        >
+          <FileText size={14} />
+          <span>Receipts</span>
+          {receiptItems.length > 0 && (
+            <span className="vault-tab-count">{receiptItems.length}</span>
+          )}
+        </button>
+      </div>
+
+      {/* Tab content */}
       <motion.div
         className="vault-section"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.3 }}
+        transition={{ delay: 0.05, duration: 0.3 }}
       >
         <div className="vault-section-header">
-          <Clock size={14} />
-          <span>Bookings</span>
-          {allBookings.length > 0 && (
-            <span className="vault-section-count">{allBookings.length}</span>
+          <span>
+            {activeTab === "active" && "Active"}
+            {activeTab === "history" && "History"}
+            {activeTab === "receipts" && "Receipts"}
+          </span>
+          {currentItems.length > 0 && (
+            <span className="vault-section-count">{currentItems.length}</span>
           )}
         </div>
         {isLoading ? (
           <div className="vault-empty">Loading...</div>
-        ) : allBookings.length === 0 ? (
+        ) : isEmpty ? (
           <div className="vault-empty vault-empty-centered">
-            Your first receipt will appear here after your order is processed.
+            {emptyMessage[activeTab]}
           </div>
-        ) : (
-          allBookings.map((req: any) => (
+        ) : activeTab === "receipts" ? (
+          currentItems.map((req: any) => (
             <button
               key={req.id}
-              className="vault-booking-row"
+              type="button"
+              className="vault-booking-row vault-receipt-row"
               onClick={() => setSelectedRequest(req)}
             >
               <span className="vault-booking-icon">
@@ -189,18 +332,25 @@ export default function Vault({ onBack }: VaultProps) {
                 </span>
                 <span className="vault-booking-date">
                   {req.scheduledDate || formatDate(req.createdAt)}
-                  {req.scheduledWindow ? ` · ${req.scheduledWindow}` : ""}
+                  {req.upgradePriceCents != null
+                    ? ` · $${(req.upgradePriceCents / 100).toFixed(2)}`
+                    : ""}
                 </span>
               </div>
-              <span
-                className="vault-booking-status"
-                style={{ color: STATUS_COLORS[req.status] || "#9E8E82" }}
+              <a
+                href={req.receiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="vault-receipt-link vault-receipt-link-btn"
+                onClick={(e) => e.stopPropagation()}
               >
-                {req.status}
-              </span>
+                Open receipt
+              </a>
               <ChevronRight size={14} className="vault-booking-chevron" />
             </button>
           ))
+        ) : (
+          currentItems.map((req: any) => renderRow(req, false))
         )}
       </motion.div>
 
@@ -231,6 +381,31 @@ export default function Vault({ onBack }: VaultProps) {
                   <X size={18} />
                 </button>
               </div>
+
+              {COORDINATED_SERVICE_TYPES.has(selectedRequest.serviceType) && (
+                <div className="vault-timeline">
+                  {TIMELINE_STEPS.map((step, idx) => {
+                    const currentStep = getTimelineStepIndex(selectedRequest.status);
+                    const isReached = currentStep >= idx;
+                    const isCurrent = currentStep === idx;
+                    return (
+                      <div key={step.key} className="vault-timeline-step">
+                        <div
+                          className={`vault-timeline-dot ${isReached ? "vault-timeline-dot-done" : ""} ${isCurrent ? "vault-timeline-dot-current" : ""}`}
+                        />
+                        {idx < TIMELINE_STEPS.length - 1 && (
+                          <div
+                            className={`vault-timeline-line ${isReached && currentStep > idx ? "vault-timeline-line-done" : ""}`}
+                          />
+                        )}
+                        <span className={`vault-timeline-label ${isReached ? "vault-timeline-label-done" : ""}`}>
+                          {step.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="vault-detail-body">
                 <div className="vault-detail-row">

@@ -3172,6 +3172,140 @@
     color: rgba(245, 240, 232, 0.5);
   }
 
+  /* Vault Tabs */
+  .vault-tabs {
+    display: flex;
+    gap: 0;
+    margin: 0 16px 12px;
+    padding: 4px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(245, 240, 232, 0.06);
+  }
+
+  .vault-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 8px;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(245, 240, 232, 0.5);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .vault-tab:hover {
+    color: rgba(245, 240, 232, 0.8);
+  }
+
+  .vault-tab-active {
+    background: rgba(201, 169, 110, 0.15);
+    color: #C9A96E;
+  }
+
+  .vault-tab-count {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(245, 240, 232, 0.1);
+    color: rgba(245, 240, 232, 0.6);
+  }
+
+  .vault-tab-active .vault-tab-count {
+    background: rgba(201, 169, 110, 0.25);
+    color: #C9A96E;
+  }
+
+  .vault-receipt-row .vault-booking-info {
+    flex: 1;
+  }
+
+  .vault-receipt-link-btn {
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: rgba(201, 169, 110, 0.15);
+  }
+
+  .vault-receipt-link-btn:hover {
+    background: rgba(201, 169, 110, 0.25);
+  }
+
+  /* Coordinated service progress timeline */
+  .vault-timeline {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(245, 240, 232, 0.06);
+  }
+
+  .vault-timeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+    min-width: 0;
+  }
+
+  .vault-timeline-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(245, 240, 232, 0.15);
+    flex-shrink: 0;
+    margin-bottom: 6px;
+    transition: background 0.2s;
+  }
+
+  .vault-timeline-dot-done {
+    background: #C9A96E;
+  }
+
+  .vault-timeline-dot-current {
+    box-shadow: 0 0 0 3px rgba(201, 169, 110, 0.35);
+  }
+
+  .vault-timeline-line {
+    position: absolute;
+    top: 4px;
+    left: calc(50% + 6px);
+    right: -50%;
+    height: 2px;
+    background: rgba(245, 240, 232, 0.1);
+    z-index: 0;
+  }
+
+  .vault-timeline-line-done {
+    background: #C9A96E;
+  }
+
+  .vault-timeline-step .vault-timeline-dot {
+    position: relative;
+    z-index: 1;
+  }
+
+  .vault-timeline-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(245, 240, 232, 0.35);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .vault-timeline-label-done {
+    color: rgba(245, 240, 232, 0.7);
+  }
+
   /* Booking Rows */
   .vault-booking-row {
     display: flex;
