@@ -4,6 +4,7 @@
  */
 export {
   mapLbOrderReceiptJsonToBldgReceipt,
+  mapLbOrderReceiptJsonToBldgReceipt as mapLaundryButlerApiToBldgReceipt,
   type LbOrderReceiptJson,
   type MapLbOrderReceiptToBldgOptions,
   orderPlacedDisplayIsMissing,
