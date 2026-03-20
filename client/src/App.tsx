@@ -25,7 +25,7 @@ import {
   resolveBuildingFromHostname,
 } from "@shared/buildingHostMap";
 
-function Router() {
+function PageSwitch() {
   const [location] = useLocation();
 
   // Render exactly one page component. This avoids any ambiguity in route
@@ -66,7 +66,14 @@ function Router() {
 }
 
 function App() {
+  const [location] = useLocation();
+
+  /** Public product tour — sales/demo; no session or OTP required */
+  const isPublicTour =
+    location === "/tour" || location.startsWith("/tour/");
+
   const shouldShowNeutralFallback =
+    !isPublicTour &&
     typeof window !== "undefined" &&
     Boolean(extractNumericHostToken(window.location.hostname)) &&
     !resolveBuildingFromHostname(window.location.hostname);
@@ -90,9 +97,11 @@ function App() {
           />
           {shouldShowNeutralFallback ? (
             <NeutralBuildingFallback />
+          ) : isPublicTour ? (
+            <PageSwitch />
           ) : (
             <OnboardingFlow>
-              <Router />
+              <PageSwitch />
             </OnboardingFlow>
           )}
         </TooltipProvider>
