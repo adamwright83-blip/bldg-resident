@@ -15,6 +15,9 @@ import Home from "./pages/Home";
 import Welcome from "./pages/Welcome";
 import OrderReceipt from "./pages/OrderReceipt";
 import Receipt from "./pages/Receipt";
+import ManusLanding from "./pages/ManusLanding";
+import MarketplacePrototype from "./pages/MarketplacePrototype";
+import CommunityPulse from "./pages/CommunityPulse";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import {
@@ -45,6 +48,18 @@ function Router() {
 
   if (/^\/receipt\/[^/]+/.test(location)) {
     return <Receipt />;
+  }
+
+  if (location.startsWith("/marketplace")) {
+    return <MarketplacePrototype />;
+  }
+
+  if (location.startsWith("/tour")) {
+    return <ManusLanding />;
+  }
+
+  if (location.startsWith("/pulse")) {
+    return <CommunityPulse />;
   }
 
   return <Home />;

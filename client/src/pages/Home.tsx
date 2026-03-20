@@ -15,7 +15,8 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight, ArrowLeft, MoreHorizontal } from "lucide-react";
+import { useLocation } from "wouter";
+import { Send, Phone, MessageSquare, Loader2, LayoutGrid, ChevronDown, Check, Wrench, Puzzle, Home as HomeIcon, ArrowRight, ArrowLeft, MoreHorizontal, Sparkles, ShoppingBag } from "lucide-react";
 import { API_BASE } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { StreamingText } from "@/components/StreamingText";
@@ -720,6 +721,7 @@ export default function Home() {
   const [sessionUserId, setSessionUserId] = useState<number | null>(null);
   const sessionBootstrapRetried = useRef(false);
   const pendingOtherRequestRef = useRef(false);
+  const [, setLocation] = useLocation();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1623,6 +1625,58 @@ export default function Home() {
           </a>
         </div>
       </header>
+
+      {!servicesMode && (
+        <div
+          className="home-discover-strip"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px 10px",
+            borderBottom: "1px solid var(--border-subtle)",
+            overflowX: "auto",
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--text-tertiary)",
+              marginRight: 4,
+              flexShrink: 0,
+            }}
+          >
+            Explore
+          </span>
+          <button
+            type="button"
+            className="home-discover-chip tappable"
+            onClick={() => setLocation("/pulse")}
+          >
+            <Sparkles size={14} strokeWidth={1.8} />
+            Building pulse
+          </button>
+          <button
+            type="button"
+            className="home-discover-chip tappable"
+            onClick={() => setLocation("/marketplace")}
+          >
+            <ShoppingBag size={14} strokeWidth={1.8} />
+            Marketplace
+          </button>
+          <button
+            type="button"
+            className="home-discover-chip tappable"
+            onClick={() => setLocation("/tour")}
+          >
+            Product tour
+          </button>
+        </div>
+      )}
 
       {/* Messages Area — exactly one of: Services panel OR Chat (empty or thread) */}
       <div
