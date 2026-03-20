@@ -30,6 +30,8 @@ import {
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
+import { mapLaundryButlerApiToBldgReceipt } from "@shared/mapLaundryButlerApiToBldgReceipt";
+import type { BldgReceiptViewModel } from "@shared/receiptViewModel";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -58,6 +60,28 @@ function getSessionSecret(): Uint8Array {
 
 function getLaundryApiBase(): string {
   return process.env.LAUNDRY_API_BASE_URL ?? "https://laundrybutler.bldg.chat";
+}
+
+/** Receipt link JWT — same secret fallbacks as api/receipt/[token].ts */
+function getReceiptJwtSecretBytes(): Uint8Array {
+  const raw =
+    process.env.JWT_SHARED_SECRET ||
+    process.env.JWT_SECRET ||
+    process.env.APP_SHARED_API_SECRET ||
+    "";
+  return new TextEncoder().encode(raw);
+}
+
+/** Server-side defaults until building→vendor branding is centralized */
+function defaultReceiptBrandingFromEnv(): BldgReceiptViewModel["branding"] {
+  return {
+    title: process.env.RECEIPT_BRANDING_TITLE?.trim() || "Laundry Butler",
+    serviceSubtitle: "",
+    businessName: process.env.RECEIPT_BUSINESS_NAME?.trim() || "Laundry Butler",
+    addressLine1: process.env.RECEIPT_ADDRESS_LINE1?.trim() || "Los Angeles, CA",
+    addressLine2: process.env.RECEIPT_ADDRESS_LINE2?.trim() || "United States",
+    phoneDisplay: process.env.RECEIPT_PHONE?.trim() || "(323) 807-4661",
+  };
 }
 
 function isSecureRequest(req: Request): boolean {
@@ -534,6 +558,82 @@ export function registerWelcomeRoutes(app: Router): void {
     } catch (err) {
       console.error("[SetBuilding] Error:", err);
       return res.status(500).json({ error: "Failed to save building" });
+    }
+  });
+
+  /**
+   * POST /api/receipt/expand
+   * Verifies charge-time receipt JWT, fetches Laundry Butler receipt JSON, returns BldgReceiptViewModel.
+   * No session required — possession of valid token is the auth.
+   */
+  app.post("/api/receipt/expand", async (req: Request, res: Response) => {
+    try {
+      const token =
+        typeof req.body?.token === "string" ? req.body.token.trim() : "";
+      if (!token) {
+        return res.status(400).json({ error: "Missing token" });
+      }
+
+      const secret = getReceiptJwtSecretBytes();
+      if (secret.length === 0) {
+        console.error("[ReceiptExpand] No JWT secret configured");
+        return res.status(500).json({ error: "Server misconfigured" });
+      }
+
+      let orderIdStr: string;
+      try {
+        const { payload } = await jwtVerify(token, secret, {
+          clockTolerance: 0,
+          maxTokenAge: "365d",
+        });
+        const orderId = payload.orderId as number | string | undefined;
+        if (orderId == null || orderId === "") {
+          return res.status(400).json({ error: "Invalid token: missing orderId" });
+        }
+        orderIdStr = String(orderId);
+      } catch (e: any) {
+        const code = e?.code;
+        if (code === "ERR_JWT_EXPIRED") {
+          return res.status(401).json({ error: "Token expired" });
+        }
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+
+      const sharedSecret = getSharedApiSecret();
+      if (!sharedSecret) {
+        console.error("[ReceiptExpand] APP_SHARED_API_SECRET not set");
+        return res.status(500).json({ error: "Server misconfigured" });
+      }
+
+      const laundryApiBase = getLaundryApiBase();
+      try {
+        const response = await axios.get(
+          `${laundryApiBase}/api/orders/${orderIdStr}/receipt`,
+          {
+            headers: { "X-APP-SHARED-SECRET": sharedSecret },
+            timeout: 15000,
+          }
+        );
+        const model = mapLaundryButlerApiToBldgReceipt(response.data, {
+          branding: defaultReceiptBrandingFromEnv(),
+        });
+        return res.json(model);
+      } catch (err: any) {
+        if (err.response) {
+          console.error(
+            `[ReceiptExpand] LB API ${err.response.status}:`,
+            err.response.data
+          );
+          return res.status(err.response.status || 502).json({
+            error: "Failed to load receipt details",
+          });
+        }
+        console.error("[ReceiptExpand] Unexpected error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    } catch (err) {
+      console.error("[ReceiptExpand] Error:", err);
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 

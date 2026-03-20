@@ -1,97 +1,111 @@
 /**
  * Receipt page — /receipt/:token
- * Pure client-rendered: decode JWT payload in browser (no signature verification), render receipt.
- * BLDG aesthetic: warm dark background, gold accents, centered card.
+ * Verifies JWT server-side, expands to BldgReceiptViewModel via POST /api/receipt/expand.
  */
-
 import { useParams } from "wouter";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { API_BASE } from "@/const";
+import { ReceiptPaper } from "@/components/receipt/ReceiptPaper";
+import type { BldgReceiptViewModel } from "@shared/receiptViewModel";
 
-interface ReceiptPayload {
-  orderId?: number;
-  totalWeight?: number | null;
-  finalAmount?: number | null;
-  currency?: string;
-  vendorName?: string | null;
-  iat?: number | null;
-  exp?: number | null;
-}
-
-function base64UrlDecode(str: string): string {
-  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = base64.length % 4;
-  const padded = pad ? base64 + "=".repeat(4 - pad) : base64;
-  try {
-    return atob(padded);
-  } catch {
-    return "";
-  }
-}
-
-function decodeReceiptPayload(token: string): ReceiptPayload | null {
-  if (!token || typeof token !== "string") return null;
-  const trimmed = token.trim();
-  const parts = trimmed.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const decoded = base64UrlDecode(parts[1]);
-    if (!decoded) return null;
-    return JSON.parse(decoded) as ReceiptPayload;
-  } catch {
-    return null;
-  }
-}
-
-function isExpired(payload: ReceiptPayload): boolean {
-  const exp = payload.exp;
-  if (exp == null || typeof exp !== "number") return false;
-  const now = Math.floor(Date.now() / 1000);
-  return exp < now;
-}
-
-function isValidReceiptPayload(payload: ReceiptPayload | null): payload is ReceiptPayload {
-  if (!payload || payload.orderId == null) return false;
-  if (isExpired(payload)) return false;
-  return true;
+function extractTokenFromLocation(): string {
+  if (typeof window === "undefined") return "";
+  const path = window.location.pathname;
+  const fromPath = path.includes("/receipt/")
+    ? (path.split("/receipt/")[1] ?? "")
+    : "";
+  const raw = decodeURIComponent(fromPath.trim());
+  return raw.split("/")[0].split("?")[0].split("#")[0].trim();
 }
 
 export default function Receipt() {
   const params = useParams<{ token?: string }>();
   const tokenFromParams = params?.token ?? "";
-  const tokenFromPath =
-    typeof window !== "undefined" && window.location.pathname.includes("/receipt/")
-      ? window.location.pathname.split("/receipt/")[1] ?? ""
-      : "";
-  const rawToken = decodeURIComponent((tokenFromParams || tokenFromPath || "").trim());
-  const token = rawToken.split("/")[0].split("?")[0].split("#")[0].trim();
+  const token = useMemo(() => {
+    const a = (tokenFromParams || "").trim();
+    if (a) {
+      return decodeURIComponent(a).split("/")[0].split("?")[0].split("#")[0].trim();
+    }
+    return extractTokenFromLocation();
+  }, [tokenFromParams]);
 
-  const { payload, invalid, invalidReason } = useMemo(() => {
-    console.log("[Receipt] token length:", token.length);
-    const parts = token.trim().split(".");
-    console.log("[Receipt] parts length:", parts.length);
-    const decoded = decodeReceiptPayload(token);
-    console.log("[Receipt] decoded payload:", decoded);
-    if (decoded && decoded.orderId != null && !isExpired(decoded)) {
-      return { payload: decoded, invalid: false, invalidReason: null };
+  const [model, setModel] = useState<BldgReceiptViewModel | null>(null);
+  const [invalid, setInvalid] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) {
+      setInvalid(true);
+      setLoading(false);
+      return;
     }
-    let reason: string;
-    if (!decoded) {
-      reason = "decode failed or null";
-    } else {
-      if (decoded.orderId == null) reason = "missing orderId";
-      else if (isExpired(decoded)) reason = "expired";
-      else reason = "unknown";
+
+    let cancelled = false;
+
+    async function expand() {
+      try {
+        setLoading(true);
+        setInvalid(false);
+        setLoadError(null);
+        const res = await fetch(`${API_BASE}/api/receipt/expand`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        if (cancelled) return;
+        if (res.status === 401) {
+          setInvalid(true);
+          setModel(null);
+          return;
+        }
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setLoadError(
+            typeof body.error === "string" ? body.error : "Could not load receipt"
+          );
+          setModel(null);
+          return;
+        }
+        const data = (await res.json()) as BldgReceiptViewModel;
+        if (data?.schemaVersion === 1 && data.branding && data.lines) {
+          setModel(data);
+        } else {
+          setLoadError("Invalid receipt data");
+          setModel(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setLoadError("Network error");
+          setModel(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    console.log("[Receipt] invalid reason:", reason);
-    return { payload: null, invalid: true, invalidReason: reason };
+
+    expand();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-100 text-neutral-500 text-sm">
+        Loading receipt…
+      </div>
+    );
+  }
 
   if (invalid) {
     return (
-      <div className="receipt-page" style={receiptPageStyle}>
-        <div className="receipt-card receipt-card--error" style={cardStyle}>
-          <h1 style={errorTitleStyle}>This receipt link is no longer valid.</h1>
-          <p style={errorSecondaryStyle}>
+      <div className="min-h-screen flex items-center justify-center p-6 bg-neutral-100">
+        <div className="max-w-md w-full bg-white border border-neutral-200 rounded-2xl p-7 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-neutral-900 mb-2">
+            This receipt link is no longer valid.
+          </h1>
+          <p className="text-sm text-neutral-500">
             Reply in chat and we&apos;ll help you locate your receipt.
           </p>
         </div>
@@ -99,135 +113,18 @@ export default function Receipt() {
     );
   }
 
-  if (!payload) return null;
-
-  const amountDollars =
-    payload.finalAmount != null ? (payload.finalAmount / 100).toFixed(2) : "—";
-  const currency = payload.currency || "USD";
-  const dateCharged =
-    payload.iat != null
-      ? new Date(payload.iat * 1000).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })
-      : null;
-
-  return (
-    <div className="receipt-page" style={receiptPageStyle}>
-      <div className="receipt-card" style={cardStyle}>
-        <p style={brandStyle}>BLDG.chat</p>
-        <h1 style={titleStyle}>Receipt</h1>
-
-        <div style={rowStyle}>
-          <span style={mutedStyle}>Order</span>
-          <span style={valueStyle}>#{payload.orderId}</span>
+  if (loadError || !model) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-neutral-100">
+        <div className="max-w-md w-full bg-white border border-neutral-200 rounded-2xl p-7 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-neutral-900 mb-2">
+            Could not load receipt
+          </h1>
+          <p className="text-sm text-neutral-500">{loadError}</p>
         </div>
-        {payload.vendorName && (
-          <div style={rowStyle}>
-            <span style={mutedStyle}>Vendor</span>
-            <span style={valueStyle}>{payload.vendorName}</span>
-          </div>
-        )}
-        <div style={rowStyle}>
-          <span style={mutedStyle}>Amount charged</span>
-          <span style={valueStyle}>
-            {currency} ${amountDollars}
-          </span>
-        </div>
-        {payload.totalWeight != null && payload.totalWeight > 0 && (
-          <div style={rowStyle}>
-            <span style={mutedStyle}>Weight</span>
-            <span style={valueStyle}>{payload.totalWeight} lbs</span>
-          </div>
-        )}
-        {dateCharged && (
-          <div style={rowStyle}>
-            <span style={mutedStyle}>Date charged</span>
-            <span style={valueStyle}>{dateCharged}</span>
-          </div>
-        )}
-        <div style={rowStyle}>
-          <span style={mutedStyle}>Currency</span>
-          <span style={valueStyle}>{currency}</span>
-        </div>
-
-        <footer style={footerStyle}>Paid and processed securely.</footer>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return <ReceiptPaper model={model} />;
 }
-
-const receiptPageStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "var(--bg, #2C2824)",
-  color: "var(--text-primary, #F5F0E8)",
-  fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 24,
-  boxSizing: "border-box",
-};
-
-const cardStyle: React.CSSProperties = {
-  background: "var(--bg-elevated, #3D3630)",
-  borderRadius: 16,
-  padding: "28px 24px",
-  maxWidth: 400,
-  width: "100%",
-  border: "1px solid var(--border, rgba(245,240,232,0.14))",
-};
-
-const brandStyle: React.CSSProperties = {
-  fontSize: 12,
-  letterSpacing: "0.08em",
-  color: "var(--accent, #C9A96E)",
-  marginBottom: 4,
-  fontWeight: 600,
-};
-
-const titleStyle: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 600,
-  color: "var(--text-primary, #F5F0E8)",
-  marginBottom: 24,
-};
-
-const rowStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "baseline",
-  padding: "10px 0",
-  borderBottom: "1px solid var(--border-subtle, rgba(245,240,232,0.08))",
-};
-
-const mutedStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: "var(--text-secondary, rgba(245,240,232,0.78))",
-};
-
-const valueStyle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 500,
-  color: "var(--text-primary, #F5F0E8)",
-};
-
-const footerStyle: React.CSSProperties = {
-  marginTop: 24,
-  paddingTop: 16,
-  borderTop: "1px solid var(--border-subtle, rgba(245,240,232,0.08))",
-  fontSize: 11,
-  color: "var(--text-tertiary, rgba(245,240,232,0.55))",
-  textAlign: "center",
-};
-
-const errorTitleStyle: React.CSSProperties = {
-  ...titleStyle,
-  marginBottom: 12,
-};
-
-const errorSecondaryStyle: React.CSSProperties = {
-  ...mutedStyle,
-  fontSize: 14,
-};
