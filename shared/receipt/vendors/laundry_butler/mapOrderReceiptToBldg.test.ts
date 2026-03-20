@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import dryCleaningFixture from "../docs/samples/laundry-butler-receipt.sample.json";
-import washFoldFixture from "../docs/samples/laundry-butler-receipt-wash-fold.sample.json";
-import type { BldgReceiptViewModel } from "./receiptViewModel";
-import { mapLaundryButlerApiToBldgReceipt } from "./mapLaundryButlerApiToBldgReceipt";
+import dryCleaningFixture from "../../../../docs/samples/laundry-butler-receipt.sample.json";
+import washFoldFixture from "../../../../docs/samples/laundry-butler-receipt-wash-fold.sample.json";
+import type { BldgReceiptViewModel } from "../../../receiptViewModel";
+import { mapLbOrderReceiptJsonToBldgReceipt } from "./mapOrderReceiptToBldg";
 
 const testBranding: BldgReceiptViewModel["branding"] = {
   title: "Test Vendor",
@@ -13,9 +13,9 @@ const testBranding: BldgReceiptViewModel["branding"] = {
   phoneDisplay: "555",
 };
 
-describe("mapLaundryButlerApiToBldgReceipt", () => {
+describe("mapLbOrderReceiptJsonToBldgReceipt", () => {
   it("maps lineItems + cents totals and order placed from timestamps.createdAt", () => {
-    const vm = mapLaundryButlerApiToBldgReceipt(
+    const vm = mapLbOrderReceiptJsonToBldgReceipt(
       {
         orderId: 42,
         serviceType: "dry_cleaning",

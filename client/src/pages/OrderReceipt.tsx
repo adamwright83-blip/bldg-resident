@@ -1,5 +1,5 @@
 /**
- * /orders/:orderId — Full receipt via GET /api/orders/:orderId/receipt → BldgReceiptViewModel → ReceiptPaper.
+ * /orders/:orderId — BldgReceiptViewModel via GET /api/receipt/session/:orderId (server branding + vendor resolution).
  */
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
@@ -7,9 +7,7 @@ import { API_BASE } from "@/const";
 import { motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 import { ReceiptPaper } from "@/components/receipt/ReceiptPaper";
-import { mapLaundryButlerApiToBldgReceipt } from "@shared/mapLaundryButlerApiToBldgReceipt";
 import type { BldgReceiptViewModel } from "@shared/receiptViewModel";
-import { laundryButlerReceiptBrandingFromEnv } from "@/lib/receiptBrandingEnv";
 
 export default function OrderReceipt() {
   const params = useParams<{ orderId: string }>();
@@ -28,9 +26,10 @@ export default function OrderReceipt() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`${API_BASE}/api/orders/${orderId}/receipt`, {
-          credentials: "include",
-        });
+        const res = await fetch(
+          `${API_BASE}/api/receipt/session/${encodeURIComponent(orderId)}`,
+          { credentials: "include" }
+        );
 
         if (res.status === 401) {
           navigate("/");
@@ -44,11 +43,8 @@ export default function OrderReceipt() {
           );
         }
 
-        const data = await res.json();
-        const vm = mapLaundryButlerApiToBldgReceipt(data, {
-          branding: laundryButlerReceiptBrandingFromEnv(),
-        });
-        setModel(vm);
+        const data = (await res.json()) as BldgReceiptViewModel;
+        setModel(data);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load receipt");
       } finally {

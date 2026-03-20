@@ -1,14 +1,24 @@
-# Receipt handoff (synced from bldg-admin-api)
+# Receipt handoff (BLDG resident)
 
-Canonical updates live in **`bldg-admin-api`** on `main`: `docs/LAUNDRY_BUTLER_RECEIPT_HANDOFF.md`.
+Canonical contract: **`BldgReceiptViewModel`** only — see [`shared/receiptViewModel.ts`](../shared/receiptViewModel.ts).
 
-This copy was added when implementing `BldgReceiptViewModel` + `ReceiptPaper` in the resident app. If the two diverge, prefer the admin repo version and refresh this file.
+## Resident architecture (multi-vendor)
 
-**Resident implementation:**
+1. **Branding** — [`shared/receipt/branding/resolveBranding.ts`](../shared/receipt/branding/resolveBranding.ts)  
+   Merges vendor defaults ([`profiles.ts`](../shared/receipt/branding/profiles.ts)), per-building overrides, then `RECEIPT_*` env as **fallback** only.
 
-- Types: [`shared/receiptViewModel.ts`](../shared/receiptViewModel.ts)
-- Mapper: [`shared/mapLaundryButlerApiToBldgReceipt.ts`](../shared/mapLaundryButlerApiToBldgReceipt.ts)
-- Line builder (LB): [`shared/laundryButlerReceiptLines.ts`](../shared/laundryButlerReceiptLines.ts)
-- UI: [`client/src/components/receipt/ReceiptPaper.tsx`](../client/src/components/receipt/ReceiptPaper.tsx)
-- JWT expansion: `POST /api/receipt/expand` in [`server/welcomeRoutes.ts`](../server/welcomeRoutes.ts)
-- Fixtures: [`docs/samples/`](samples/)
+2. **Session receipts** — `GET /api/receipt/session/:orderId`  
+   Uses logged-in user’s `buildingSlug` + `?vendor=` (default `laundry_butler`) → `expandReceiptToViewModel`.
+
+3. **JWT expansion** — `POST /api/receipt/expand` `{ token }`  
+   Parses `orderId`, optional `vendorId` / `receiptVendorId`, optional `buildingSlug`, optional `serviceType` → same expansion pipeline.
+
+4. **Vendor registry** — [`server/receipt/vendorRegistry.ts`](../server/receipt/vendorRegistry.ts) + switch in [`server/receipt/expandViewModel.ts`](../server/receipt/expandViewModel.ts).
+
+5. **Raw order API (legacy / integrations)** — `GET /api/orders/:orderId/receipt` still returns vendor JSON for chat injection and tools.
+
+6. **Laundry Butler mapper** — [`shared/receipt/vendors/laundry_butler/mapOrderReceiptToBldg.ts`](../shared/receipt/vendors/laundry_butler/mapOrderReceiptToBldg.ts).
+
+7. **Fixtures** — [`docs/samples/`](samples/).
+
+Admin repo handoff doc may contain LB-specific notes; this file describes **bldg-resident** behavior.

@@ -30,8 +30,13 @@ import {
 } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
-import { mapLaundryButlerApiToBldgReceipt } from "@shared/mapLaundryButlerApiToBldgReceipt";
-import type { BldgReceiptViewModel } from "@shared/receiptViewModel";
+import { RECEIPT_VENDOR_IDS } from "@shared/receipt/types";
+import { expandReceiptToViewModel } from "./receipt/expandViewModel";
+import {
+  parseKnownVendorFromQuery,
+  parseReceiptExpansionIdentityFromJwt,
+} from "./receipt/parseExpansionIdentity";
+import { UnsupportedReceiptVendorError } from "./receipt/errors";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -70,18 +75,6 @@ function getReceiptJwtSecretBytes(): Uint8Array {
     process.env.APP_SHARED_API_SECRET ||
     "";
   return new TextEncoder().encode(raw);
-}
-
-/** Server-side defaults until building→vendor branding is centralized */
-function defaultReceiptBrandingFromEnv(): BldgReceiptViewModel["branding"] {
-  return {
-    title: process.env.RECEIPT_BRANDING_TITLE?.trim() || "Laundry Butler",
-    serviceSubtitle: "",
-    businessName: process.env.RECEIPT_BUSINESS_NAME?.trim() || "Laundry Butler",
-    addressLine1: process.env.RECEIPT_ADDRESS_LINE1?.trim() || "Los Angeles, CA",
-    addressLine2: process.env.RECEIPT_ADDRESS_LINE2?.trim() || "United States",
-    phoneDisplay: process.env.RECEIPT_PHONE?.trim() || "(323) 807-4661",
-  };
 }
 
 function isSecureRequest(req: Request): boolean {
@@ -529,6 +522,88 @@ export function registerWelcomeRoutes(app: Router): void {
   );
 
   /**
+   * GET /api/receipt/session/:orderId
+   *
+   * Authenticated BldgReceiptViewModel for /orders/:orderId.
+   * Query: ?vendor=laundry_butler (default), optional ?serviceType=
+   * Branding from central resolver (building + vendor tables + env fallback).
+   */
+  app.get(
+    "/api/receipt/session/:orderId",
+    async (req: Request, res: Response) => {
+      try {
+        const sessionCookie = getBldgSessionCookie(req);
+        const bldgUserId = await verifyBldgSession(sessionCookie);
+
+        if (!bldgUserId) {
+          return res.status(401).json({ error: "Not authenticated" });
+        }
+
+        const user = await getBldgUserById(bldgUserId);
+        if (!user) {
+          return res.status(401).json({ error: "User not found" });
+        }
+
+        const { orderId } = req.params;
+        if (!orderId) {
+          return res.status(400).json({ error: "Missing orderId" });
+        }
+
+        let vendorId;
+        try {
+          vendorId = parseKnownVendorFromQuery(
+            typeof req.query.vendor === "string" ? req.query.vendor : null,
+            RECEIPT_VENDOR_IDS.LAUNDRY_BUTLER
+          );
+        } catch (e) {
+          if (e instanceof UnsupportedReceiptVendorError) {
+            return res.status(400).json({ error: e.message });
+          }
+          throw e;
+        }
+
+        const serviceType =
+          typeof req.query.serviceType === "string"
+            ? req.query.serviceType.trim() || null
+            : null;
+
+        const sharedSecret = getSharedApiSecret();
+        if (!sharedSecret) {
+          console.error("[ReceiptSession] APP_SHARED_API_SECRET not set");
+          return res.status(500).json({ error: "Server misconfigured" });
+        }
+
+        const model = await expandReceiptToViewModel(
+          {
+            orderId,
+            vendorId,
+            buildingSlug: user.buildingSlug ?? null,
+            serviceType,
+          },
+          {
+            sharedApiSecret: sharedSecret,
+            laundryApiBase: getLaundryApiBase(),
+          }
+        );
+
+        return res.json(model);
+      } catch (err: any) {
+        if (err.response) {
+          console.error(
+            `[ReceiptSession] Vendor API ${err.response.status}:`,
+            err.response.data
+          );
+          return res.status(err.response.status || 502).json({
+            error: "Failed to load receipt",
+          });
+        }
+        console.error("[ReceiptSession] Unexpected error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  );
+
+  /**
    * POST /api/set-building
    *
    * Called during onboarding to save the user's building + unit selection.
@@ -563,8 +638,9 @@ export function registerWelcomeRoutes(app: Router): void {
 
   /**
    * POST /api/receipt/expand
-   * Verifies charge-time receipt JWT, fetches Laundry Butler receipt JSON, returns BldgReceiptViewModel.
-   * No session required — possession of valid token is the auth.
+   * Verifies receipt JWT → explicit vendor + order identity → vendor fetch + mapper → BldgReceiptViewModel.
+   * Claims: orderId (required); vendorId | receiptVendorId (optional, default laundry_butler);
+   * buildingSlug | building (optional); serviceType (optional).
    */
   app.post("/api/receipt/expand", async (req: Request, res: Response) => {
     try {
@@ -580,17 +656,13 @@ export function registerWelcomeRoutes(app: Router): void {
         return res.status(500).json({ error: "Server misconfigured" });
       }
 
-      let orderIdStr: string;
+      let payload: import("jose").JWTPayload;
       try {
-        const { payload } = await jwtVerify(token, secret, {
+        const verified = await jwtVerify(token, secret, {
           clockTolerance: 0,
           maxTokenAge: "365d",
         });
-        const orderId = payload.orderId as number | string | undefined;
-        if (orderId == null || orderId === "") {
-          return res.status(400).json({ error: "Invalid token: missing orderId" });
-        }
-        orderIdStr = String(orderId);
+        payload = verified.payload;
       } catch (e: any) {
         const code = e?.code;
         if (code === "ERR_JWT_EXPIRED") {
@@ -599,29 +671,38 @@ export function registerWelcomeRoutes(app: Router): void {
         return res.status(401).json({ error: "Invalid or expired token" });
       }
 
+      let identity;
+      try {
+        identity = parseReceiptExpansionIdentityFromJwt(payload);
+      } catch (e) {
+        if (e instanceof UnsupportedReceiptVendorError) {
+          return res.status(501).json({ error: e.message });
+        }
+        if (e instanceof Error && e.message === "missing orderId") {
+          return res.status(400).json({ error: "Invalid token: missing orderId" });
+        }
+        throw e;
+      }
+
       const sharedSecret = getSharedApiSecret();
       if (!sharedSecret) {
         console.error("[ReceiptExpand] APP_SHARED_API_SECRET not set");
         return res.status(500).json({ error: "Server misconfigured" });
       }
 
-      const laundryApiBase = getLaundryApiBase();
       try {
-        const response = await axios.get(
-          `${laundryApiBase}/api/orders/${orderIdStr}/receipt`,
-          {
-            headers: { "X-APP-SHARED-SECRET": sharedSecret },
-            timeout: 15000,
-          }
-        );
-        const model = mapLaundryButlerApiToBldgReceipt(response.data, {
-          branding: defaultReceiptBrandingFromEnv(),
+        const model = await expandReceiptToViewModel(identity, {
+          sharedApiSecret: sharedSecret,
+          laundryApiBase: getLaundryApiBase(),
         });
         return res.json(model);
       } catch (err: any) {
+        if (err instanceof UnsupportedReceiptVendorError) {
+          return res.status(501).json({ error: err.message });
+        }
         if (err.response) {
           console.error(
-            `[ReceiptExpand] LB API ${err.response.status}:`,
+            `[ReceiptExpand] Vendor API ${err.response.status}:`,
             err.response.data
           );
           return res.status(err.response.status || 502).json({

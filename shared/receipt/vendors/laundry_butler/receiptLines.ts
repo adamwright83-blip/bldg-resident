@@ -1,10 +1,9 @@
 /**
- * Build itemized receipt rows from stored order intake JSON (Laundry Butler).
- * Ported from bldg-admin-api shared/receipt.ts.
+ * Line builder for Laundry Butler order receipt JSON (intake-shaped fields).
  */
-import { WF_RATE_PER_LB_CENTS } from "./laundryButlerPricing";
+import { LB_WF_RATE_PER_LB_CENTS } from "./pricing";
 
-export type LaundryButlerReceiptLineBuilt = {
+export type LbBuiltReceiptLine = {
   item: string;
   quantity: string;
   unitPrice: string;
@@ -33,17 +32,14 @@ function fmtUnit(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-/**
- * Line items that sum to pre-discount subtotal (matches order.subtotal after intake).
- */
-export function buildLaundryButlerReceiptLines(order: {
+export function buildLbIntakeReceiptLines(order: {
   serviceType: "wash_fold" | "dry_cleaning";
   weightLbs: string | null;
   upchargesJson: unknown;
   drycleanItemsJson: unknown;
   subtotal: string | null;
-}): LaundryButlerReceiptLineBuilt[] {
-  const lines: LaundryButlerReceiptLineBuilt[] = [];
+}): LbBuiltReceiptLine[] {
+  const lines: LbBuiltReceiptLine[] = [];
 
   if (order.serviceType === "dry_cleaning") {
     const raw = order.drycleanItemsJson;
@@ -61,18 +57,17 @@ export function buildLaundryButlerReceiptLines(order: {
     return lines;
   }
 
-  /* wash_fold */
   const w = order.weightLbs ? parseFloat(String(order.weightLbs)) : 0;
   const upcharges = order.upchargesJson;
   let runningCents = 0;
 
   if (w > 0) {
-    const baseCents = Math.round(w * WF_RATE_PER_LB_CENTS);
+    const baseCents = Math.round(w * LB_WF_RATE_PER_LB_CENTS);
     runningCents += baseCents;
     lines.push({
       item: "Wash & Fold",
       quantity: w % 1 === 0 ? String(w) : w.toFixed(2),
-      unitPrice: fmtUnit(WF_RATE_PER_LB_CENTS),
+      unitPrice: fmtUnit(LB_WF_RATE_PER_LB_CENTS),
       amount: fmtMoney(baseCents),
     });
   }
