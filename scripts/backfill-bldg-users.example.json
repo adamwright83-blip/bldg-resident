@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "phone": "+13105551234",
+      "firstName": "Alex",
+      "lastName": "Rivera",
+      "buildingSlug": "opusla"
+    },
+    {
+      "phone": "3105559876",
+      "firstName": "Sam",
+      "lastName": "Lee",
+      "buildingSlug": "cpe-north"
+    }
+  ]
+}
