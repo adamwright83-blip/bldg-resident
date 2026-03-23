@@ -115,12 +115,13 @@ export async function getUserByOpenId(openId: string) {
 
 /**
  * Upsert a BLDG resident user by phone_e164.
- * If exists: update firstName, buildingSlug, lastLoginAt.
+ * If exists: update fields that are passed (undefined = leave column unchanged on duplicate).
  * If not: create the record.
  */
 export async function upsertBldgUser(data: {
   phoneE164: string;
   firstName?: string | null;
+  lastName?: string | null;
   buildingSlug?: string | null;
 }): Promise<BldgUser> {
   const db = await getDb();
@@ -134,6 +135,7 @@ export async function upsertBldgUser(data: {
   const values: InsertBldgUser = {
     phoneE164: data.phoneE164,
     firstName: data.firstName ?? null,
+    lastName: data.lastName ?? null,
     buildingSlug: data.buildingSlug ?? null,
     lastLoginAt: now,
   };
@@ -143,6 +145,9 @@ export async function upsertBldgUser(data: {
   };
   if (data.firstName !== undefined) {
     updateSet.firstName = data.firstName;
+  }
+  if (data.lastName !== undefined) {
+    updateSet.lastName = data.lastName;
   }
   if (data.buildingSlug !== undefined) {
     updateSet.buildingSlug = data.buildingSlug;

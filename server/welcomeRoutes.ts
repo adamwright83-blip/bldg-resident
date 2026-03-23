@@ -3,7 +3,7 @@
  *
  * GET /api/welcome?token=JWT
  *   - Verifies the JWT (signed with APP_SHARED_API_SECRET shared with Laundry Butler)
- *   - Extracts: phone, firstName, orderId, buildingSlug
+ *   - Extracts: phone, firstName, lastName, orderId, buildingSlug
  *   - Upserts bldg_users by phone_e164
  *   - Creates a session cookie (bldg_session)
  *   - Fetches receipt from Laundry Butler API
@@ -22,12 +22,14 @@ import axios from "axios";
 import {
   upsertBldgUser,
   getBldgUserById,
+  getBldgUserByPhone,
   insertChatMessage,
   updateBldgUser,
   getServiceRequests,
   getServiceRequestByBldgUserAndOrderId,
   updateServiceRequest,
 } from "./db";
+import { mergeWelcomeHandoffIdentity } from "./lib/welcomeHandoffMerge";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
 import { RECEIPT_VENDOR_IDS } from "@shared/receipt/types";
@@ -331,7 +333,7 @@ export function registerWelcomeRoutes(app: Router): void {
    * GET /api/welcome?token=JWT
    *
    * The Laundry Butler project redirects here after a successful order.
-   * The JWT contains: phone, firstName, orderId, buildingSlug.
+   * The JWT contains: phone, firstName, lastName, orderId, buildingSlug.
    *
    * Flow:
    * 1. Verify JWT → upsert user → create session cookie
@@ -363,16 +365,33 @@ export function registerWelcomeRoutes(app: Router): void {
       }
 
       // Extract fields from the JWT
-      const phone = payload.phone as string | undefined;
-      const firstName = payload.firstName as string | undefined;
-      const orderId = payload.orderId as string | undefined;
+      const phone = typeof payload.phone === "string" ? payload.phone.trim() : undefined;
+      const orderIdRaw = payload.orderId;
+      const orderId =
+        typeof orderIdRaw === "string"
+          ? orderIdRaw.trim()
+          : orderIdRaw != null
+            ? String(orderIdRaw)
+            : undefined;
+
+      const jwtFirst =
+        typeof payload.firstName === "string" && payload.firstName.trim()
+          ? payload.firstName.trim()
+          : undefined;
+      const jwtLast =
+        typeof payload.lastName === "string" && payload.lastName.trim()
+          ? payload.lastName.trim()
+          : undefined;
+
       const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
-      const payloadBuilding = payload.buildingSlug as string | undefined;
-      const buildingSlug =
-        hostBuilding?.slug ?? payloadBuilding ?? "3545";
+      const payloadBuilding =
+        typeof payload.buildingSlug === "string" && payload.buildingSlug.trim()
+          ? payload.buildingSlug.trim()
+          : undefined;
+      const buildingCandidate = hostBuilding?.slug ?? payloadBuilding ?? undefined;
 
       if (!hostBuilding?.slug && payloadBuilding == null) {
-        console.warn("[Welcome] No building context from host or JWT; defaulting buildingSlug to 3545");
+        console.warn("[Welcome] No building context from host or JWT; merge will use existing row or fallback 3545");
       }
 
       if (!phone || !orderId) {
@@ -382,16 +401,28 @@ export function registerWelcomeRoutes(app: Router): void {
           .json({ error: "Token missing required fields" });
       }
 
+      const existing = await getBldgUserByPhone(phone);
+      const merged = mergeWelcomeHandoffIdentity(existing, {
+        firstName: jwtFirst,
+        lastName: jwtLast,
+        buildingCandidate: buildingCandidate ?? null,
+        buildingFallback: "3545",
+      });
+
       console.log(
-        `[Welcome] Handoff for phone=${phone}, orderId=${orderId}, building=${buildingSlug}`
+        `[Welcome] Handoff for phone=${phone}, orderId=${orderId}, building=${merged.buildingSlug}`
       );
 
-      // Upsert the BLDG resident user by phone
+      // Upsert the BLDG resident user by phone (identity only — never Stripe from LB)
       const bldgUser = await upsertBldgUser({
         phoneE164: phone,
-        firstName: firstName ?? null,
-        buildingSlug,
+        firstName: merged.firstName,
+        lastName: merged.lastName,
+        buildingSlug: merged.buildingSlug,
       });
+
+      const receiptDisplayName =
+        [merged.firstName, merged.lastName].filter(Boolean).join(" ") || merged.firstName || null;
 
       // Create a session cookie
       const sessionToken = await createBldgSession(bldgUser.id);
@@ -426,7 +457,7 @@ export function registerWelcomeRoutes(app: Router): void {
       try {
         const content = formatReceiptMessage(
           receiptData,
-          firstName,
+          receiptDisplayName,
           orderId
         );
         await insertChatMessage({

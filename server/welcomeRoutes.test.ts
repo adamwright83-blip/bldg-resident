@@ -40,6 +40,7 @@ describe("Handoff JWT (signed with APP_SHARED_API_SECRET)", () => {
     const token = await new SignJWT({
       phone: "+13105551234",
       firstName: "Alex",
+      lastName: "Rivera",
       orderId: "ord_test_123",
       buildingSlug: "opusla",
     })
@@ -57,6 +58,7 @@ describe("Handoff JWT (signed with APP_SHARED_API_SECRET)", () => {
 
     expect(payload.phone).toBe("+13105551234");
     expect(payload.firstName).toBe("Alex");
+    expect(payload.lastName).toBe("Rivera");
     expect(payload.orderId).toBe("ord_test_123");
     expect(payload.buildingSlug).toBe("opusla");
   });
