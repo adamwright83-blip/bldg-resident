@@ -40,8 +40,30 @@ import { createOpsPickup } from "../opsIntegration";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
+import {
+  getCriticalProfileGaps,
+  isStrictPaymentComplete,
+  needsCriticalProfileRecovery,
+} from "../../shared/profileCritical";
 
 const BLDG_COOKIE_NAME = "bldg_session";
+
+const RECOVERY_NAME_BEFORE_PAYMENT =
+  "Let's add your name on file first — then we'll save your card.";
+
+async function insertRecoveryNameBeforePayment(bldgUserId: number): Promise<string> {
+  await insertChatMessage({
+    bldgUserId,
+    role: "assistant",
+    content: RECOVERY_NAME_BEFORE_PAYMENT,
+    metadata: {
+      type: "onboarding_collect",
+      collectType: "name",
+      resumeWithPayment: true,
+    },
+  });
+  return RECOVERY_NAME_BEFORE_PAYMENT;
+}
 const CONTEXT_WINDOW = 20;
 
 // ─── Onboarding step constants (v2) ───
@@ -1098,7 +1120,12 @@ export const chatRouter = router({
       {
         const recentMessages = await getChatHistory(bldgUserId, 3);
         const lastAssistant = recentMessages.filter(m => m.role === "assistant").pop();
-        if (lastAssistant?.metadata && (lastAssistant.metadata as any).type === "awaiting_name" && !user.firstName) {
+        const nameGapsForAwaiting = getCriticalProfileGaps(user);
+        if (
+          lastAssistant?.metadata &&
+          (lastAssistant.metadata as any).type === "awaiting_name" &&
+          (nameGapsForAwaiting.missingFirstName || nameGapsForAwaiting.missingLastName)
+        ) {
           const text = input.content.trim();
           const isServiceRequest = /^(laundry|dry\s*clean|car\s*wash|groom|food|sushi|hungry)/i.test(text);
           if (!isServiceRequest && text.length >= 2 && text.length <= 40 && !text.includes("?")) {
@@ -1134,6 +1161,18 @@ export const chatRouter = router({
         if (lastAssist?.metadata && (lastAssist.metadata as any).type === "payment_update_offer") {
           const affirmative = /^(yes|yeah|yep|sure|ok|okay|update|y)\b/i.test(input.content.trim());
           if (affirmative) {
+            const freshOfferUser = await getBldgUserById(bldgUserId);
+            const offerGaps = getCriticalProfileGaps(freshOfferUser);
+            if (offerGaps.missingFirstName || offerGaps.missingLastName) {
+              const nameMsg = await insertRecoveryNameBeforePayment(bldgUserId);
+              return {
+                role: "assistant" as const,
+                content: nameMsg,
+                booking: null,
+                collectStep: "name",
+                resumeWithPaymentAfterName: true,
+              };
+            }
             const updateMsg = "Looks like we need to grab a card for your account.\nAdd one below and you're good to go — takes 10 seconds.";
             await insertChatMessage({
               bldgUserId,
@@ -1156,10 +1195,10 @@ export const chatRouter = router({
       // the correct message + collectStep so the frontend renders the Stripe card.
       if (detectPaymentIntentFromUserInput(input.content)) {
         const freshPaymentUser = await getBldgUserById(bldgUserId);
-        const hasCard = !!freshPaymentUser?.paymentMethodSaved;
+        const payGaps = getCriticalProfileGaps(freshPaymentUser);
         const cardLast4 = freshPaymentUser?.cardLast4;
 
-        if (hasCard) {
+        if (isStrictPaymentComplete(freshPaymentUser)) {
           const paymentResponse = "Your card on file is all set. We'll charge it automatically when your order is processed. Want to update it?";
           await insertChatMessage({
             bldgUserId,
@@ -1172,6 +1211,17 @@ export const chatRouter = router({
             content: paymentResponse,
             booking: null,
             collectStep: undefined,
+          };
+        }
+
+        if (payGaps.missingFirstName || payGaps.missingLastName) {
+          const nameMsg = await insertRecoveryNameBeforePayment(bldgUserId);
+          return {
+            role: "assistant" as const,
+            content: nameMsg,
+            booking: null,
+            collectStep: "name",
+            resumeWithPaymentAfterName: true,
           };
         }
 
@@ -1219,12 +1269,9 @@ export const chatRouter = router({
           console.log(`[ResidentBooking][FastPath] booking defaults resolved: ${defaults.date} ${defaults.window}`);
 
           const freshUser = await getBldgUserById(bldgUserId);
-          const tutorialMode =
-            !(freshUser?.firstName ?? user?.firstName)?.trim() ||
-            !(freshUser?.lastName ?? user?.lastName)?.trim() ||
-            !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved);
+          const recoveryMode = needsCriticalProfileRecovery(freshUser);
 
-          if (tutorialMode) {
+          if (recoveryMode) {
             // Duplicate guard: if pending intent already exists for same service, don't overwrite
             const existingPending = (freshUser as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
             if (existingPending?.serviceType === simpleService) {
@@ -1322,78 +1369,73 @@ export const chatRouter = router({
           const lastName  = (freshUser?.lastName ?? user?.lastName ?? "")?.trim() ?? "";
           const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
-          if (!firstName || !lastName || !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved)) {
-            intakeFailureReason = !firstName ? "missing_firstName" : !lastName ? "missing_lastName" : "missing_paymentMethod";
-            console.warn(`[INTAKE][FastPath] blocked: ${intakeFailureReason} (bldgUserId=${bldgUserId})`);
+          let sr: { id: number };
+          if (duplicate) {
+            sr = duplicate;
+            serviceRequestId = duplicate.id;
+            console.log(`[ResidentBooking][FastPath] duplicate detected — reusing #${duplicate.id}`);
           } else {
-            let sr: { id: number };
-            if (duplicate) {
-              sr = duplicate;
-              serviceRequestId = duplicate.id;
-              console.log(`[ResidentBooking][FastPath] duplicate detected — reusing #${duplicate.id}`);
-            } else {
-              sr = await createServiceRequest({
-                bldgUserId,
-                serviceType: simpleService as any,
-                status: "pending",
-                requestSummary: `${simpleService} — ${defaults.date} ${defaults.window}`,
-                scheduledDate: defaults.date,
-                scheduledWindow: defaults.window,
-                scheduledStartUtc: defaults.scheduled_start_utc,
-                scheduledEndUtc: defaults.scheduled_end_utc,
-                scheduledStartLocal: defaults.scheduled_start_local,
-                scheduledEndLocal: defaults.scheduled_end_local,
-                timezone: defaults.timezone,
-                requestJson: {
-                  recurrence: defaults.recurrence,
-                  ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
-                },
-              });
-              serviceRequestId = sr.id;
-              console.log(`[ResidentBooking][FastPath] local service_request created #${sr.id}: ${simpleService}`);
-            }
+            sr = await createServiceRequest({
+              bldgUserId,
+              serviceType: simpleService as any,
+              status: "pending",
+              requestSummary: `${simpleService} — ${defaults.date} ${defaults.window}`,
+              scheduledDate: defaults.date,
+              scheduledWindow: defaults.window,
+              scheduledStartUtc: defaults.scheduled_start_utc,
+              scheduledEndUtc: defaults.scheduled_end_utc,
+              scheduledStartLocal: defaults.scheduled_start_local,
+              scheduledEndLocal: defaults.scheduled_end_local,
+              timezone: defaults.timezone,
+              requestJson: {
+                recurrence: defaults.recurrence,
+                ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
+              },
+            });
+            serviceRequestId = sr.id;
+            console.log(`[ResidentBooking][FastPath] local service_request created #${sr.id}: ${simpleService}`);
+          }
 
-            const pickupDateISO = parseDisplayDateToISO(defaults.date);
-            const fpSpecialInstructions = fpSameDay ? "Same-day requested." : undefined;
+          const pickupDateISO = parseDisplayDateToISO(defaults.date);
+          const fpSpecialInstructions = fpSameDay ? "Same-day requested." : undefined;
 
-            const intakePayload = {
-              externalId: `bldg-sr-${sr.id}`,
-              source: "bldg-resident",
-              status: "new",
-              serviceType: fpServiceType,
-              pickupDate: pickupDateISO,
-              pickupWindow: defaults.window,
-              pickupWindowStart,
-              pickupWindowEnd,
-              address,
-              buildingId: intakeBuildingKey || null,
-              unit: freshUser?.unit || user?.unit || null,
-              firstName,
-              lastName,
-              phone,
-              bldgUserId: bldgUserId ?? null,
-              stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
-              stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
-              ...(fpSpecialInstructions ? { specialInstructions: fpSpecialInstructions } : {}),
-            };
+          const intakePayload = {
+            externalId: `bldg-sr-${sr.id}`,
+            source: "bldg-resident",
+            status: "new",
+            serviceType: fpServiceType,
+            pickupDate: pickupDateISO,
+            pickupWindow: defaults.window,
+            pickupWindowStart,
+            pickupWindowEnd,
+            address,
+            buildingId: intakeBuildingKey || null,
+            unit: freshUser?.unit || user?.unit || null,
+            firstName,
+            lastName,
+            phone,
+            bldgUserId: bldgUserId ?? null,
+            stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
+            stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+            ...(fpSpecialInstructions ? { specialInstructions: fpSpecialInstructions } : {}),
+          };
 
-            console.log("[INTAKE][FastPath] sending", JSON.stringify(intakePayload, null, 2));
+          console.log("[INTAKE][FastPath] sending", JSON.stringify(intakePayload, null, 2));
 
-            const intakeResult = await postToAdminIntakeAndVerify(
-              adminApiUrl,
-              sharedSecret,
-              intakePayload,
-              "FastPath"
-            );
+          const intakeResult = await postToAdminIntakeAndVerify(
+            adminApiUrl,
+            sharedSecret,
+            intakePayload,
+            "FastPath"
+          );
 
-            if (intakeResult.success) {
-              await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
-              console.log(`[BookingConfirm][FastPath] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
-              intakeSuccess = true;
-            } else {
-              intakeFailureReason = (intakeResult as { reason: string }).reason;
-              console.warn(`[INTAKE][FastPath] intake failed: reason=${intakeFailureReason}`);
-            }
+          if (intakeResult.success) {
+            await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
+            console.log(`[BookingConfirm][FastPath] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
+            intakeSuccess = true;
+          } else {
+            intakeFailureReason = (intakeResult as { reason: string }).reason;
+            console.warn(`[INTAKE][FastPath] intake failed: reason=${intakeFailureReason}`);
           }
 
           if (!intakeSuccess) {
@@ -1568,64 +1610,7 @@ export const chatRouter = router({
       }
 
       // ─── POST-BOOKING COLLECTION FLOW (legacy steps 1-4) ───
-      // Step 0 (NOT_STARTED) = fresh user, let them through to LLM/booking.
-      // Steps 1-4 = collecting profile info after first booking.
-      // Step 5 (COMPLETE) = done, normal chat.
-      if (false && user.onboardingStep >= ONBOARDING_STEP.COLLECTING_ADDRESS && user.onboardingStep < ONBOARDING_STEP.COMPLETE) {
-        const collectResult = await handlePostBookingCollection(
-          bldgUserId,
-          input.content,
-          user.onboardingStep
-        );
-
-        if (collectResult) {
-          const effectiveUserId = collectResult.mergedUserId || bldgUserId;
-
-          // Store the collection response with metadata for trust card rendering
-          await insertChatMessage({
-            bldgUserId: effectiveUserId,
-            role: "assistant",
-            content: collectResult.response,
-            metadata: {
-              type: "onboarding_collect",
-              collectType: collectResult.collectType || "info",
-              step: collectResult.newStep,
-              complete: collectResult.onboardingComplete,
-            },
-          });
-
-          // Reissue session cookie if merged
-          if (collectResult.mergedUserId && ctx.res) {
-            const { SignJWT } = await import("jose");
-            const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "");
-            const newToken = await new SignJWT({ bldgUserId: collectResult.mergedUserId })
-              .setProtectedHeader({ alg: "HS256" })
-              .setIssuedAt()
-              .setExpirationTime("365d")
-              .sign(secret);
-
-            ctx.res.cookie("bldg_session", newToken, {
-              ...getSessionCookieOptions(ctx.req as any),
-              maxAge: 365 * 24 * 60 * 60 * 1000,
-            });
-            console.log(`[Onboarding] Reissued session cookie for merged user ${collectResult.mergedUserId}`);
-          }
-
-          // If payment collection step, include metadata for the Stripe form
-          const paymentMeta = collectResult.collectType === "payment"
-            ? { type: "payment_collection" as const, bldgUserId: effectiveUserId }
-            : undefined;
-
-          return {
-            role: "assistant" as const,
-            content: collectResult.response,
-            booking: null,
-            onboardingComplete: collectResult.onboardingComplete,
-            collectStep: collectResult.collectType,
-            paymentMeta,
-          };
-        }
-      }
+      // Disabled in v2; handlePostBookingCollection remains for tests/reference.
 
       // Fetch recent history for context (only after onboarding)
       const dbHistory = await getChatHistory(bldgUserId, CONTEXT_WINDOW);
@@ -1729,26 +1714,46 @@ export const chatRouter = router({
         // ─── PAYMENT INTENT DETECTION ───
         if (hasPaymentIntent(rawContent)) {
           const freshPaymentUser = await getBldgUserById(bldgUserId);
-          const hasCard = !!freshPaymentUser?.paymentMethodSaved;
+          const llmPayGaps = getCriticalProfileGaps(freshPaymentUser);
           const cardLast4 = freshPaymentUser?.cardLast4;
 
-          let paymentResponse: string;
-          let paymentMetaType: string;
-
-          if (hasCard) {
-            paymentResponse = `Your card on file ending in ${cardLast4 || "****"} is all set. We'll charge it automatically when your order is processed. Want to update it?`;
-            paymentMetaType = "payment_update_offer";
-          } else {
-            paymentResponse = "Looks like we need to grab a card for your account.\nAdd one below and you're good to go — takes 10 seconds.";
-            paymentMetaType = "payment_collection";
+          if (isStrictPaymentComplete(freshPaymentUser)) {
+            const paymentResponse = `Your card on file ending in ${cardLast4 || "****"} is all set. We'll charge it automatically when your order is processed. Want to update it?`;
+            await insertChatMessage({
+              bldgUserId,
+              role: "assistant",
+              content: paymentResponse,
+              metadata: {
+                type: "payment_update_offer",
+                bldgUserId,
+              },
+            });
+            return {
+              role: "assistant" as const,
+              content: paymentResponse,
+              booking: null,
+              collectStep: undefined,
+            };
           }
 
+          if (llmPayGaps.missingFirstName || llmPayGaps.missingLastName) {
+            const nameMsg = await insertRecoveryNameBeforePayment(bldgUserId);
+            return {
+              role: "assistant" as const,
+              content: nameMsg,
+              booking: null,
+              collectStep: "name",
+              resumeWithPaymentAfterName: true,
+            };
+          }
+
+          const paymentResponse = "Looks like we need to grab a card for your account.\nAdd one below and you're good to go — takes 10 seconds.";
           await insertChatMessage({
             bldgUserId,
             role: "assistant",
             content: paymentResponse,
             metadata: {
-              type: paymentMetaType,
+              type: "payment_collection",
               bldgUserId,
             },
           });
@@ -1757,7 +1762,7 @@ export const chatRouter = router({
             role: "assistant" as const,
             content: paymentResponse,
             booking: null,
-            collectStep: !hasCard ? "payment" : undefined,
+            collectStep: "payment",
           };
         }
 
@@ -1830,12 +1835,9 @@ export const chatRouter = router({
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
           const freshUserForTutorial = await getBldgUserById(bldgUserId);
-          const tutorialMode =
-            !(freshUserForTutorial?.firstName ?? user?.firstName)?.trim() ||
-            !(freshUserForTutorial?.lastName ?? user?.lastName)?.trim() ||
-            !(freshUserForTutorial?.paymentMethodSaved ?? user?.paymentMethodSaved);
+          const recoveryModeLlm = needsCriticalProfileRecovery(freshUserForTutorial);
 
-          if (isLaundryOrDryCleaning(serviceCategory) && tutorialMode) {
+          if (isLaundryOrDryCleaning(serviceCategory) && recoveryModeLlm) {
             const existingPending = (freshUserForTutorial as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
             if (existingPending?.serviceType === serviceCategory) {
               const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
@@ -1962,49 +1964,43 @@ export const chatRouter = router({
             const llmSameDay = detectSameDay(input.content);
             const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
 
-            if (!firstName || !lastName || !(freshUser?.paymentMethodSaved ?? user?.paymentMethodSaved)) {
-              llmIntakeFailureReason = !firstName ? "missing_firstName" : !lastName ? "missing_lastName" : "missing_paymentMethod";
-              intakeSuccess = false;
-              console.warn(`[INTAKE][LLM] blocked: ${llmIntakeFailureReason} (bldgUserId=${bldgUserId}, sr=${sr.id})`);
+            const intakePayload = {
+              externalId: `bldg-sr-${sr.id}`,
+              source: "bldg-resident",
+              status: "new",
+              serviceType,
+              pickupDate: pickupDateISO,
+              pickupWindow: bookingMeta.window,
+              pickupWindowStart,
+              pickupWindowEnd,
+              address,
+              buildingId: intakeBuildingKey || null,
+              unit: freshUser?.unit || user?.unit || null,
+              firstName,
+              lastName,
+              phone,
+              bldgUserId: bldgUserId ?? null,
+              stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
+              stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+              ...(llmSpecialInstructions ? { specialInstructions: llmSpecialInstructions } : {}),
+            };
+
+            console.log("[INTAKE][LLM] sending", JSON.stringify(intakePayload, null, 2));
+
+            const intakeResult = await postToAdminIntakeAndVerify(
+              adminApiUrl,
+              sharedSecret,
+              intakePayload,
+              "LLM"
+            );
+
+            if (intakeResult.success) {
+              await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
+              console.log(`[BookingConfirm][LLM] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
             } else {
-              const intakePayload = {
-                externalId: `bldg-sr-${sr.id}`,
-                source: "bldg-resident",
-                status: "new",
-                serviceType,
-                pickupDate: pickupDateISO,
-                pickupWindow: bookingMeta.window,
-                pickupWindowStart,
-                pickupWindowEnd,
-                address,
-                buildingId: intakeBuildingKey || null,
-                unit: freshUser?.unit || user?.unit || null,
-                firstName,
-                lastName,
-                phone,
-                bldgUserId: bldgUserId ?? null,
-                stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
-                stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
-                ...(llmSpecialInstructions ? { specialInstructions: llmSpecialInstructions } : {}),
-              };
-
-              console.log("[INTAKE][LLM] sending", JSON.stringify(intakePayload, null, 2));
-
-              const intakeResult = await postToAdminIntakeAndVerify(
-                adminApiUrl,
-                sharedSecret,
-                intakePayload,
-                "LLM"
-              );
-
-              if (intakeResult.success) {
-                await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
-                console.log(`[BookingConfirm][LLM] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
-              } else {
-                llmIntakeFailureReason = (intakeResult as { reason: string }).reason;
-                intakeSuccess = false;
-                console.warn(`[INTAKE][LLM] intake failed: reason=${llmIntakeFailureReason}`);
-              }
+              llmIntakeFailureReason = (intakeResult as { reason: string }).reason;
+              intakeSuccess = false;
+              console.warn(`[INTAKE][LLM] intake failed: reason=${llmIntakeFailureReason}`);
             }
 
             if (!intakeSuccess) {
@@ -2054,26 +2050,28 @@ export const chatRouter = router({
               console.error("[ownerNotify] Failed to send alert:", err);
             }
 
-            // ─── POST-BOOKING: Prompt payment + conversational name capture ───
+            // ─── POST-BOOKING: Name before payment when profile gaps remain ───
             const latestUser = bldgUserId ? await getBldgUserById(bldgUserId) : null;
-            if (latestUser && !latestUser.paymentMethodSaved && latestUser.onboardingStep >= ONBOARDING_STEP.COMPLETE) {
-              await insertChatMessage({
-                bldgUserId: bldgUserId!,
-                role: "assistant",
-                content: "Add a card to lock it in.",
-                metadata: {
-                  type: "payment_collection",
+            const postBookGaps = getCriticalProfileGaps(latestUser);
+            if (latestUser && latestUser.onboardingStep >= ONBOARDING_STEP.COMPLETE) {
+              if (postBookGaps.missingFirstName || postBookGaps.missingLastName) {
+                await insertChatMessage({
                   bldgUserId: bldgUserId!,
-                },
-              });
-            } else if (latestUser && !latestUser.firstName && latestUser.onboardingStep >= ONBOARDING_STEP.COMPLETE) {
-              // Payment already saved but no name — ask conversationally
-              await insertChatMessage({
-                bldgUserId: bldgUserId!,
-                role: "assistant",
-                content: "Locked in. What name should we use for pickups?",
-                metadata: { type: "awaiting_name" },
-              });
+                  role: "assistant",
+                  content: "Locked in. What name should we use for pickups?",
+                  metadata: { type: "awaiting_name" },
+                });
+              } else if (postBookGaps.missingPayment) {
+                await insertChatMessage({
+                  bldgUserId: bldgUserId!,
+                  role: "assistant",
+                  content: "Add a card to lock it in.",
+                  metadata: {
+                    type: "payment_collection",
+                    bldgUserId: bldgUserId!,
+                  },
+                });
+              }
             }
 
             // Show silent drift reveal if preference was updated
@@ -2254,8 +2252,9 @@ export const chatRouter = router({
 
     // Filter out payment collection prompts once payment is saved.
     // Include legacy plain-text prompts so old chat rows do not keep reappearing.
+    const strictPaymentOk = user ? isStrictPaymentComplete(user) : false;
     const filteredMessages = messages.filter((m) => {
-      if (user?.paymentMethodSaved && m.role === "assistant") {
+      if (strictPaymentOk && m.role === "assistant") {
         const plain = m.content.toLowerCase();
         if (plain.includes("last thing") && plain.includes("add a card")) {
           return false;
@@ -2269,7 +2268,7 @@ export const chatRouter = router({
       const isOnboardingPaymentCollect =
         meta.type === "onboarding_collect" && meta.collectType === "payment";
       if (isPaymentCollection || isOnboardingPaymentCollect) {
-        return !user?.paymentMethodSaved;
+        return !strictPaymentOk;
       }
       return true;
     });
@@ -2292,9 +2291,12 @@ export const chatRouter = router({
         ? {
             id: user.id,
             firstName: user.firstName,
+            lastName: user.lastName,
             buildingSlug: user.buildingSlug,
+            unit: user.unit,
             onboardingStep: user.onboardingStep,
             paymentMethodSaved: !!user.paymentMethodSaved,
+            stripePaymentMethodId: user.stripePaymentMethodId,
           }
         : null,
       session: {

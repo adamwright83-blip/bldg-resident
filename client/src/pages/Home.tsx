@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import Vault from "@/pages/Vault";
 import Settings from "@/pages/Settings";
 import AccountSheet from "@/components/AccountSheet";
+import { getCriticalProfileGaps } from "@shared/profileCritical";
 
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
@@ -721,6 +722,8 @@ export default function Home() {
   const [sessionUserId, setSessionUserId] = useState<number | null>(null);
   const sessionBootstrapRetried = useRef(false);
   const pendingOtherRequestRef = useRef(false);
+  /** User hit payment intent but needed name first; after save, offer card if still needed. */
+  const resumePaymentAfterNameRef = useRef(false);
   const [, setLocation] = useLocation();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1298,10 +1301,15 @@ export default function Home() {
         if (isOtherRequest) pendingOtherRequestRef.current = false;
         const response = await sendMutation.mutateAsync({ content, isOtherRequest: isOtherRequest || undefined });
         const collectStep = (response as any).collectStep as string | undefined;
+        const resumeWithPaymentAfterName = Boolean((response as any).resumeWithPaymentAfterName);
+        if (resumeWithPaymentAfterName) {
+          resumePaymentAfterNameRef.current = true;
+        }
         const collectMetadata = collectStep
           ? {
               type: "onboarding_collect" as const,
               collectType: collectStep,
+              ...(collectStep === "name" && resumeWithPaymentAfterName ? { resumeWithPayment: true as const } : {}),
             }
           : undefined;
 
@@ -1333,11 +1341,21 @@ export default function Home() {
           // Use the local `onboardingComplete` state first (set synchronously by
           // handlePaymentSaved) to avoid acting on a stale historyQuery cache.
           const userData = historyQuery.data?.user;
-          const alreadyOnboarded = onboardingComplete === true || (userData as any)?.paymentMethodSaved;
-          const needsName = !alreadyOnboarded && !userData?.firstName;
-          const needsPayment = !alreadyOnboarded && !(userData as any)?.paymentMethodSaved;
+          const gateGaps = getCriticalProfileGaps(
+            userData
+              ? {
+                  firstName: userData.firstName,
+                  lastName: userData.lastName,
+                  paymentMethodSaved: userData.paymentMethodSaved ? 1 : 0,
+                  stripePaymentMethodId: userData.stripePaymentMethodId,
+                }
+              : null
+          );
+          const needsName = gateGaps.missingFirstName || gateGaps.missingLastName;
+          const needsPayment = gateGaps.missingPayment;
           const isTutorialBooking = response.booking.serviceRequestId === 0;
-          const shouldGate = isLaundryBooking && (isTutorialBooking || (!alreadyOnboarded && (needsName || needsPayment)));
+          const shouldGate =
+            isLaundryBooking && (isTutorialBooking || needsName || needsPayment);
           if (shouldGate) {
             setServicesMode(false);
             setPostBookingPhase("animating");
@@ -1491,9 +1509,18 @@ export default function Home() {
       await saveNameMutation.mutateAsync({ firstName, lastName });
       setCollectedFirstName(firstName);
       setCollectedLastName(lastName);
+      const fromPaymentRecovery = resumePaymentAfterNameRef.current;
+      if (fromPaymentRecovery) {
+        resumePaymentAfterNameRef.current = false;
+      }
       const userData = historyQuery.data?.user;
-      const needsPayment = !(userData as any)?.paymentMethodSaved;
-      if (needsPayment) {
+      const gaps = getCriticalProfileGaps({
+        firstName,
+        lastName,
+        paymentMethodSaved: userData?.paymentMethodSaved ? 1 : 0,
+        stripePaymentMethodId: userData?.stripePaymentMethodId,
+      });
+      if (gaps.missingPayment) {
         const strippedTypes = new Set(["post_booking_name", "post_booking_intro", "post_booking_learn", "post_booking_tagline"]);
         setMessages((prev) => [
           ...prev.filter((m) => !strippedTypes.has(m.metadata?.type as string)),
@@ -1508,6 +1535,17 @@ export default function Home() {
       } else {
         setPostBookingPhase(null);
         setPostBookingData(null);
+        if (fromPaymentRecovery) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant" as const,
+              content: "You're all set.",
+              createdAt: new Date(),
+            },
+          ]);
+          void historyQuery.refetch();
+        }
       }
     } catch {
       // Silently handle — name will be collected later
@@ -1915,6 +1953,11 @@ export default function Home() {
                             </Elements>
                           )}
                         </TrustCard>
+                      ) : msg.metadata.collectType === "name" && msg.metadata.resumeWithPayment ? (
+                        <div className="bldg-inline-card message-enter">
+                          <p className="bldg-inline-card-text">{msg.content}</p>
+                          <NameInputCard onSubmit={handleNameSubmit} loading={saveNameMutation.isPending} />
+                        </div>
                       ) : (
                         <TrustCard collectType={msg.metadata.collectType || "info"} content={msg.content} />
                       )}
