@@ -71,16 +71,15 @@ export default function ResidentMarketplace() {
               className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-5"
               style={{ fontFamily: "var(--font-display)", color: "#FAF8F5" }}
             >
-              Buy and sell{" "}
-              <span style={{ color: "oklch(0.78 0.12 75)" }}>within your building.</span>
+              No strangers.{" "}
+              <span style={{ color: "oklch(0.78 0.12 75)" }}>Just neighbors.</span>
             </h2>
 
             <p
               className="text-lg leading-relaxed mb-6"
               style={{ color: "rgba(250,248,245,0.5)" }}
             >
-              No strangers. No shipping. No meetups in parking lots. Just neighbors trading
-              with neighbors — all inside the same building.
+              No shipping. No parking lot meetups. No middlemen. Whether you're selling a Peloton or giving away a plant, the marketplace is where good things find a new home — just an elevator ride away.
             </p>
 
             <div className="space-y-3">

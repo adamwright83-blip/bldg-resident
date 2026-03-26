@@ -1,17 +1,24 @@
 /**
  * Section 9: Final CTA
- * Segmented paths: Residents ("Begin") and Property Teams ("Bring BLDG.chat to your building").
+ * Segmented paths: residents (charter) and property teams.
  * Gradient background, no image needed.
  * Color: Gold accent on warm dark.
  */
 
 import { motion } from "framer-motion";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Building2, Sparkles } from "lucide-react";
 
+function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 export default function FinalCTA() {
+  const [, setLocation] = useLocation();
+
   return (
-    <section className="relative py-24 lg:py-32">
+    <section id="charter" className="relative py-24 lg:py-32">
       <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
 
       {/* Subtle radial glow */}
@@ -37,13 +44,13 @@ export default function FinalCTA() {
             className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4"
             style={{ fontFamily: "var(--font-display)", color: "#FAF8F5" }}
           >
-            Ready to <span className="text-gradient-gold">upgrade your building?</span>
+            Bring it to <span className="text-gradient-gold">your building.</span>
           </h2>
           <p
             className="text-lg max-w-lg mx-auto"
             style={{ color: "rgba(250,248,245,0.5)" }}
           >
-            Whether you live here or manage here, BLDG.chat makes it better.
+            It starts with one resident. One conversation. Charter your building and watch it come alive.
           </p>
         </motion.div>
 
@@ -70,14 +77,15 @@ export default function FinalCTA() {
                 className="text-sm mb-6"
                 style={{ color: "rgba(250,248,245,0.45)" }}
               >
-                Start using BLDG.chat in your building today. Just text what you need.
+                Charter your building for $25 and become the founding member of your building's private network.
               </p>
               <Button
                 size="lg"
                 className="w-full bg-brand-gold text-brand-dark font-semibold hover:bg-brand-gold/90 glow-gold transition-all duration-300"
                 style={{ fontFamily: "var(--font-display)" }}
+                onClick={() => setLocation("/")}
               >
-                Begin
+                Bring it to your building — $25
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
@@ -104,15 +112,16 @@ export default function FinalCTA() {
                 className="text-sm mb-6"
                 style={{ color: "rgba(250,248,245,0.45)" }}
               >
-                Give your residents a premium amenity layer — zero lift for your team.
+                Your residents are already here. Make it official and give your building the amenity layer it deserves.
               </p>
               <Button
                 variant="outline"
                 size="lg"
                 className="w-full border-white/15 hover:bg-white/5 hover:border-white/25 transition-all duration-300"
                 style={{ fontFamily: "var(--font-display)", color: "rgba(250,248,245,0.7)" }}
+                onClick={() => scrollToId("property-teams")}
               >
-                Bring BLDG.chat to your building
+                Talk to our team
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>

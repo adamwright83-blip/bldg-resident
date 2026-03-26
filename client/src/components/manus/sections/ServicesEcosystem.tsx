@@ -89,18 +89,19 @@ export default function ServicesEcosystem() {
             className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4"
             style={{ fontFamily: "var(--font-display)", color: "#FAF8F5" }}
           >
-            Your building's <span className="text-gradient-gold">service layer.</span>
+            Everything beyond your door,{" "}
+            <span className="text-gradient-gold">delivered.</span>
           </h2>
           <p
             className="text-lg max-w-xl"
             style={{ color: "rgba(250,248,245,0.5)" }}
           >
-            Every service comes to you, coordinated for you, and feels native to where you live.
+            Stop searching, scheduling, and coordinating. Just text what you need. Our AI handles the logistics with vetted, in-building vendors — turning any outside service into a native amenity.
           </p>
         </motion.div>
 
-        {/* Service grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
+        {/* Service grid — full catalog; zip used 4 cards only */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 max-w-4xl mx-auto">
           {services.map((service, i) => (
             <motion.div
               key={service.name}

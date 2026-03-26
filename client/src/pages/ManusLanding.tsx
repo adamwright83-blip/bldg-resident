@@ -8,16 +8,17 @@
  * Typography: Space Grotesk (display) + Inter (body) + JetBrains Mono (tech accents)
  *
  * Sections:
- * 1. Hero (existing)
+ * 1. Hero
  * 2. Social Proof Bar
- * 3. How It Works
- * 4. Services Ecosystem
- * 5. Live Product Demo
- * 6. Resident Marketplace
- * 7. For Property Teams
- * 8. Trust & Security
- * 9. The Vision
- * 10. Final CTA
+ * 3. Building Feed
+ * 4. How It Works
+ * 5. Services Ecosystem
+ * 6. Live Product Demo
+ * 7. Resident Marketplace
+ * 8. For Property Teams
+ * 9. Trust & Security
+ * 10. The Vision
+ * 11. Final CTA
  */
 
 import { useState, useEffect } from "react";
@@ -27,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import ChatDemo from "@/components/ChatDemo";
 import FloatingIcons from "@/components/FloatingIcons";
 import SocialProofBar from "@/components/manus/sections/SocialProofBar";
+import BuildingFeedSection from "@/components/manus/sections/BuildingFeedSection";
 import HowItWorks from "@/components/manus/sections/HowItWorks";
 import ServicesEcosystem from "@/components/manus/sections/ServicesEcosystem";
 import LiveProductDemo from "@/components/manus/sections/LiveProductDemo";
@@ -80,6 +82,7 @@ const wordVariants = {
 const navLinks = [
   { label: "Services", href: "#services" },
   { label: "Marketplace", href: "#marketplace" },
+  { label: "Feed", href: "#feed" },
   { label: "How It Works", href: "#how-it-works" },
 ];
 
@@ -110,7 +113,7 @@ export default function ManusLanding() {
     return () => { document.body.style.overflow = ""; };
   }, [mobileMenuOpen]);
 
-  const headlineWords = ["Outside", "services,", "inside", "experience."];
+  const headlineWords = ["A private", "network", "for the people", "down the hall."];
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-background">
@@ -216,6 +219,7 @@ export default function ManusLanding() {
               size="sm"
               className="hidden md:flex bg-brand-gold text-brand-dark font-semibold hover:bg-brand-gold/90 transition-all duration-300"
               style={{ fontFamily: "var(--font-display)" }}
+              onClick={() => smoothScrollTo("#charter")}
             >
               Get Started
             </Button>
@@ -309,9 +313,12 @@ export default function ManusLanding() {
                     size="lg"
                     className="w-full bg-brand-gold text-brand-dark font-semibold hover:bg-brand-gold/90 transition-all duration-300"
                     style={{ fontFamily: "var(--font-display)" }}
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setTimeout(() => smoothScrollTo("#charter"), 300);
+                    }}
                   >
-                    Begin
+                    Bring it to your building
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                   <Button
@@ -321,10 +328,10 @@ export default function ManusLanding() {
                     style={{ fontFamily: "var(--font-display)", color: "rgba(250,248,245,0.7)" }}
                     onClick={() => {
                       setMobileMenuOpen(false);
-                      setTimeout(() => smoothScrollTo("#property-teams"), 300);
+                      setLocation("/");
                     }}
                   >
-                    Property Teams
+                    Log in
                   </Button>
                 </div>
               </motion.div>
@@ -358,7 +365,7 @@ export default function ManusLanding() {
                       className="text-xs text-brand-gold tracking-wide uppercase"
                       style={{ fontFamily: "var(--font-mono)" }}
                     >
-                      AI-Powered Building Services
+                      Now live in Los Angeles
                     </span>
                   </div>
                 </motion.div>
@@ -377,11 +384,9 @@ export default function ManusLanding() {
                         initial="hidden"
                         animate="visible"
                         className={`inline-block mr-[0.3em] ${
-                          i === 0 || i === 1
-                            ? ""
-                            : "text-gradient-gold"
+                          i < 2 ? "" : "text-gradient-gold"
                         }`}
-                        style={i === 0 || i === 1 ? { color: "#FAF8F5" } : undefined}
+                        style={i < 2 ? { color: "#FAF8F5" } : undefined}
                       >
                         {word}
                       </motion.span>
@@ -395,9 +400,7 @@ export default function ManusLanding() {
                   className="text-lg sm:text-xl leading-relaxed max-w-xl mb-8"
                   style={{ fontFamily: "var(--font-sans)", color: "rgba(250,248,245,0.5)" }}
                 >
-                  Residents type what they need. BLDG.chat coordinates the vendor,
-                  confirms the booking, and sends updates — making outside services
-                  feel like in-building amenities.
+                  Book a service, buy from a neighbor, or ask the building for a favor — all from one conversation.
                 </motion.p>
 
                 {/* CTA buttons */}
@@ -406,8 +409,9 @@ export default function ManusLanding() {
                     size="lg"
                     className="bg-brand-gold text-brand-dark font-semibold hover:bg-brand-gold/90 glow-gold transition-all duration-300 px-7"
                     style={{ fontFamily: "var(--font-display)" }}
+                    onClick={() => smoothScrollTo("#charter")}
                   >
-                    Begin
+                    Bring it to your building — $25
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                   <Button
@@ -415,9 +419,9 @@ export default function ManusLanding() {
                     size="lg"
                     className="border-white/15 hover:bg-white/5 hover:border-white/25 transition-all duration-300 px-7"
                     style={{ fontFamily: "var(--font-display)", color: "rgba(250,248,245,0.7)" }}
-                    onClick={() => smoothScrollTo("#property-teams")}
+                    onClick={() => setLocation("/")}
                   >
-                    Property Teams
+                    Log in
                   </Button>
                 </motion.div>
 
@@ -488,8 +492,9 @@ export default function ManusLanding() {
         </main>
       </section>
 
-      {/* ===== SECTIONS 2–10 ===== */}
+      {/* ===== SECTIONS 2–11 ===== */}
       <SocialProofBar />
+      <BuildingFeedSection />
       <HowItWorks />
       <ServicesEcosystem />
       <LiveProductDemo />

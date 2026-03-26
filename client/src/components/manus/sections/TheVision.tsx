@@ -42,26 +42,22 @@ export default function TheVision() {
             className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold tracking-tight mb-8 leading-[1.1]"
             style={{ fontFamily: "var(--font-display)", color: "#FAF8F5" }}
           >
-            AI infrastructure for{" "}
-            <span className="text-gradient-gold">vertical living.</span>
+            The missing{" "}
+            <span className="text-gradient-gold">community layer.</span>
           </h2>
 
           <p
             className="text-lg sm:text-xl leading-relaxed mb-6"
             style={{ color: "rgba(250,248,245,0.55)" }}
           >
-            Every luxury building promises a lifestyle. But the services that define
-            daily life — laundry, cleaning, pet care, repairs — still require residents
-            to leave the building experience entirely.
+            The proptech market is split into two camps: infrastructure platforms that manage the building, and amenity platforms that serve the resident. Both are top-down, enterprise-sold, and lack a social moat.
           </p>
 
           <p
             className="text-lg sm:text-xl leading-relaxed mb-8"
             style={{ color: "rgba(250,248,245,0.55)" }}
           >
-            BLDG.chat is the coordination layer that makes any building intelligent.
-            We start with two buildings in Los Angeles. The infrastructure works for
-            every building, everywhere.
+            BLDG.chat is the missing third layer: the community network. We are software-only and bottoms-up. Residents charter us for their own buildings, creating a private network inside each building that grows stronger as more neighbors join. We start with the best buildings in LA. The model works for every high-rise, everywhere.
           </p>
 
           {/* Stats row */}
@@ -74,9 +70,9 @@ export default function TheVision() {
           >
             {[
               { value: "44M+", label: "U.S. apartment units" },
-              { value: "$0", label: "for residents" },
-              { value: "2", label: "buildings live" },
-            ].map((stat, i) => (
+              { value: "100%", label: "Software-only model" },
+              { value: "0", label: "Enterprise salespeople" },
+            ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <p
                   className="text-2xl sm:text-3xl font-bold text-brand-gold mb-1"

@@ -1,25 +1,24 @@
 /**
  * Section 1: Social Proof Strip
  * Activity signals — platform quality, not deployment count.
- * Framed as "Serving residents across Los Angeles" with rating + CTA reinforcement.
  * Pattern: Fast-scan trust strip, no images, text-only.
  */
 
 import { motion } from "framer-motion";
-import { Star, MapPin, Zap } from "lucide-react";
+import { Zap, Users, ShieldCheck } from "lucide-react";
 
 const signals = [
   {
-    icon: MapPin,
-    text: "Serving residents across Los Angeles",
-  },
-  {
-    icon: Star,
-    text: "4.9 average resident rating",
-  },
-  {
     icon: Zap,
-    text: "Request any service, anytime",
+    text: "Services booked in seconds",
+  },
+  {
+    icon: Users,
+    text: "A private network, not a group chat",
+  },
+  {
+    icon: ShieldCheck,
+    text: "Every vendor vetted and insured",
   },
 ];
 

@@ -84,18 +84,15 @@ export default function ForPropertyTeams() {
               className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-5"
               style={{ fontFamily: "var(--font-display)", color: "#FAF8F5" }}
             >
-              Upgrade your building.{" "}
-              <span className="text-gradient-gold">Not your workload.</span>
+              Your residents{" "}
+              <span className="text-gradient-gold">are already here.</span>
             </h2>
 
             <p
               className="text-lg leading-relaxed mb-8"
               style={{ color: "rgba(250,248,245,0.5)" }}
             >
-              BLDG.chat gives your residents a premium amenity layer without adding
-              a single task to your team's plate. We handle vendor coordination,
-              scheduling, and resident communication — you get happier tenants and
-              higher retention.
+              When residents bring BLDG.chat to your building, it becomes the amenity they actually use. We handle all coordination and support. You get a direct lift in resident satisfaction, retention, and NOI — with zero lift from your team.
             </p>
 
             {/* Key metrics — compact horizontal */}
@@ -126,12 +123,19 @@ export default function ForPropertyTeams() {
               ))}
             </div>
 
+            <p
+              className="text-base leading-relaxed mb-8"
+              style={{ color: "rgba(250,248,245,0.35)" }}
+            >
+              A simple dashboard gives you full visibility into building activity, vendor status, and resident satisfaction — turning community engagement into measurable asset value.
+            </p>
+
             <Button
               size="lg"
               className="bg-brand-gold text-brand-dark font-semibold hover:bg-brand-gold/90 glow-gold transition-all duration-300 px-7"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Bring BLDG.chat to your building
+              Learn more about the dashboard
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </motion.div>
