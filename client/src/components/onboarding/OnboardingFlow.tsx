@@ -1,12 +1,14 @@
 /**
- * OnboardingFlow v2 — Identity + OTP → Chat
+ * OnboardingFlow v2 — Identity + OTP → App home
  *
  * Numeric subdomains (3545.bldg.chat): building auto-locked, just Unit + Mobile.
  * Generic entry (app.bldg.chat): shows building dropdown.
  *
- * Returning users (localStorage or valid session) skip directly to chat.
+ * Unauthenticated users are routed to `/setup` until identity + OTP (or valid session).
+ * Returning users (localStorage or valid session) skip directly to the app.
  */
 import { useState, useCallback, useEffect } from "react";
+import { useLocation, Redirect } from "wouter";
 import { API_BASE } from "@/const";
 import {
   extractNumericHostToken,
@@ -16,6 +18,7 @@ import IdentityScreen from "./IdentityScreen";
 import OTPScreen from "./OTPScreen";
 
 const ONBOARDING_KEY = "bldg_onboarding_complete";
+const SETUP_PATH = "/setup";
 
 const BUILDING_NAMES: Record<string, string> = {
   "opus-south": "3545 Wilshire Blvd",
@@ -52,11 +55,21 @@ function getHostnameBuilding(): { slug: string; displayName: string } | null {
   };
 }
 
+/** Paths that can render without completing resident onboarding (handoffs, receipts, legal). */
+function isExemptFromSetup(path: string): boolean {
+  if (path.startsWith("/welcome")) return true;
+  if (path.startsWith("/orders/")) return true;
+  if (path.startsWith("/receipt/")) return true;
+  if (path === "/terms" || path === "/privacy") return true;
+  return false;
+}
+
 interface OnboardingFlowProps {
   children: React.ReactNode;
 }
 
 export default function OnboardingFlow({ children }: OnboardingFlowProps) {
+  const [location, setLocation] = useLocation();
   const [checkingSession, setCheckingSession] = useState(true);
   const [step, setStep] = useState<OnboardingStep>(
     isOnboardingComplete() ? "done" : "identity"
@@ -80,7 +93,6 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
     let active = true;
     (async () => {
       try {
-        // Returning users with a valid session cookie skip onboarding.
         const res = await fetch(`${API_BASE}/api/session`, {
           credentials: "include",
         });
@@ -155,13 +167,14 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
         }
         markOnboardingComplete();
         setStep("done");
+        setLocation("/");
       } catch {
         setOtpError("Network error. Try again.");
       } finally {
         setIsVerifying(false);
       }
     },
-    [phone]
+    [phone, setLocation]
   );
 
   const handleResend = useCallback(async () => {
@@ -187,7 +200,18 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
   }
 
   if (step === "done") {
+    if (location === SETUP_PATH) {
+      return <Redirect to="/" />;
+    }
     return <>{children}</>;
+  }
+
+  if (isExemptFromSetup(location)) {
+    return <>{children}</>;
+  }
+
+  if (location !== SETUP_PATH) {
+    return <Redirect to={SETUP_PATH} />;
   }
 
   if (step === "otp") {

@@ -55,6 +55,7 @@ import {
   HandHeart,
   CheckCircle2,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { InboxList, ConversationThread, MOCK_CONVERSATIONS } from "@/components/messaging";
 import type { Conversation } from "@/components/messaging";
@@ -1123,7 +1124,8 @@ function MarketplaceEmpty() {
 
 // ─── Main Prototype Page ───
 export default function MarketplacePrototype() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const isAppHome = location === "/";
   const [mode, setMode] = useState<"services" | "feed" | "marketplace">("marketplace");
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
@@ -1282,25 +1284,27 @@ export default function MarketplacePrototype() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => setLocation("/")}
-            aria-label="Back to chat"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              border: `1px solid ${T.border}`,
-              background: T.surface,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              WebkitTapHighlightColor: "transparent",
-            }}
-          >
-            <ArrowLeft size={18} color={T.textSecondary} strokeWidth={1.8} />
-          </button>
+          {!isAppHome && (
+            <button
+              type="button"
+              onClick={() => setLocation("/chat")}
+              aria-label="Back to concierge chat"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                border: `1px solid ${T.border}`,
+                background: T.surface,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              <ArrowLeft size={18} color={T.textSecondary} strokeWidth={1.8} />
+            </button>
+          )}
           <div
             style={{
               width: 32,
@@ -1318,36 +1322,68 @@ export default function MarketplacePrototype() {
           >
             R
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <span style={{ fontSize: 17, fontWeight: 600, color: T.textPrimary, letterSpacing: "-0.01em" }}>
-                BLDG
-              </span>
-              <span style={{ fontSize: 17, fontWeight: 600, color: T.gold }}>.</span>
-              <span style={{ fontSize: 17, fontWeight: 400, color: T.textSecondary }}>chat</span>
-            </div>
-            {/* Neighbor count badge */}
-            <button
-              onClick={() => setShowNeighborDir(true)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 8px",
-                borderRadius: 20,
-                background: T.goldMuted,
-                border: `1px solid ${T.goldBorder}`,
-                cursor: "pointer",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              <Users size={11} color={T.gold} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: T.gold, fontFamily: T.font }}>47</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setLocation("/")}
+            aria-label="BLDG.chat home"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <span style={{ fontSize: 17, fontWeight: 600, color: T.textPrimary, letterSpacing: "-0.01em" }}>
+              BLDG
+            </span>
+            <span style={{ fontSize: 17, fontWeight: 600, color: T.gold }}>.</span>
+            <span style={{ fontSize: 17, fontWeight: 400, color: T.textSecondary }}>chat</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowNeighborDir(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "3px 8px",
+              borderRadius: 20,
+              background: T.goldMuted,
+              border: `1px solid ${T.goldBorder}`,
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <Users size={11} color={T.gold} />
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.gold, fontFamily: T.font }}>47</span>
+          </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <button
+            type="button"
+            onClick={() => setLocation("/chat")}
+            title="Concierge chat"
+            aria-label="Open concierge chat"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: T.surfaceRaised,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+          >
+            <Sparkles size={18} strokeWidth={1.5} color={T.gold} />
+          </button>
+          <button
+            type="button"
             onClick={openInbox}
             style={{
               position: "relative",
@@ -1387,6 +1423,7 @@ export default function MarketplacePrototype() {
             )}
           </button>
           <button
+            type="button"
             style={{
               width: 36,
               height: 36,

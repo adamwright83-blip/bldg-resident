@@ -1701,7 +1701,7 @@ export default function Home() {
           <button
             type="button"
             className="home-discover-chip tappable"
-            onClick={() => setLocation("/marketplace")}
+            onClick={() => setLocation("/")}
           >
             <ShoppingBag size={14} strokeWidth={1.8} />
             Marketplace

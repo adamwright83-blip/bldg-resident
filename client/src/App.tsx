@@ -1,12 +1,12 @@
 /**
  * BLDG.chat App — Root component
- * Chat-first concierge. No AppShell, no bottom nav.
- * Routes: / (chat), /welcome (handoff), /orders/:orderId (receipt)
+ * Home = marketplace/services hub (/). Concierge chat lives at /chat.
+ * Routes: /welcome (handoff), /orders/:orderId, /receipt/:token, /setup (onboarding), /tour, etc.
  */
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useLocation } from "wouter";
+import { useLocation, Redirect } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import OnboardingFlow from "./components/onboarding/OnboardingFlow";
@@ -50,8 +50,16 @@ function PageSwitch() {
     return <Receipt />;
   }
 
-  if (location.startsWith("/marketplace")) {
+  if (location === "/marketplace" || location.startsWith("/marketplace/")) {
+    return <Redirect to="/" />;
+  }
+
+  if (location === "/") {
     return <MarketplacePrototype />;
+  }
+
+  if (location === "/chat" || location.startsWith("/chat/")) {
+    return <Home />;
   }
 
   if (location.startsWith("/tour")) {
@@ -62,7 +70,7 @@ function PageSwitch() {
     return <CommunityPulse />;
   }
 
-  return <Home />;
+  return <Redirect to="/" />;
 }
 
 function App() {
