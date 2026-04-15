@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveIntakeBuildingKey,
   getAddressForIntakeKey,
+  normalizePortalBuildingSlugForWelcome,
   TOWER_IDS,
 } from "../shared/intakeBuilding";
 import { resolveBuildingFromHostname } from "../shared/buildingHostMap";
@@ -88,6 +89,24 @@ describe("Intake tower verification", () => {
         expect(address).toBe(expectedAddress);
       }
     );
+
+    it.each([
+      ["opusla", "3545"],
+      ["centuryparkeast", "2160"],
+      ["centuryparkeastnorth", "2160"],
+      ["centuryparkeastsouth", "2170"],
+    ] as const)(
+      "normalizePortalBuildingSlugForWelcome(%s) -> %s (portal JWT contract)",
+      (slug, tower) => {
+        expect(normalizePortalBuildingSlugForWelcome(slug)).toBe(tower);
+      }
+    );
+
+    it("normalizePortalBuildingSlugForWelcome returns undefined for unknown slugs", () => {
+      expect(normalizePortalBuildingSlugForWelcome("not-a-tower")).toBeUndefined();
+      expect(normalizePortalBuildingSlugForWelcome("")).toBeUndefined();
+      expect(normalizePortalBuildingSlugForWelcome(null)).toBeUndefined();
+    });
   });
 
   describe("4. Unknown slug yields Address unknown", () => {

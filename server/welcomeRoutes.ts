@@ -32,6 +32,7 @@ import {
 import { mergeWelcomeHandoffIdentity } from "./lib/welcomeHandoffMerge";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
+import { normalizePortalBuildingSlugForWelcome } from "@shared/intakeBuilding";
 import { RECEIPT_VENDOR_IDS } from "@shared/receipt/types";
 import { expandReceiptToViewModel } from "./receipt/expandViewModel";
 import {
@@ -384,14 +385,22 @@ export function registerWelcomeRoutes(app: Router): void {
           : undefined;
 
       const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
-      const payloadBuilding =
+      const payloadBuildingRaw =
         typeof payload.buildingSlug === "string" && payload.buildingSlug.trim()
           ? payload.buildingSlug.trim()
           : undefined;
+      const payloadBuilding =
+        normalizePortalBuildingSlugForWelcome(payloadBuildingRaw);
       const buildingCandidate = hostBuilding?.slug ?? payloadBuilding ?? undefined;
 
-      if (!hostBuilding?.slug && payloadBuilding == null) {
+      if (!hostBuilding?.slug && payloadBuildingRaw == null) {
         console.warn("[Welcome] No building context from host or JWT; merge will use existing row or fallback 3545");
+      }
+
+      if (!hostBuilding?.slug && payloadBuildingRaw && !payloadBuilding) {
+        console.warn(
+          `[Welcome] JWT buildingSlug "${payloadBuildingRaw}" did not map to a known tower; merge will use existing row or fallback 3545`
+        );
       }
 
       if (!phone || !orderId) {

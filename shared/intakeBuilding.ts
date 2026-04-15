@@ -23,13 +23,18 @@ const TOWER_ADDRESSES: Record<string, string> = {
   "2170": "2170 Century Pk E",
 };
 
-/** Legacy slugs (onboarding, old DB) → canonical tower ID. */
+/** Legacy slugs (onboarding, old DB, bldg-admin portal JWT) → canonical tower ID. */
 const LEGACY_SLUG_TO_TOWER: Record<string, string> = {
   opusla: "3545",
   "opus-south": "3545",
   "opus-north": "3650",
   "cpe-north": "2160",
   "cpe-south": "2170",
+  /** bldg-admin-api shared/buildings.ts — campus-level; disambiguate with cpe-north/cpe-south or numeric JWT when possible */
+  centuryparkeast: "2160",
+  "century-park-east": "2160",
+  centuryparkeastnorth: "2160",
+  centuryparkeastsouth: "2170",
 };
 
 /** Used when tower is unknown (no guessed address; avoids silent misrouting). */
@@ -56,4 +61,19 @@ export function resolveIntakeBuildingKey(slug: string): string {
  */
 export function getAddressForIntakeKey(intakeKey: string): string {
   return TOWER_ADDRESSES[intakeKey] ?? FALLBACK_ADDRESS;
+}
+
+/**
+ * Normalize `buildingSlug` from Laundry Butler / bldg-admin portal handoff JWTs before merge/upsert.
+ * Returns a canonical tower id (3545 | 3650 | 2160 | 2170) when the slug maps to a known tower;
+ * otherwise `undefined` so merge can fall back to the existing row or default.
+ */
+export function normalizePortalBuildingSlugForWelcome(
+  slug: string | undefined | null
+): string | undefined {
+  const raw = typeof slug === "string" ? slug.trim() : "";
+  if (!raw) return undefined;
+  const key = resolveIntakeBuildingKey(raw);
+  if (TOWER_ADDRESSES[key]) return key;
+  return undefined;
 }
