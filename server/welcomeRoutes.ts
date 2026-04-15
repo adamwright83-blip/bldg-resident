@@ -385,6 +385,8 @@ export function registerWelcomeRoutes(app: Router): void {
           : undefined;
 
       const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
+      // Handoff JWT buildingSlug (bldg-admin-api generatePortalToken): canonical tower ids
+      // "3545" | "3650" | "2160" | "2170", or null/omitted when LB cannot resolve — not wrong tower.
       const payloadBuildingRaw =
         typeof payload.buildingSlug === "string" && payload.buildingSlug.trim()
           ? payload.buildingSlug.trim()
@@ -394,7 +396,9 @@ export function registerWelcomeRoutes(app: Router): void {
       const buildingCandidate = hostBuilding?.slug ?? payloadBuilding ?? undefined;
 
       if (!hostBuilding?.slug && payloadBuildingRaw == null) {
-        console.warn("[Welcome] No building context from host or JWT; merge will use existing row or fallback 3545");
+        console.warn(
+          "[Welcome] No tower from host or JWT (omit/null); merge will use existing row or fallback 3545"
+        );
       }
 
       if (!hostBuilding?.slug && payloadBuildingRaw && !payloadBuilding) {

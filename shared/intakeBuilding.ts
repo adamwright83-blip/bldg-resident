@@ -65,8 +65,9 @@ export function getAddressForIntakeKey(intakeKey: string): string {
 
 /**
  * Normalize `buildingSlug` from Laundry Butler / bldg-admin portal handoff JWTs before merge/upsert.
- * Returns a canonical tower id (3545 | 3650 | 2160 | 2170) when the slug maps to a known tower;
- * otherwise `undefined` so merge can fall back to the existing row or default.
+ * LB now prefers canonical string tower ids in new JWTs; legacy slugs still map here.
+ * Returns a canonical tower id when the slug maps to a known tower; otherwise `undefined`
+ * (omit/null JWT claim, or unknown slug) so merge can fall back to the existing row or default.
  */
 export function normalizePortalBuildingSlugForWelcome(
   slug: string | undefined | null
