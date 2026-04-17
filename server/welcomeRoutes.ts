@@ -496,8 +496,8 @@ export function registerWelcomeRoutes(app: Router): void {
       // The bldg_session cookie is scoped to .bldg.chat, so it carries across.
       const targetHost =
         merged.buildingSlug && BUILDING_HOST_MAP[merged.buildingSlug]
-          ? `https://${merged.buildingSlug}.bldg.chat/`
-          : "https://app.bldg.chat/";
+          ? `https://${merged.buildingSlug}.bldg.chat/chat`
+          : "https://app.bldg.chat/chat";
       return res.redirect(targetHost);
     } catch (err) {
       console.error("[Welcome] Unexpected error:", err);
