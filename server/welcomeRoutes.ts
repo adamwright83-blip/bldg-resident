@@ -31,7 +31,7 @@ import {
 } from "./db";
 import { mergeWelcomeHandoffIdentity } from "./lib/welcomeHandoffMerge";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { resolveBuildingFromHostname } from "@shared/buildingHostMap";
+import { BUILDING_HOST_MAP, resolveBuildingFromHostname } from "@shared/buildingHostMap";
 import { normalizePortalBuildingSlugForWelcome } from "@shared/intakeBuilding";
 import { RECEIPT_VENDOR_IDS } from "@shared/receipt/types";
 import { expandReceiptToViewModel } from "./receipt/expandViewModel";
@@ -491,8 +491,14 @@ export function registerWelcomeRoutes(app: Router): void {
         // Non-fatal — still redirect to chat
       }
 
-      // Redirect to chat home (not /orders/:orderId anymore)
-      return res.redirect("/");
+      // Redirect to the building-specific resident SPA host so the user lands
+      // on their building's app (e.g. 3545.bldg.chat) — not the API host root.
+      // The bldg_session cookie is scoped to .bldg.chat, so it carries across.
+      const targetHost =
+        merged.buildingSlug && BUILDING_HOST_MAP[merged.buildingSlug]
+          ? `https://${merged.buildingSlug}.bldg.chat/`
+          : "https://app.bldg.chat/";
+      return res.redirect(targetHost);
     } catch (err) {
       console.error("[Welcome] Unexpected error:", err);
       return res.status(500).json({ error: "Internal server error" });
