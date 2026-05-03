@@ -1276,6 +1276,7 @@ export default function Home() {
       // Block duplicate sends during post-booking animation/collection
       if (postBookingPhaseRef.current !== null) return;
 
+      setServicesMode(false);
       setInput("");
       setIsSending(true);
 
@@ -2147,6 +2148,7 @@ export default function Home() {
             disabled={isSending || postBookingPhase !== null}
           />
           <button
+            type="button"
             onClick={() => handleSend()}
             disabled={!input.trim() || isSending || postBookingPhase !== null}
             className={`chat-send-btn ${sendBtnCompress ? "send-btn-compress" : ""}`}
