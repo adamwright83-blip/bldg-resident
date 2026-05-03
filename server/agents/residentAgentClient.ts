@@ -1,5 +1,8 @@
 import type { ResidentAgentSession } from "./session";
 
+export const DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL =
+  "https://bldg-admin-api-production.up.railway.app/api/agent/s2s/run-tool";
+
 export interface LaundryOrderToolInput {
   externalId: string;
   source: "bldg-resident";
@@ -35,17 +38,40 @@ export interface AdminAgentClient {
   ): Promise<AdminExecutionResult>;
 }
 
+function normalizeUrl(url: string): string {
+  return url.replace(/\/$/, "");
+}
+
+export function normalizeAdminAgentS2SRunToolUrl(url: string): string {
+  const endpoint = normalizeUrl(url);
+  if (endpoint.endsWith("/api/agent/s2s/run-tool")) return endpoint;
+  if (endpoint.endsWith("/api/agent/s2s/runTool")) return endpoint.replace(/\/runTool$/, "/run-tool");
+  if (endpoint.endsWith("/api/agent/s2s")) return `${endpoint}/run-tool`;
+  if (endpoint.endsWith("/api/agent")) return `${endpoint}/s2s/run-tool`;
+  return `${endpoint}/api/agent/s2s/run-tool`;
+}
+
+function getAdminAgentS2SRunToolUrlCandidates(): string[] {
+  const configured = process.env.ADMIN_AGENT_S2S_URL;
+  return Array.from(
+    new Set([
+      ...(configured ? [normalizeAdminAgentS2SRunToolUrl(configured)] : []),
+      DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL,
+    ])
+  );
+}
+
 export function createAdminAgentClient(): AdminAgentClient {
-  const endpoint = process.env.ADMIN_AGENT_S2S_URL?.replace(/\/$/, "");
   const sharedSecret = process.env.ADMIN_AGENT_SHARED_SECRET || "";
 
   return {
     canRunLaundryOrderTool() {
-      return Boolean(endpoint && sharedSecret);
+      return Boolean(process.env.ADMIN_AGENT_S2S_URL && sharedSecret);
     },
 
     async runCreateLaundryOrderTool(input, session) {
-      if (!endpoint || !sharedSecret) {
+      const targets = getAdminAgentS2SRunToolUrlCandidates();
+      if (!process.env.ADMIN_AGENT_S2S_URL || !sharedSecret) {
         return {
           success: false,
           reason: "no_safe_admin_agent_s2s_endpoint",
@@ -54,51 +80,73 @@ export function createAdminAgentClient(): AdminAgentClient {
       }
 
       try {
-        const res = await fetch(`${endpoint}/runTool`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-app-shared-secret": sharedSecret,
-          },
-          body: JSON.stringify({
-            toolName: "createLaundryOrderTool",
-            sessionId: session.sessionId,
-            conversationId: session.conversationId,
-            input: {
-              ...input,
+        let lastFailure: AdminExecutionResult | null = null;
+        for (const target of targets) {
+          console.log(
+            `[ResidentAgent][AdminAgentClient] S2S runTool attempt target=${target} tool=createLaundryOrderTool`
+          );
+          const res = await fetch(target, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-agent-shared-secret": sharedSecret,
+            },
+            body: JSON.stringify({
+              toolName: "createLaundryOrderTool",
+              tenantId: "default",
+              agentType: "resident_agent",
+              actorType: "resident_chat",
+              actorId: input.bldgUserId == null ? null : `bldg_user:${input.bldgUserId}`,
               sessionId: session.sessionId,
               conversationId: session.conversationId,
-            },
-          }),
-        });
+              input: {
+                ...input,
+                buildingSlug: input.buildingId,
+                pickupTimeWindow: input.pickupWindow,
+                deliveryTimeWindow: input.pickupWindow,
+                sessionId: session.sessionId,
+                conversationId: session.conversationId,
+              },
+            }),
+          });
 
-        const responseText = await res.text().catch(() => "(no body)");
-        if (!res.ok) {
-          return {
-            success: false,
-            reason: `non_2xx:${res.status}`,
-            path: "agent-tool",
-            status: res.status,
-          };
+          const responseText = await res.text().catch(() => "(no body)");
+          console.log(
+            `[ResidentAgent][AdminAgentClient] S2S runTool response target=${target} status=${res.status} body=${responseText}`
+          );
+          if (!res.ok) {
+            lastFailure = {
+              success: false,
+              reason: `non_2xx:${res.status}`,
+              path: "agent-tool",
+              status: res.status,
+            };
+            if ([404, 405].includes(res.status) && target !== targets[targets.length - 1]) {
+              continue;
+            }
+            return lastFailure;
+          }
+
+          let body: { orderId?: number; result?: { orderId?: number }; output?: { orderId?: number } };
+          try {
+            body = JSON.parse(responseText);
+          } catch {
+            return { success: false, reason: "parse_error", path: "agent-tool" };
+          }
+
+          const orderId = body.orderId ?? body.result?.orderId ?? body.output?.orderId;
+          if (orderId == null || !Number.isFinite(Number(orderId))) {
+            return {
+              success: false,
+              reason: "missing_orderId",
+              path: "agent-tool",
+            };
+          }
+
+          return { success: true, orderId: Number(orderId), path: "agent-tool" };
         }
 
-        let body: { orderId?: number; result?: { orderId?: number } };
-        try {
-          body = JSON.parse(responseText);
-        } catch {
-          return { success: false, reason: "parse_error", path: "agent-tool" };
-        }
-
-        const orderId = body.orderId ?? body.result?.orderId;
-        if (orderId == null || !Number.isFinite(Number(orderId))) {
-          return {
-            success: false,
-            reason: "missing_orderId",
-            path: "agent-tool",
-          };
-        }
-
-        return { success: true, orderId: Number(orderId), path: "agent-tool" };
+        return lastFailure ?? { success: false, reason: "no_s2s_targets", path: "agent-tool" };
       } catch (err) {
         console.error("[ResidentAgent][AdminAgentClient] runTool failed:", err);
         return { success: false, reason: "fetch_error", path: "agent-tool" };

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL,
   createAdminAgentClient,
+  normalizeAdminAgentS2SRunToolUrl,
   postToAdminIntakeFallbackAndVerify,
   shouldUseIntakeFallbackForAgentFailure,
   shouldTryNextIntakeBaseUrl,
@@ -40,6 +42,65 @@ describe("residentAgentClient", () => {
     expect(createAdminAgentClient().canRunLaundryOrderTool()).toBe(false);
   });
 
+  it("normalizes admin agent S2S endpoints to the run-tool route", () => {
+    expect(normalizeAdminAgentS2SRunToolUrl("https://admin.example")).toBe(
+      "https://admin.example/api/agent/s2s/run-tool"
+    );
+    expect(normalizeAdminAgentS2SRunToolUrl("https://admin.example/api/agent")).toBe(
+      "https://admin.example/api/agent/s2s/run-tool"
+    );
+    expect(normalizeAdminAgentS2SRunToolUrl("https://admin.example/api/agent/s2s/run-tool")).toBe(
+      "https://admin.example/api/agent/s2s/run-tool"
+    );
+  });
+
+  it("posts to the admin S2S run-tool contract before fallback", async () => {
+    vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent/s2s/run-tool");
+    vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(JSON.stringify({ orderId: 456 })),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createAdminAgentClient().runCreateLaundryOrderTool(payload, {
+        sessionId: "sess_1",
+        conversationId: "conv_1",
+      })
+    ).resolves.toEqual({
+      success: true,
+      orderId: 456,
+      path: "agent-tool",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://admin.example/api/agent/s2s/run-tool",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-agent-shared-secret": "secret",
+        }),
+      })
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      toolName: "createLaundryOrderTool",
+      tenantId: "default",
+      agentType: "resident_agent",
+      actorType: "resident_chat",
+      actorId: "bldg_user:1",
+      sessionId: "sess_1",
+      conversationId: "conv_1",
+      input: {
+        pickupTimeWindow: "7–10 AM",
+        deliveryTimeWindow: "7–10 AM",
+        buildingSlug: "opus",
+      },
+    });
+  });
+
   it("treats missing admin agent S2S routes as fallback-eligible", async () => {
     vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent");
     vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
@@ -63,6 +124,14 @@ describe("residentAgentClient", () => {
       path: "agent-tool",
       status: 404,
     });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://admin.example/api/agent/s2s/run-tool",
+      expect.any(Object)
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL,
+      expect.any(Object)
+    );
     expect(shouldUseIntakeFallbackForAgentFailure(result)).toBe(true);
   });
 

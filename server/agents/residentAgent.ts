@@ -294,6 +294,7 @@ async function executeLaundryIntent(input: {
 
   let executionResult;
   if (adminAgentClient.canRunLaundryOrderTool()) {
+    console.log("[ResidentAgent] attempting admin agent S2S createLaundryOrderTool");
     const agentExecutionResult = await adminAgentClient.runCreateLaundryOrderTool(
       intakePayload,
       input.session
