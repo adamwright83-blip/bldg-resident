@@ -1,0 +1,27 @@
+import { describe, expect, it } from "vitest";
+import { inferResidentIntent, isFutureVendorServiceIntent } from "./intentClassifier";
+
+describe("inferResidentIntent", () => {
+  it("detects current laundry booking behavior", () => {
+    expect(inferResidentIntent("laundry")).toMatchObject({ type: "laundry" });
+    expect(inferResidentIntent("I need laundry pickup")).toMatchObject({
+      type: "laundry",
+    });
+  });
+
+  it("does not turn laundry questions into bookings", () => {
+    expect(inferResidentIntent("how much is laundry?")).toMatchObject({
+      type: "unknown",
+    });
+  });
+
+  it("classifies future vendor services as pending vendor work", () => {
+    const dogGrooming = inferResidentIntent("can you get a dog groomer Saturday?");
+    const carWash = inferResidentIntent("car wash");
+
+    expect(dogGrooming).toMatchObject({ type: "dog-grooming-request" });
+    expect(carWash).toMatchObject({ type: "car-wash-request" });
+    expect(isFutureVendorServiceIntent(dogGrooming)).toBe(true);
+    expect(isFutureVendorServiceIntent(carWash)).toBe(true);
+  });
+});

@@ -45,6 +45,7 @@ import {
   isStrictPaymentComplete,
   needsCriticalProfileRecovery,
 } from "../../shared/profileCritical";
+import { runResidentAgent } from "../agents/residentAgent";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 
@@ -1243,6 +1244,25 @@ export const chatRouter = router({
       // ─── SAME-DAY DETECTION ───
       // Detects "same day" / "same-day" anywhere in the user message.
       const detectSameDay = (text: string): boolean => /same[\s-]?day/i.test(text);
+
+      // ─── RESIDENT AGENT ENTRY POINT ───
+      // Laundry now enters through ResidentAgent. The agent prefers a safe
+      // shared-secret admin tool endpoint when configured, otherwise it keeps
+      // the existing /api/intake/from-bldg fallback contract.
+      {
+        const agentResult = await runResidentAgent({
+          bldgUserId,
+          content: input.content,
+          user,
+        });
+        if (agentResult.handled) {
+          return {
+            role: agentResult.role!,
+            content: agentResult.content!,
+            booking: agentResult.booking ?? null,
+          };
+        }
+      }
 
       // ─── FAST-PATH: simple service-only intents bypass the LLM ───
       // Recognizes bare dry-cleaning (and laundry) phrases so they always produce
