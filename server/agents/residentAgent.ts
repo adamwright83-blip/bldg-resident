@@ -15,9 +15,10 @@ import {
   createAdminAgentClient,
   postToAdminIntakeFallbackAndVerify,
   shouldUseIntakeFallbackForAgentFailure,
+  shouldTryNextIntakeBaseUrl,
   type LaundryOrderToolInput,
 } from "./residentAgentClient";
-import { getAdminIntakeApiBaseUrl, hasAdminIntakeSharedSecret } from "./adminIntakeConfig";
+import { getAdminIntakeApiBaseUrlCandidates, hasAdminIntakeSharedSecret } from "./adminIntakeConfig";
 import {
   getOrCreateResidentAgentSession,
   withResidentAgentMetadata,
@@ -262,17 +263,33 @@ async function executeLaundryIntent(input: {
   const adminAgentClient = createAdminAgentClient();
   const runIntakeFallback = async (fallbackReason: string) => {
     console.warn(`[ResidentAgent] using intake fallback: reason=${fallbackReason}`);
-    const adminApiUrl = getAdminIntakeApiBaseUrl();
     const sharedSecret = process.env.APP_SHARED_API_SECRET || "";
     if (!hasAdminIntakeSharedSecret()) {
       console.warn("[ResidentAgent] APP_SHARED_API_SECRET is missing; admin intake will reject fallback");
     }
-    return postToAdminIntakeFallbackAndVerify(
-      adminApiUrl,
-      sharedSecret,
-      intakePayload,
-      "ResidentAgent"
-    );
+
+    let lastResult = null as Awaited<ReturnType<typeof postToAdminIntakeFallbackAndVerify>> | null;
+    for (const adminApiUrl of getAdminIntakeApiBaseUrlCandidates()) {
+      const result = await postToAdminIntakeFallbackAndVerify(
+        adminApiUrl,
+        sharedSecret,
+        intakePayload,
+        "ResidentAgent"
+      );
+      if (result.success || !shouldTryNextIntakeBaseUrl(result)) {
+        return result;
+      }
+      lastResult = result;
+      console.warn(
+        `[ResidentAgent] intake route unavailable at ${adminApiUrl}; trying next configured intake base`
+      );
+    }
+
+    return lastResult ?? {
+      success: false,
+      reason: "no_admin_intake_base_url",
+      path: "intake-fallback" as const,
+    };
   };
 
   let executionResult;

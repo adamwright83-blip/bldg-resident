@@ -126,6 +126,11 @@ export function shouldUseIntakeFallbackForAgentFailure(result: AdminExecutionRes
   return status != null && [401, 403, 404, 405].includes(status);
 }
 
+export function shouldTryNextIntakeBaseUrl(result: AdminExecutionResult): boolean {
+  if (result.success || result.path !== "intake-fallback") return false;
+  return result.reason === "non_200:404" || result.reason === "non_200:405";
+}
+
 export async function postToAdminIntakeFallbackAndVerify(
   adminApiUrl: string,
   sharedSecret: string,
@@ -133,7 +138,7 @@ export async function postToAdminIntakeFallbackAndVerify(
   logPrefix: string
 ): Promise<AdminExecutionResult> {
   try {
-    console.log(`[INTAKE][${logPrefix}] POST attempted to admin intake`);
+    console.log(`[INTAKE][${logPrefix}] POST attempted to admin intake target=${adminApiUrl}/api/intake/from-bldg`);
     const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
       method: "POST",
       headers: {

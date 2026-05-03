@@ -3,6 +3,7 @@ import {
   createAdminAgentClient,
   postToAdminIntakeFallbackAndVerify,
   shouldUseIntakeFallbackForAgentFailure,
+  shouldTryNextIntakeBaseUrl,
   type LaundryOrderToolInput,
 } from "./residentAgentClient";
 
@@ -72,6 +73,23 @@ describe("residentAgentClient", () => {
         reason: "non_2xx:500",
         path: "agent-tool",
         status: 500,
+      })
+    ).toBe(false);
+  });
+
+  it("only retries intake fallback on missing route responses", () => {
+    expect(
+      shouldTryNextIntakeBaseUrl({
+        success: false,
+        reason: "non_200:404",
+        path: "intake-fallback",
+      })
+    ).toBe(true);
+    expect(
+      shouldTryNextIntakeBaseUrl({
+        success: false,
+        reason: "non_200:400",
+        path: "intake-fallback",
       })
     ).toBe(false);
   });

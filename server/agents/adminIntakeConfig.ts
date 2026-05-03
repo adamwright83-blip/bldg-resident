@@ -1,11 +1,26 @@
-const LAUNDRY_BUTLER_API_BASE_URL = "https://laundrybutler.bldg.chat";
+export const DEFAULT_ADMIN_INTAKE_API_BASE_URL =
+  "https://bldg-admin-api-production.up.railway.app";
+
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/$/, "");
+}
 
 export function getAdminIntakeApiBaseUrl(): string {
-  return (
+  return normalizeBaseUrl(
     process.env.ADMIN_INTAKE_API_URL ||
     process.env.LAUNDRY_API_BASE_URL ||
-    LAUNDRY_BUTLER_API_BASE_URL
-  ).replace(/\/$/, "");
+    process.env.ADMIN_API_URL ||
+    DEFAULT_ADMIN_INTAKE_API_BASE_URL
+  );
+}
+
+export function getAdminIntakeApiBaseUrlCandidates(): string[] {
+  return Array.from(
+    new Set([
+      getAdminIntakeApiBaseUrl(),
+      DEFAULT_ADMIN_INTAKE_API_BASE_URL,
+    ])
+  ).map(normalizeBaseUrl);
 }
 
 export function hasAdminIntakeSharedSecret(): boolean {
