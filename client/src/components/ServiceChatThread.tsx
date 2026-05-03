@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Send, Check, CheckCheck } from "lucide-react";
 import LivingBuilding from "./LivingBuilding";
 import { trpc } from "@/lib/trpc";
+import { API_BASE } from "@/const";
 
 // ─── Design Tokens ───
 const T = {
@@ -122,7 +123,7 @@ interface Message {
 
 async function ensureServiceChatSession(): Promise<boolean> {
   try {
-    const res = await fetch("/api/guest-session", {
+    const res = await fetch(`${API_BASE}/api/guest-session`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
