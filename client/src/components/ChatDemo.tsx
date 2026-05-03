@@ -20,7 +20,7 @@ interface ChatMessage {
 const conversations: ChatMessage[][] = [
   [
     { id: 1, type: "user", text: "I need a laundry pickup today", time: "2:34 PM", status: "read" },
-    { id: 2, type: "ai", text: "I've scheduled a laundry pickup for today between 4–6 PM. CleanLux will come to unit 1204. You'll get a text when they're in the lobby.", time: "2:34 PM" },
+    { id: 2, type: "ai", text: "I've scheduled a laundry pickup for today between 4–6 PM. Laundry Butler will come to unit 1204. You'll get a text when they're in the lobby.", time: "2:34 PM" },
   ],
   [
     { id: 1, type: "user", text: "Can someone groom my dog this week?", time: "10:15 AM", status: "read" },

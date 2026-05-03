@@ -9,13 +9,15 @@
  * - Service-specific opening message from AI
  * - Typing indicator before AI responds
  * - Back button returns to service tiles
- * - Simulated AI responses for demo purposes
+ * - Laundry messages use the real resident chat backend
+ * - Simulated AI responses for future vendor-service demos
  */
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Send, Check, CheckCheck } from "lucide-react";
 import LivingBuilding from "./LivingBuilding";
+import { trpc } from "@/lib/trpc";
 
 // ─── Design Tokens ───
 const T = {
@@ -50,9 +52,9 @@ const springs = {
 // ─── Service-specific AI opening messages ───
 const SERVICE_OPENERS: Record<string, { greeting: string; followUps: string[] }> = {
   Laundry: {
-    greeting: "Hi! I can schedule a laundry pickup for you. CleanLux picks up from your door — next available is **tomorrow between 9–11am**. Want me to book that?",
+    greeting: "Laundry Butler picks up from your door. Send **laundry** and I’ll book the next available pickup.",
     followUps: [
-      "Perfect! I've booked CleanLux for tomorrow 9–11am. They'll text you 30 min before arrival. Anything else?",
+      "Laundry Butler is booked. They'll text you before arrival. Anything else?",
       "Got it! I'll note that preference. Anything special about this load — delicates, dry-clean items?",
       "On it! I'll add that to your booking notes.",
     ],
@@ -382,6 +384,7 @@ export default function ServiceChatThread({
   const opener = SERVICE_OPENERS[serviceLabel] || SERVICE_OPENERS["Handyman"];
   const followUps = opener.followUps;
   const followUpIndexRef = useRef(0);
+  const sendMutation = trpc.chat.sendMessage.useMutation();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -412,12 +415,13 @@ export default function ServiceChatThread({
     }
   }, [messages, showTyping]);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const handleSend = async () => {
+    const content = inputValue.trim();
+    if (!content || sendMutation.isPending) return;
 
     const userMsg: Message = {
       id: `user-${Date.now()}`,
-      text: inputValue.trim(),
+      text: content,
       sent: true,
       time: "Just now",
       read: false,
@@ -425,9 +429,40 @@ export default function ServiceChatThread({
 
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
-
-    // Simulate AI typing then responding
     setShowTyping(true);
+
+    if (serviceLabel === "Laundry") {
+      try {
+        const response = await sendMutation.mutateAsync({ content });
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `ai-${Date.now()}`,
+            text: response.content,
+            sent: false,
+            time: "Just now",
+            isAI: true,
+          },
+        ]);
+      } catch (err) {
+        console.error("[ServiceChatThread] Laundry send failed:", err);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `ai-${Date.now()}`,
+            text: "Your request did not go through. Please try again in a moment.",
+            sent: false,
+            time: "Just now",
+            isAI: true,
+          },
+        ]);
+      } finally {
+        setShowTyping(false);
+      }
+      return;
+    }
+
+    // Simulate AI typing then responding for future services.
     setTimeout(() => {
       setShowTyping(false);
       const idx = followUpIndexRef.current % followUps.length;
@@ -522,6 +557,7 @@ export default function ServiceChatThread({
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder={`Ask about ${serviceLabel.toLowerCase()}...`}
+            disabled={sendMutation.isPending}
             style={{
               flex: 1,
               border: "none",
@@ -536,23 +572,24 @@ export default function ServiceChatThread({
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={handleSend}
+          disabled={!inputValue.trim() || sendMutation.isPending}
           style={{
             width: 40,
             height: 40,
             borderRadius: 12,
-            background: inputValue.trim() ? T.gold : T.surfaceRaised,
+            background: inputValue.trim() && !sendMutation.isPending ? T.gold : T.surfaceRaised,
             border: "none",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            cursor: inputValue.trim() ? "pointer" : "default",
+            cursor: inputValue.trim() && !sendMutation.isPending ? "pointer" : "default",
             transition: "background 0.15s ease",
             flexShrink: 0,
           }}
         >
           <Send
             size={17}
-            color={inputValue.trim() ? "#FFFFFF" : T.textTertiary}
+            color={inputValue.trim() && !sendMutation.isPending ? "#FFFFFF" : T.textTertiary}
           />
         </motion.button>
       </div>

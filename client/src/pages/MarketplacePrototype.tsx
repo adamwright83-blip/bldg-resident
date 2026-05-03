@@ -55,7 +55,6 @@ import {
   HandHeart,
   CheckCircle2,
   ChevronRight,
-  Sparkles,
 } from "lucide-react";
 import { InboxList, ConversationThread, MOCK_CONVERSATIONS } from "@/components/messaging";
 import type { Conversation } from "@/components/messaging";
@@ -1503,7 +1502,7 @@ export default function MarketplacePrototype() {
                 Recent
               </div>
               {[
-                { icon: Shirt, text: "Laundry pickup — Tomorrow 10am", sub: "CleanLux · Confirmed", accent: "#4CAF50" },
+                { icon: Shirt, text: "Laundry pickup — Tomorrow 10am", sub: "Laundry Butler · Confirmed", accent: "#4CAF50" },
                 { icon: Car, text: "Car detail — Saturday 10am", sub: "AutoShine Mobile · Pending", accent: T.gold },
                 { icon: Wrench, text: "Faucet repair — Completed", sub: "FixIt Pro · Rated ★★★★★", accent: T.textTertiary },
               ].map((item, i) => (
