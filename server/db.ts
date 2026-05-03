@@ -36,6 +36,112 @@ export async function getDb() {
   return _db;
 }
 
+function logDatabaseError(label: string, error: unknown, context: Record<string, unknown> = {}) {
+  const err = error as any;
+  console.error(`[Database][${label}]`, {
+    message: err?.message,
+    code: err?.code,
+    errno: err?.errno,
+    sqlState: err?.sqlState,
+    sqlMessage: err?.sqlMessage,
+    context,
+  });
+}
+
+function isSchemaColumnError(error: unknown): boolean {
+  const err = error as any;
+  const message = String(err?.message || err?.sqlMessage || "");
+  return (
+    err?.code === "ER_BAD_FIELD_ERROR" ||
+    /unknown column/i.test(message) ||
+    /check that column\/key exists/i.test(message)
+  );
+}
+
+const serviceRequestBaseSelect = {
+  id: serviceRequests.id,
+  bldgUserId: serviceRequests.bldgUserId,
+  serviceType: serviceRequests.serviceType,
+  status: serviceRequests.status,
+  requestSummary: serviceRequests.requestSummary,
+  requestJson: serviceRequests.requestJson,
+  scheduledDate: serviceRequests.scheduledDate,
+  scheduledWindow: serviceRequests.scheduledWindow,
+  createdAt: serviceRequests.createdAt,
+  updatedAt: serviceRequests.updatedAt,
+};
+
+type ServiceRequestBaseRow = typeof serviceRequests.$inferSelect extends infer _T
+  ? {
+      id: number;
+      bldgUserId: number;
+      serviceType: ServiceRequest["serviceType"];
+      status: ServiceRequest["status"];
+      requestSummary: string | null;
+      requestJson: unknown;
+      scheduledDate: string | null;
+      scheduledWindow: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  : never;
+
+function hydrateServiceRequest(row: ServiceRequestBaseRow): ServiceRequest {
+  return {
+    ...row,
+    scheduledStartUtc: null,
+    scheduledEndUtc: null,
+    scheduledStartLocal: null,
+    scheduledEndLocal: null,
+    timezone: null,
+    upgradeCode: null,
+    upgradePriceCents: null,
+    upgradeLabel: null,
+    paymentAdjustmentDueCents: null,
+    receiptUrl: null,
+    orderId: null,
+    buildingId: null,
+    buildingLabel: null,
+    residentName: null,
+    residentPhone: null,
+    source: null,
+  };
+}
+
+function baseServiceRequestInsert(data: InsertServiceRequest): InsertServiceRequest {
+  const baseStatuses = new Set(["pending", "confirmed", "in-progress", "completed", "cancelled"]);
+  return {
+    bldgUserId: data.bldgUserId,
+    serviceType: data.serviceType,
+    status: data.status && baseStatuses.has(String(data.status)) ? data.status : "pending",
+    requestSummary: data.requestSummary ?? null,
+    requestJson: data.requestJson ?? null,
+    scheduledDate: data.scheduledDate ?? null,
+    scheduledWindow: data.scheduledWindow ?? null,
+  } as InsertServiceRequest;
+}
+
+function baseServiceRequestUpdate(
+  updates: Partial<InsertServiceRequest>
+): Partial<InsertServiceRequest> {
+  const allowed = [
+    "bldgUserId",
+    "serviceType",
+    "status",
+    "requestSummary",
+    "requestJson",
+    "scheduledDate",
+    "scheduledWindow",
+  ] as const;
+  const next: Partial<InsertServiceRequest> = {};
+  for (const key of allowed) {
+    if (updates[key] !== undefined) {
+      (next as any)[key] = updates[key];
+    }
+  }
+  return next;
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
@@ -310,16 +416,49 @@ export async function createServiceRequest(
     );
   }
 
-  const result = await db.insert(serviceRequests).values(data);
-  const insertId = result[0].insertId;
+  let insertId: number;
+  try {
+    const result = await db.insert(serviceRequests).values(data);
+    insertId = result[0].insertId;
+  } catch (error) {
+    logDatabaseError("createServiceRequest.full_insert_failed", error, {
+      bldgUserId: data.bldgUserId,
+      serviceType: data.serviceType,
+    });
+    if (!isSchemaColumnError(error)) throw error;
 
-  const rows = await db
-    .select()
-    .from(serviceRequests)
-    .where(eq(serviceRequests.id, insertId))
-    .limit(1);
+    const fallbackData = baseServiceRequestInsert(data);
+    const result = await db.insert(serviceRequests).values(fallbackData);
+    insertId = result[0].insertId;
+    console.warn("[Database][createServiceRequest] inserted using base service_requests columns", {
+      id: insertId,
+      bldgUserId: data.bldgUserId,
+      serviceType: data.serviceType,
+    });
+  }
 
-  return rows[0];
+  const created = await getServiceRequestById(insertId);
+  if (!created) {
+    throw new Error(`[Database] Created service request ${insertId} but could not read it back`);
+  }
+  return created;
+}
+
+async function getServiceRequestById(id: number): Promise<ServiceRequest | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  try {
+    const rows = await db
+      .select(serviceRequestBaseSelect)
+      .from(serviceRequests)
+      .where(eq(serviceRequests.id, id))
+      .limit(1);
+    return rows[0] ? hydrateServiceRequest(rows[0] as ServiceRequestBaseRow) : undefined;
+  } catch (error) {
+    logDatabaseError("getServiceRequestById.failed", error, { id });
+    return undefined;
+  }
 }
 
 /**
@@ -334,12 +473,18 @@ export async function getServiceRequests(
     return [];
   }
 
-  return db
-    .select()
-    .from(serviceRequests)
-    .where(eq(serviceRequests.bldgUserId, bldgUserId))
-    .orderBy(desc(serviceRequests.createdAt))
-    .limit(limit);
+  try {
+    const rows = await db
+      .select(serviceRequestBaseSelect)
+      .from(serviceRequests)
+      .where(eq(serviceRequests.bldgUserId, bldgUserId))
+      .orderBy(desc(serviceRequests.createdAt))
+      .limit(limit);
+    return rows.map((row) => hydrateServiceRequest(row as ServiceRequestBaseRow));
+  } catch (error) {
+    logDatabaseError("getServiceRequests.failed", error, { bldgUserId, limit });
+    return [];
+  }
 }
 
 /**
@@ -353,17 +498,25 @@ export async function getServiceRequestByBldgUserAndOrderId(
   if (!db) {
     return undefined;
   }
-  const rows = await db
-    .select()
-    .from(serviceRequests)
-    .where(
-      and(
-        eq(serviceRequests.bldgUserId, bldgUserId),
-        eq(serviceRequests.orderId, orderId)
+  try {
+    const rows = await db
+      .select(serviceRequestBaseSelect)
+      .from(serviceRequests)
+      .where(
+        and(
+          eq(serviceRequests.bldgUserId, bldgUserId),
+          eq(serviceRequests.orderId, orderId)
+        )
       )
-    )
-    .limit(1);
-  return rows[0];
+      .limit(1);
+    return rows[0] ? hydrateServiceRequest(rows[0] as ServiceRequestBaseRow) : undefined;
+  } catch (error) {
+    logDatabaseError("getServiceRequestByBldgUserAndOrderId.failed", error, {
+      bldgUserId,
+      orderId,
+    });
+    return undefined;
+  }
 }
 
 /**
@@ -380,15 +533,31 @@ export async function updateServiceRequest(
     );
   }
 
-  await db.update(serviceRequests).set(updates).where(eq(serviceRequests.id, id));
+  try {
+    await db.update(serviceRequests).set(updates).where(eq(serviceRequests.id, id));
+  } catch (error) {
+    logDatabaseError("updateServiceRequest.full_update_failed", error, {
+      id,
+      updateKeys: Object.keys(updates),
+    });
+    if (!isSchemaColumnError(error)) throw error;
 
-  const rows = await db
-    .select()
-    .from(serviceRequests)
-    .where(eq(serviceRequests.id, id))
-    .limit(1);
+    const fallbackUpdates = baseServiceRequestUpdate(updates);
+    if (Object.keys(fallbackUpdates).length > 0) {
+      await db.update(serviceRequests).set(fallbackUpdates).where(eq(serviceRequests.id, id));
+      console.warn("[Database][updateServiceRequest] updated using base service_requests columns", {
+        id,
+        updateKeys: Object.keys(fallbackUpdates),
+      });
+    } else {
+      console.warn("[Database][updateServiceRequest] skipped unsupported update on legacy service_requests schema", {
+        id,
+        updateKeys: Object.keys(updates),
+      });
+    }
+  }
 
-  return rows.length > 0 ? rows[0] : undefined;
+  return getServiceRequestById(id);
 }
 
 // ─── Preferences ───
@@ -549,11 +718,7 @@ export async function getBookingStats(bldgUserId: number): Promise<BookingStats>
 
   try {
     // Get all service requests (non-cancelled)
-    const allRequests = await db
-      .select()
-      .from(serviceRequests)
-      .where(eq(serviceRequests.bldgUserId, bldgUserId))
-      .orderBy(desc(serviceRequests.createdAt));
+    const allRequests = await getServiceRequests(bldgUserId, 100);
 
     const activeRequests = allRequests.filter(
       (r) => r.status !== "cancelled"
