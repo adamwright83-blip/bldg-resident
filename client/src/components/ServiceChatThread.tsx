@@ -120,6 +120,20 @@ interface Message {
   isAI?: boolean;
 }
 
+async function ensureServiceChatSession(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/guest-session", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("[ServiceChatThread] Failed to ensure session:", err);
+    return false;
+  }
+}
+
 // ─── Small animated BLDG logo for AI bubbles ───
 function AIAvatar() {
   return (
@@ -377,9 +391,11 @@ function ServiceChatHeader({
 export default function ServiceChatThread({
   serviceLabel,
   onBack,
+  initialMessage,
 }: {
   serviceLabel: string;
   onBack: () => void;
+  initialMessage?: string | null;
 }) {
   const opener = SERVICE_OPENERS[serviceLabel] || SERVICE_OPENERS["Handyman"];
   const followUps = opener.followUps;
@@ -389,6 +405,7 @@ export default function ServiceChatThread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [showTyping, setShowTyping] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -408,6 +425,10 @@ export default function ServiceChatThread({
     return () => clearTimeout(t);
   }, [opener.greeting]);
 
+  useEffect(() => {
+    ensureServiceChatSession().then(setSessionReady);
+  }, []);
+
   // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
@@ -415,8 +436,8 @@ export default function ServiceChatThread({
     }
   }, [messages, showTyping]);
 
-  const handleSend = async () => {
-    const content = inputValue.trim();
+  const handleSend = async (overrideText?: string) => {
+    const content = (overrideText ?? inputValue).trim();
     if (!content || sendMutation.isPending) return;
 
     const userMsg: Message = {
@@ -433,6 +454,15 @@ export default function ServiceChatThread({
 
     if (serviceLabel === "Laundry") {
       try {
+        let ready = sessionReady;
+        if (!ready) {
+          ready = await ensureServiceChatSession();
+          setSessionReady(ready);
+        }
+        if (!ready) {
+          throw new Error("session_unavailable");
+        }
+
         const response = await sendMutation.mutateAsync({ content });
         setMessages((prev) => [
           ...prev,
@@ -446,11 +476,19 @@ export default function ServiceChatThread({
         ]);
       } catch (err) {
         console.error("[ServiceChatThread] Laundry send failed:", err);
+        const trpcCode = (err as any)?.data?.code;
+        if (trpcCode === "UNAUTHORIZED") {
+          const restored = await ensureServiceChatSession();
+          setSessionReady(restored);
+        }
         setMessages((prev) => [
           ...prev,
           {
             id: `ai-${Date.now()}`,
-            text: "Your request did not go through. Please try again in a moment.",
+            text:
+              trpcCode === "UNAUTHORIZED"
+                ? "Session restored. Send that again."
+                : "Your request did not go through. Please try again in a moment.",
             sent: false,
             time: "Just now",
             isAI: true,
@@ -479,6 +517,16 @@ export default function ServiceChatThread({
       ]);
     }, 2200);
   };
+
+  const initialMessageSentRef = useRef(false);
+  useEffect(() => {
+    if (!initialMessage || initialMessageSentRef.current) return;
+    initialMessageSentRef.current = true;
+    const t = setTimeout(() => {
+      void handleSend(initialMessage);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [initialMessage]);
 
   return (
     <motion.div
@@ -571,7 +619,7 @@ export default function ServiceChatThread({
         </div>
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={handleSend}
+          onClick={() => void handleSend()}
           disabled={!inputValue.trim() || sendMutation.isPending}
           style={{
             width: 40,

@@ -1142,6 +1142,8 @@ export default function MarketplacePrototype() {
   const [showLivingBuilding, setShowLivingBuilding] = useState(false);
   const [pendingServiceLabel, setPendingServiceLabel] = useState<string | null>(null);
   const [activeServiceChat, setActiveServiceChat] = useState<string | null>(null);
+  const [activeServiceInitialMessage, setActiveServiceInitialMessage] = useState<string | null>(null);
+  const [servicesComposerInput, setServicesComposerInput] = useState("");
 
   // ─── Messaging State ───
   const [showInbox, setShowInbox] = useState(false);
@@ -1187,6 +1189,26 @@ export default function MarketplacePrototype() {
     setShowInbox(false);
     setActiveConversation(null);
   }, []);
+
+  const resolveServiceLabelFromText = useCallback((text: string): string => {
+    const normalized = text.toLowerCase();
+    if (/\b(laundry|wash\s*(&|and)\s*fold)\b/.test(normalized)) return "Laundry";
+    if (/\b(dry\s*clean|dryclean)\b/.test(normalized)) return "Dry Clean";
+    if (/\b(dog|groom|pet)\b/.test(normalized)) return "Dog Groom";
+    if (/\b(car|detail|wash)\b/.test(normalized)) return "Car Detail";
+    if (/\b(clean|housekeep)\b/.test(normalized)) return "Cleaning";
+    if (/\b(assemble|assembly|furniture)\b/.test(normalized)) return "Assembly";
+    if (/\b(maintenance|repair|fix|leak|broken)\b/.test(normalized)) return "Maintenance";
+    return "Handyman";
+  }, []);
+
+  const handleServicesComposerSend = useCallback(() => {
+    const content = servicesComposerInput.trim();
+    if (!content) return;
+    setActiveServiceInitialMessage(content);
+    setActiveServiceChat(resolveServiceLabelFromText(content));
+    setServicesComposerInput("");
+  }, [resolveServiceLabelFromText, servicesComposerInput]);
 
   // "I can help" from Building Feed → open a neighbor DM
   const handleFeedDM = useCallback((neighborName: string) => {
@@ -1479,6 +1501,7 @@ export default function MarketplacePrototype() {
                     {...tile}
                     index={i}
                     onTap={() => {
+                      setActiveServiceInitialMessage(null);
                       setPendingServiceLabel(tile.label);
                       setShowLivingBuilding(true);
                     }}
@@ -1808,6 +1831,14 @@ export default function MarketplacePrototype() {
           >
             <input
               type="text"
+              value={servicesComposerInput}
+              onChange={(e) => setServicesComposerInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleServicesComposerSend();
+                }
+              }}
               placeholder="Type what you need..."
               style={{
                 flex: 1,
@@ -1820,6 +1851,9 @@ export default function MarketplacePrototype() {
               }}
             />
             <button
+              type="button"
+              onClick={handleServicesComposerSend}
+              disabled={!servicesComposerInput.trim()}
               style={{
                 width: 32,
                 height: 32,
@@ -1829,8 +1863,8 @@ export default function MarketplacePrototype() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                cursor: "pointer",
-                opacity: 0.5,
+                cursor: servicesComposerInput.trim() ? "pointer" : "default",
+                opacity: servicesComposerInput.trim() ? 1 : 0.5,
               }}
             >
               <Send size={15} color="#FFFFFF" />
@@ -1865,7 +1899,11 @@ export default function MarketplacePrototype() {
         {activeServiceChat && (
           <ServiceChatThread
             serviceLabel={activeServiceChat}
-            onBack={() => setActiveServiceChat(null)}
+            initialMessage={activeServiceInitialMessage}
+            onBack={() => {
+              setActiveServiceChat(null);
+              setActiveServiceInitialMessage(null);
+            }}
           />
         )}
       </AnimatePresence>
