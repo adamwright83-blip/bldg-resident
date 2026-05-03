@@ -139,6 +139,14 @@ describe("residentAgentClient", () => {
     expect(
       shouldUseIntakeFallbackForAgentFailure({
         success: false,
+        reason: "non_2xx:400",
+        path: "agent-tool",
+        status: 400,
+      })
+    ).toBe(true);
+    expect(
+      shouldUseIntakeFallbackForAgentFailure({
+        success: false,
         reason: "non_2xx:500",
         path: "agent-tool",
         status: 500,

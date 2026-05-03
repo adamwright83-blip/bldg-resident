@@ -171,7 +171,7 @@ export function shouldUseIntakeFallbackForAgentFailure(result: AdminExecutionRes
   // These statuses mean the safe admin agent S2S route is unavailable or not
   // usable from resident. Preserve production behavior via the existing intake
   // endpoint instead of calling protected admin tRPC or inventing local order logic.
-  return status != null && [401, 403, 404, 405].includes(status);
+  return status != null && [400, 401, 403, 404, 405].includes(status);
 }
 
 export function shouldTryNextIntakeBaseUrl(result: AdminExecutionResult): boolean {
