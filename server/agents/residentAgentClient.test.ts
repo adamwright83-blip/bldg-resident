@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAdminAgentClient,
   postToAdminIntakeFallbackAndVerify,
+  shouldUseIntakeFallbackForAgentFailure,
   type LaundryOrderToolInput,
 } from "./residentAgentClient";
 
@@ -36,6 +37,43 @@ describe("residentAgentClient", () => {
     vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "");
 
     expect(createAdminAgentClient().canRunLaundryOrderTool()).toBe(false);
+  });
+
+  it("treats missing admin agent S2S routes as fallback-eligible", async () => {
+    vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent");
+    vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: vi.fn().mockResolvedValue("not found"),
+      })
+    );
+
+    const result = await createAdminAgentClient().runCreateLaundryOrderTool(payload, {
+      sessionId: "sess_1",
+      conversationId: "conv_1",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      reason: "non_2xx:404",
+      path: "agent-tool",
+      status: 404,
+    });
+    expect(shouldUseIntakeFallbackForAgentFailure(result)).toBe(true);
+  });
+
+  it("does not fall back on admin agent execution errors that may be real tool failures", () => {
+    expect(
+      shouldUseIntakeFallbackForAgentFailure({
+        success: false,
+        reason: "non_2xx:500",
+        path: "agent-tool",
+        status: 500,
+      })
+    ).toBe(false);
   });
 
   it("requires ok true and orderId for intake fallback success", async () => {

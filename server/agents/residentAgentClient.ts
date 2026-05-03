@@ -25,7 +25,7 @@ export interface LaundryOrderToolInput {
 
 export type AdminExecutionResult =
   | { success: true; orderId: number; path: "agent-tool" | "intake-fallback" }
-  | { success: false; reason: string; path: "agent-tool" | "intake-fallback" };
+  | { success: false; reason: string; path: "agent-tool" | "intake-fallback"; status?: number };
 
 export interface AdminAgentClient {
   canRunLaundryOrderTool(): boolean;
@@ -78,6 +78,7 @@ export function createAdminAgentClient(): AdminAgentClient {
             success: false,
             reason: `non_2xx:${res.status}`,
             path: "agent-tool",
+            status: res.status,
           };
         }
 
@@ -104,6 +105,25 @@ export function createAdminAgentClient(): AdminAgentClient {
       }
     },
   };
+}
+
+export function shouldUseIntakeFallbackForAgentFailure(result: AdminExecutionResult): boolean {
+  if (result.success || result.path !== "agent-tool") return false;
+
+  if (
+    result.reason === "no_safe_admin_agent_s2s_endpoint" ||
+    result.reason === "fetch_error"
+  ) {
+    return true;
+  }
+
+  const statusMatch = result.reason.match(/^non_2xx:(\d+)$/);
+  const status = result.status ?? (statusMatch?.[1] ? Number(statusMatch[1]) : null);
+
+  // These statuses mean the safe admin agent S2S route is unavailable or not
+  // usable from resident. Preserve production behavior via the existing intake
+  // endpoint instead of calling protected admin tRPC or inventing local order logic.
+  return status != null && [401, 403, 404, 405].includes(status);
 }
 
 export async function postToAdminIntakeFallbackAndVerify(

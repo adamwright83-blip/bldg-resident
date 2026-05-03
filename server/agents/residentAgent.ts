@@ -14,6 +14,7 @@ import { inferResidentIntent, isFutureVendorServiceIntent } from "./intentClassi
 import {
   createAdminAgentClient,
   postToAdminIntakeFallbackAndVerify,
+  shouldUseIntakeFallbackForAgentFailure,
   type LaundryOrderToolInput,
 } from "./residentAgentClient";
 import { getAdminIntakeApiBaseUrl, hasAdminIntakeSharedSecret } from "./adminIntakeConfig";
@@ -259,23 +260,38 @@ async function executeLaundryIntent(input: {
   };
 
   const adminAgentClient = createAdminAgentClient();
-  let executionResult;
-  if (adminAgentClient.canRunLaundryOrderTool()) {
-    executionResult = await adminAgentClient.runCreateLaundryOrderTool(intakePayload, input.session);
-  } else {
-    // TODO(admin): add a shared-secret server-to-server admin agent endpoint for
-    // createLaundryOrderTool. Do not call protected admin tRPC from resident.
+  const runIntakeFallback = async (fallbackReason: string) => {
+    console.warn(`[ResidentAgent] using intake fallback: reason=${fallbackReason}`);
     const adminApiUrl = getAdminIntakeApiBaseUrl();
     const sharedSecret = process.env.APP_SHARED_API_SECRET || "";
     if (!hasAdminIntakeSharedSecret()) {
       console.warn("[ResidentAgent] APP_SHARED_API_SECRET is missing; admin intake will reject fallback");
     }
-    executionResult = await postToAdminIntakeFallbackAndVerify(
+    return postToAdminIntakeFallbackAndVerify(
       adminApiUrl,
       sharedSecret,
       intakePayload,
       "ResidentAgent"
     );
+  };
+
+  let executionResult;
+  if (adminAgentClient.canRunLaundryOrderTool()) {
+    const agentExecutionResult = await adminAgentClient.runCreateLaundryOrderTool(
+      intakePayload,
+      input.session
+    );
+    if (agentExecutionResult.success) {
+      executionResult = agentExecutionResult;
+    } else if (shouldUseIntakeFallbackForAgentFailure(agentExecutionResult)) {
+      executionResult = await runIntakeFallback(`admin_agent_unavailable:${agentExecutionResult.reason}`);
+    } else {
+      executionResult = agentExecutionResult;
+    }
+  } else {
+    // TODO(admin): add a shared-secret server-to-server admin agent endpoint for
+    // createLaundryOrderTool. Do not call protected admin tRPC from resident.
+    executionResult = await runIntakeFallback("no_safe_admin_agent_s2s_endpoint");
   }
 
   if (!executionResult.success) {
