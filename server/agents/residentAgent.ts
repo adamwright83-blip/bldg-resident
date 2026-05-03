@@ -16,6 +16,7 @@ import {
   postToAdminIntakeFallbackAndVerify,
   type LaundryOrderToolInput,
 } from "./residentAgentClient";
+import { getAdminIntakeApiBaseUrl, hasAdminIntakeSharedSecret } from "./adminIntakeConfig";
 import {
   getOrCreateResidentAgentSession,
   withResidentAgentMetadata,
@@ -264,11 +265,11 @@ async function executeLaundryIntent(input: {
   } else {
     // TODO(admin): add a shared-secret server-to-server admin agent endpoint for
     // createLaundryOrderTool. Do not call protected admin tRPC from resident.
-    const adminApiUrl = (
-      process.env.ADMIN_API_URL ||
-      "https://bldg-admin-api-production.up.railway.app"
-    ).replace(/\/$/, "");
+    const adminApiUrl = getAdminIntakeApiBaseUrl();
     const sharedSecret = process.env.APP_SHARED_API_SECRET || "";
+    if (!hasAdminIntakeSharedSecret()) {
+      console.warn("[ResidentAgent] APP_SHARED_API_SECRET is missing; admin intake will reject fallback");
+    }
     executionResult = await postToAdminIntakeFallbackAndVerify(
       adminApiUrl,
       sharedSecret,
