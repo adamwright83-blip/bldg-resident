@@ -27,13 +27,30 @@ export interface LaundryOrderToolInput {
 }
 
 export type AdminExecutionResult =
-  | { success: true; orderId: number; path: "agent-tool" | "intake-fallback" }
+  | { success: true; orderId?: number; path: "agent-tool" | "intake-fallback"; [key: string]: unknown }
   | { success: false; reason: string; path: "agent-tool" | "intake-fallback"; status?: number };
 
 export interface AdminAgentClient {
   canRunLaundryOrderTool(): boolean;
+  runAdminTool(
+    toolName: string,
+    input: Record<string, unknown>,
+    session: ResidentAgentSession
+  ): Promise<AdminExecutionResult>;
   runCreateLaundryOrderTool(
     input: LaundryOrderToolInput,
+    session: ResidentAgentSession
+  ): Promise<AdminExecutionResult>;
+  runCreateResidentAgentPlanTool(
+    input: Record<string, unknown>,
+    session: ResidentAgentSession
+  ): Promise<AdminExecutionResult>;
+  runUpdateResidentAgentPlanTool(
+    input: Record<string, unknown>,
+    session: ResidentAgentSession
+  ): Promise<AdminExecutionResult>;
+  runCreateResidentCoordinatedRequestTool(
+    input: Record<string, unknown>,
     session: ResidentAgentSession
   ): Promise<AdminExecutionResult>;
 }
@@ -69,7 +86,7 @@ export function createAdminAgentClient(): AdminAgentClient {
       return Boolean(process.env.ADMIN_AGENT_S2S_URL && sharedSecret);
     },
 
-    async runCreateLaundryOrderTool(input, session) {
+    async runAdminTool(toolName, input, session) {
       const targets = getAdminAgentS2SRunToolUrlCandidates();
       if (!process.env.ADMIN_AGENT_S2S_URL || !sharedSecret) {
         return {
@@ -83,8 +100,10 @@ export function createAdminAgentClient(): AdminAgentClient {
         let lastFailure: AdminExecutionResult | null = null;
         for (const target of targets) {
           console.log(
-            `[ResidentAgent][AdminAgentClient] S2S runTool attempt target=${target} tool=createLaundryOrderTool`
+            `[ResidentAgent][AdminAgentClient] S2S runTool attempt target=${target} tool=${toolName}`
           );
+          const bldgUserId =
+            typeof input.bldgUserId === "number" ? input.bldgUserId : null;
           const res = await fetch(target, {
             method: "POST",
             headers: {
@@ -92,18 +111,22 @@ export function createAdminAgentClient(): AdminAgentClient {
               "x-agent-shared-secret": sharedSecret,
             },
             body: JSON.stringify({
-              toolName: "createLaundryOrderTool",
+              toolName,
               tenantId: "default",
               agentType: "resident_agent",
               actorType: "resident_chat",
-              actorId: input.bldgUserId == null ? null : `bldg_user:${input.bldgUserId}`,
+              actorId: bldgUserId == null ? null : `bldg_user:${bldgUserId}`,
               sessionId: session.sessionId,
               conversationId: session.conversationId,
               input: {
                 ...input,
-                buildingSlug: input.buildingId,
-                pickupTimeWindow: input.pickupWindow,
-                deliveryTimeWindow: input.pickupWindow,
+                ...(input.buildingId !== undefined ? { buildingSlug: input.buildingId } : {}),
+                ...(input.pickupWindow !== undefined
+                  ? {
+                      pickupTimeWindow: input.pickupWindow,
+                      deliveryTimeWindow: input.pickupWindow,
+                    }
+                  : {}),
                 sessionId: session.sessionId,
                 conversationId: session.conversationId,
               },
@@ -127,23 +150,15 @@ export function createAdminAgentClient(): AdminAgentClient {
             return lastFailure;
           }
 
-          let body: { orderId?: number; result?: { orderId?: number }; output?: { orderId?: number } };
+          let body: unknown;
           try {
             body = JSON.parse(responseText);
           } catch {
             return { success: false, reason: "parse_error", path: "agent-tool" };
           }
 
-          const orderId = body.orderId ?? body.result?.orderId ?? body.output?.orderId;
-          if (orderId == null || !Number.isFinite(Number(orderId))) {
-            return {
-              success: false,
-              reason: "missing_orderId",
-              path: "agent-tool",
-            };
-          }
-
-          return { success: true, orderId: Number(orderId), path: "agent-tool" };
+          const output = normalizeRunToolOutput(body);
+          return { success: true, ...output, path: "agent-tool" };
         }
 
         return lastFailure ?? { success: false, reason: "no_s2s_targets", path: "agent-tool" };
@@ -152,7 +167,43 @@ export function createAdminAgentClient(): AdminAgentClient {
         return { success: false, reason: "fetch_error", path: "agent-tool" };
       }
     },
+
+    async runCreateLaundryOrderTool(input, session) {
+      const result = await this.runAdminTool("createLaundryOrderTool", input as unknown as Record<string, unknown>, session);
+      if (!result.success) return result;
+
+      const orderId = result.orderId;
+      if (orderId == null || !Number.isFinite(Number(orderId))) {
+        return {
+          success: false,
+          reason: "missing_orderId",
+          path: "agent-tool",
+        };
+      }
+
+      return { ...result, orderId: Number(orderId), path: "agent-tool" };
+    },
+
+    async runCreateResidentAgentPlanTool(input, session) {
+      return this.runAdminTool("createResidentAgentPlanTool", input, session);
+    },
+
+    async runUpdateResidentAgentPlanTool(input, session) {
+      return this.runAdminTool("updateResidentAgentPlanTool", input, session);
+    },
+
+    async runCreateResidentCoordinatedRequestTool(input, session) {
+      return this.runAdminTool("createResidentCoordinatedRequestTool", input, session);
+    },
   };
+}
+
+function normalizeRunToolOutput(body: any): Record<string, unknown> {
+  const output = body?.result ?? body?.output ?? body ?? {};
+  if (output && typeof output === "object" && !Array.isArray(output)) {
+    return output;
+  }
+  return { output };
 }
 
 export function shouldUseIntakeFallbackForAgentFailure(result: AdminExecutionResult): boolean {

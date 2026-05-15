@@ -1260,6 +1260,7 @@ export const chatRouter = router({
             role: agentResult.role!,
             content: agentResult.content!,
             booking: agentResult.booking ?? null,
+            metadata: agentResult.metadata,
           };
         }
       }

@@ -12,6 +12,11 @@ import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/i
 import { needsCriticalProfileRecovery } from "../../shared/profileCritical";
 import { inferResidentIntent, isFutureVendorServiceIntent } from "./intentClassifier";
 import {
+  planResidentMultiIntents,
+  type ResidentPlannedIntent,
+  type ResidentMultiIntentType,
+} from "./residentMultiIntentPlanner";
+import {
   createAdminAgentClient,
   postToAdminIntakeFallbackAndVerify,
   shouldUseIntakeFallbackForAgentFailure,
@@ -70,12 +75,14 @@ export interface ResidentAgentResponse {
   handled: boolean;
   role?: "assistant";
   content?: string;
+  metadata?: Record<string, unknown>;
   booking?: {
     serviceRequestId: number | null;
     service: string;
     date: string;
     window: string;
     recurrence: string | null;
+    orderId?: number | null;
   } | null;
 }
 
@@ -84,8 +91,25 @@ export async function runResidentAgent(input: {
   content: string;
   user: BldgUser;
 }): Promise<ResidentAgentResponse> {
+  const currentDate = new Date().toISOString().slice(0, 10);
+  const multiIntentPlan = planResidentMultiIntents({
+    content: input.content,
+    currentDate,
+    buildingSlug: input.user?.buildingSlug ?? null,
+    unit: input.user?.unit ?? null,
+  });
   const intent = inferResidentIntent(input.content);
   const session = await getOrCreateResidentAgentSession(input.bldgUserId);
+
+  if (multiIntentPlan.intents.length > 1) {
+    return executeMultiIntentPlan({
+      bldgUserId: input.bldgUserId,
+      content: input.content,
+      user: input.user,
+      session,
+      intents: multiIntentPlan.intents,
+    });
+  }
 
   if (intent.type === "laundry") {
     return executeLaundryIntent({
@@ -131,14 +155,19 @@ async function executeLaundryIntent(input: {
   content: string;
   user: BldgUser;
   session: ResidentAgentSession;
+  suppressAssistantMessage?: boolean;
 }): Promise<ResidentAgentResponse> {
   console.log("[ResidentAgent] laundry intent matched");
   const dateTimeIntent = parseExplicitDateTime(input.content);
+  const windowOverride =
+    dateTimeIntent.dateOverride && !dateTimeIntent.windowOverride
+      ? "7–10 AM"
+      : dateTimeIntent.windowOverride;
   const defaults = await getBookingDefaults(
     input.bldgUserId,
     "laundry",
     dateTimeIntent.dateOverride,
-    dateTimeIntent.windowOverride
+    windowOverride
   );
   const freshUser = await getBldgUserById(input.bldgUserId);
 
@@ -158,6 +187,7 @@ async function executeLaundryIntent(input: {
           date: existingPending.date ?? defaults.date,
           window: existingPending.window ?? defaults.window,
           recurrence: existingPending.recurrence ?? defaults.recurrence,
+          orderId: null,
         },
       };
     }
@@ -178,19 +208,21 @@ async function executeLaundryIntent(input: {
     } as any);
 
     const confirmText = `Laundry booked for ${defaults.date}, ${defaults.window}.`;
-    await insertChatMessage({
-      bldgUserId: input.bldgUserId,
-      role: "assistant",
-      content: confirmText,
-      metadata: withResidentAgentMetadata(input.session, {
-        type: "booking",
-        tutorial: true,
-        service: "Laundry",
-        date: defaults.date,
-        window: defaults.window,
-        recurrence: defaults.recurrence,
-      }),
-    });
+    if (!input.suppressAssistantMessage) {
+      await insertChatMessage({
+        bldgUserId: input.bldgUserId,
+        role: "assistant",
+        content: confirmText,
+        metadata: withResidentAgentMetadata(input.session, {
+          type: "booking",
+          tutorial: true,
+          service: "Laundry",
+          date: defaults.date,
+          window: defaults.window,
+          recurrence: defaults.recurrence,
+        }),
+      });
+    }
 
     return {
       handled: true,
@@ -202,6 +234,7 @@ async function executeLaundryIntent(input: {
         date: defaults.date,
         window: defaults.window,
         recurrence: defaults.recurrence,
+        orderId: null,
       },
     };
   }
@@ -314,16 +347,18 @@ async function executeLaundryIntent(input: {
 
   if (!executionResult.success) {
     console.warn(`[ResidentAgent] admin execution failed: reason=${executionResult.reason}`);
-    await insertChatMessage({
-      bldgUserId: input.bldgUserId,
-      role: "assistant",
-      content: INTAKE_FAILURE_MESSAGE,
-      metadata: withResidentAgentMetadata(input.session, {
-        type: "booking_error",
-        service: "Laundry",
-        reason: executionResult.reason,
-      }),
-    });
+    if (!input.suppressAssistantMessage) {
+      await insertChatMessage({
+        bldgUserId: input.bldgUserId,
+        role: "assistant",
+        content: INTAKE_FAILURE_MESSAGE,
+        metadata: withResidentAgentMetadata(input.session, {
+          type: "booking_error",
+          service: "Laundry",
+          reason: executionResult.reason,
+        }),
+      });
+    }
     return {
       handled: true,
       role: "assistant",
@@ -336,21 +371,23 @@ async function executeLaundryIntent(input: {
   console.log(`[ResidentAgent] stored orderId=${executionResult.orderId} on service_request #${sr.id}`);
 
   const confirmText = `Laundry booked for ${defaults.date}, ${defaults.window}.`;
-  await insertChatMessage({
-    bldgUserId: input.bldgUserId,
-    role: "assistant",
-    content: confirmText,
-    metadata: withResidentAgentMetadata(input.session, {
-      type: "booking",
-      serviceRequestId,
-      service: "Laundry",
-      date: defaults.date,
-      window: defaults.window,
-      recurrence: defaults.recurrence,
-      orderId: executionResult.orderId,
-      adminExecutionPath: executionResult.path,
-    }),
-  });
+  if (!input.suppressAssistantMessage) {
+    await insertChatMessage({
+      bldgUserId: input.bldgUserId,
+      role: "assistant",
+      content: confirmText,
+      metadata: withResidentAgentMetadata(input.session, {
+        type: "booking",
+        serviceRequestId,
+        service: "Laundry",
+        date: defaults.date,
+        window: defaults.window,
+        recurrence: defaults.recurrence,
+        orderId: executionResult.orderId,
+        adminExecutionPath: executionResult.path,
+      }),
+    });
+  }
 
   return {
     handled: true,
@@ -362,6 +399,296 @@ async function executeLaundryIntent(input: {
       date: defaults.date,
       window: defaults.window,
       recurrence: defaults.recurrence,
+      orderId: executionResult.orderId,
     },
   };
+}
+
+type PlanItemMetadata = {
+  serviceCategory: ResidentMultiIntentType;
+  title: string;
+  status: string;
+  residentVisibleStatus: string;
+  date: string | null;
+  window: string | null;
+  deadlineDate: string | null;
+  deadlineReason: string | null;
+  requestId?: unknown;
+  orderId?: unknown;
+  nextAction: string | null;
+};
+
+async function executeMultiIntentPlan(input: {
+  bldgUserId: number;
+  content: string;
+  user: BldgUser;
+  session: ResidentAgentSession;
+  intents: ResidentPlannedIntent[];
+}): Promise<ResidentAgentResponse> {
+  const adminAgentClient = createAdminAgentClient();
+  const freshUser = (await getBldgUserById(input.bldgUserId)) ?? input.user;
+  const residentName = [freshUser?.firstName, freshUser?.lastName].filter(Boolean).join(" ") || null;
+  const canCoordinate = !needsCriticalProfileRecovery(freshUser);
+
+  let planId: unknown = null;
+  if (adminAgentClient.canRunLaundryOrderTool()) {
+    const planResult = await adminAgentClient.runCreateResidentAgentPlanTool(
+      {
+        bldgUserId: input.bldgUserId,
+        residentName,
+        buildingSlug: freshUser?.buildingSlug ?? null,
+        buildingName: freshUser?.buildingSlug ?? null,
+        unit: freshUser?.unit ?? null,
+        originalMessage: input.content,
+        sourceConversationId: input.session.conversationId,
+        sourceSessionId: input.session.sessionId,
+        planJson: { originalMessage: input.content, intents: input.intents },
+      },
+      input.session
+    );
+    if (planResult.success) {
+      planId = planResult.planId ?? null;
+    } else {
+      console.warn("[ResidentAgent] resident agent plan creation failed", planResult);
+    }
+  }
+
+  const items: PlanItemMetadata[] = [];
+  let booking: ResidentAgentResponse["booking"] = null;
+
+  const executionIntents = [
+    ...input.intents.filter((intent) => intent.type === "laundry"),
+    ...input.intents.filter((intent) => intent.type !== "laundry"),
+  ];
+
+  for (const intent of executionIntents) {
+    if (intent.type === "laundry") {
+      const laundryResult = await executeLaundryIntent({
+        bldgUserId: input.bldgUserId,
+        content: intent.originalTextSpan,
+        user: input.user,
+        session: input.session,
+        suppressAssistantMessage: true,
+      });
+      booking = laundryResult.booking ?? booking;
+      items.push({
+        serviceCategory: "laundry",
+        title: "Laundry",
+        status: laundryResult.booking ? "confirmed" : "failed",
+        residentVisibleStatus: laundryResult.booking ? "confirmed" : "failed",
+        date: laundryResult.booking?.date ?? intent.requestedDate ?? null,
+        window: laundryResult.booking?.window ?? intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        orderId: laundryResult.booking?.orderId ?? null,
+        nextAction: laundryResult.booking ? null : "retry_laundry_booking",
+      });
+      continue;
+    }
+
+    if (!canCoordinate) {
+      items.push({
+        serviceCategory: intent.type,
+        title: getServiceTitle(intent.type),
+        status: "pending_profile_completion",
+        residentVisibleStatus: "pending_profile_completion",
+        date: intent.requestedDate ?? null,
+        window: intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        nextAction: "complete_resident_profile",
+      });
+      continue;
+    }
+
+    if (!planId) {
+      items.push({
+        serviceCategory: intent.type,
+        title: getServiceTitle(intent.type),
+        status: "failed",
+        residentVisibleStatus: "failed",
+        date: intent.requestedDate ?? null,
+        window: intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        nextAction: "operator_review_required",
+      });
+      continue;
+    }
+
+    const coordinatedResult = await adminAgentClient.runCreateResidentCoordinatedRequestTool(
+      {
+        bldgUserId: input.bldgUserId,
+        residentName,
+        residentPhone: freshUser?.phoneE164 ?? null,
+        residentEmail: null,
+        buildingSlug: freshUser?.buildingSlug ?? null,
+        buildingName: freshUser?.buildingSlug ?? null,
+        unit: freshUser?.unit ?? null,
+        serviceCategory: intent.type,
+        serviceRequested: intent.originalTextSpan,
+        requestedDate: intent.requestedDate ?? null,
+        requestedWindow: intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        origin: intent.origin ?? null,
+        destination: intent.destination ?? null,
+        notes: intent.notes ?? null,
+        sourceConversationId: input.session.conversationId,
+        sourceSessionId: input.session.sessionId,
+        parentPlanId: String(planId),
+      },
+      input.session
+    );
+
+    if (coordinatedResult.success) {
+      const status = normalizeCoordinatedStatus(coordinatedResult.status);
+      items.push({
+        serviceCategory: intent.type,
+        title: getServiceTitle(intent.type),
+        status,
+        residentVisibleStatus: String(coordinatedResult.residentVisibleStatus ?? status),
+        date: intent.requestedDate ?? null,
+        window: intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        requestId: coordinatedResult.requestId,
+        nextAction: String(coordinatedResult.nextAction ?? "provider_or_operator_confirmation"),
+      });
+    } else {
+      console.warn("[ResidentAgent] coordinated request creation failed", {
+        serviceCategory: intent.type,
+        reason: coordinatedResult.reason,
+        status: coordinatedResult.status,
+      });
+      items.push({
+        serviceCategory: intent.type,
+        title: getServiceTitle(intent.type),
+        status: "failed",
+        residentVisibleStatus: "failed",
+        date: intent.requestedDate ?? null,
+        window: intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        nextAction: "operator_review_required",
+      });
+    }
+  }
+
+  const planStatus = getPlanStatus(items);
+  const metadata = withResidentAgentMetadata(input.session, {
+    type: "multi_service_plan",
+    planId,
+    originalMessage: input.content,
+    items,
+  });
+
+  if (planId) {
+    const updateResult = await adminAgentClient.runUpdateResidentAgentPlanTool(
+      {
+        planId,
+        planStatus,
+        planJson: {
+          type: "multi_service_plan",
+          originalMessage: input.content,
+          items,
+        },
+      },
+      input.session
+    );
+    if (!updateResult.success) {
+      console.warn("[ResidentAgent] resident agent plan update failed", updateResult);
+    }
+  }
+
+  const content = buildResidentPlanSummary(items);
+  await insertChatMessage({
+    bldgUserId: input.bldgUserId,
+    role: "assistant",
+    content,
+    metadata,
+  });
+
+  return {
+    handled: true,
+    role: "assistant",
+    content,
+    metadata,
+    booking,
+  };
+}
+
+function normalizeCoordinatedStatus(status: unknown): string {
+  const raw = typeof status === "string" ? status : "pending_operator_review";
+  if (raw === "confirmed") return "confirmed";
+  if (raw === "pending_provider_confirmation") return raw;
+  if (raw === "pending_operator_review") return raw;
+  if (raw === "failed" || raw === "cancelled" || raw === "completed") return raw;
+  return "pending_operator_review";
+}
+
+function getPlanStatus(items: PlanItemMetadata[]): string {
+  const hasConfirmed = items.some((item) => item.status === "confirmed");
+  const hasPending = items.some((item) => item.status.startsWith("pending_"));
+  const hasFailed = items.some((item) => item.status === "failed");
+  if (hasConfirmed && (hasPending || hasFailed)) return "partially_confirmed";
+  if (hasPending) return "pending_confirmation";
+  if (hasConfirmed) return "completed";
+  return "failed";
+}
+
+function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
+  const confirmed = items.filter((item) => item.status === "confirmed");
+  const pending = items.filter((item) => item.status.startsWith("pending_"));
+  const failed = items.filter((item) => item.status === "failed");
+  const parts: string[] = [];
+
+  for (const item of confirmed) {
+    if (item.serviceCategory === "laundry") {
+      parts.push(`Laundry is booked${item.date ? ` for ${item.date}` : ""}${item.window ? `, ${item.window}` : ""}.`);
+    } else {
+      parts.push(`${item.title} is confirmed${item.date ? ` for ${item.date}` : ""}.`);
+    }
+  }
+
+  if (pending.length > 0) {
+    const deadline = pending.find((item) => item.deadlineReason || item.deadlineDate);
+    const label = joinLabels(pending.map((item) => item.title.toLowerCase()));
+    const deadlineText = deadline?.deadlineReason
+      ? ` before your ${deadline.deadlineReason.replace(/ visit$/, " arrives")}`
+      : deadline?.deadlineDate
+        ? ` before ${deadline.deadlineDate}`
+        : "";
+    parts.push(`${capitalize(label)} ${pending.length === 1 ? "is" : "are"} queued for confirmation${deadlineText}.`);
+  }
+
+  if (failed.length > 0) {
+    const label = joinLabels(failed.map((item) => item.title.toLowerCase()));
+    parts.push(`${capitalize(label)} ${failed.length === 1 ? "needs" : "need"} operator review before it can be queued.`);
+  }
+
+  return parts.join(" ");
+}
+
+function getServiceTitle(type: ResidentMultiIntentType): string {
+  const titles: Record<ResidentMultiIntentType, string> = {
+    laundry: "Laundry",
+    dry_cleaning: "Dry cleaning",
+    dog_grooming: "Grooming",
+    car_detail: "Car detail",
+    airport_transport: "LAX pickup",
+    apartment_cleaning: "Apartment cleaning",
+    other: "Request",
+  };
+  return titles[type];
+}
+
+function joinLabels(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+function capitalize(value: string): string {
+  return value ? value[0].toUpperCase() + value.slice(1) : value;
 }

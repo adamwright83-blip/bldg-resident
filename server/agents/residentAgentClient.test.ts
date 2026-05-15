@@ -101,6 +101,64 @@ describe("residentAgentClient", () => {
     });
   });
 
+  it("runs resident plan and coordinated request tools through the generic admin S2S envelope", async () => {
+    vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent/s2s/run-tool");
+    vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") {
+        return ok({ planId: "plan_1", planStatus: "pending_confirmation" });
+      }
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return ok({
+          requestId: "req_1",
+          parentPlanId: body.input.parentPlanId,
+          status: "pending_provider_confirmation",
+        });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") {
+        return ok({ planId: body.input.planId, planStatus: body.input.planStatus });
+      }
+      return ok({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createAdminAgentClient();
+    const session = { sessionId: "sess_1", conversationId: "conv_1" };
+
+    await expect(
+      client.runCreateResidentAgentPlanTool({ bldgUserId: 1, buildingSlug: "opus" }, session)
+    ).resolves.toMatchObject({ success: true, planId: "plan_1", path: "agent-tool" });
+    await expect(
+      client.runCreateResidentCoordinatedRequestTool(
+        { bldgUserId: 1, serviceCategory: "car_detail", parentPlanId: "plan_1" },
+        session
+      )
+    ).resolves.toMatchObject({
+      success: true,
+      requestId: "req_1",
+      parentPlanId: "plan_1",
+      path: "agent-tool",
+    });
+    await expect(
+      client.runUpdateResidentAgentPlanTool({ bldgUserId: 1, planId: "plan_1", planStatus: "partially_confirmed" }, session)
+    ).resolves.toMatchObject({ success: true, planStatus: "partially_confirmed" });
+
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies.map((body) => body.toolName)).toEqual([
+      "createResidentAgentPlanTool",
+      "createResidentCoordinatedRequestTool",
+      "updateResidentAgentPlanTool",
+    ]);
+    expect(bodies[0]).toMatchObject({
+      agentType: "resident_agent",
+      actorType: "resident_chat",
+      actorId: "bldg_user:1",
+      sessionId: "sess_1",
+      conversationId: "conv_1",
+    });
+  });
+
   it("treats missing admin agent S2S routes as fallback-eligible", async () => {
     vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent");
     vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
@@ -215,3 +273,11 @@ describe("residentAgentClient", () => {
     });
   });
 });
+
+function ok(body: unknown) {
+  return {
+    ok: true,
+    status: 200,
+    text: vi.fn().mockResolvedValue(JSON.stringify(body)),
+  };
+}

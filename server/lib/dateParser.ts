@@ -18,6 +18,19 @@ const TIME_KEYWORDS = {
   night: '7-10pm',
 };
 
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
+
 /**
  * Parse user message for explicit date and time references
  */
@@ -68,6 +81,58 @@ export function parseExplicitDateTime(message: string): DateParseResult {
     dateOverride,
     windowOverride,
   };
+}
+
+export function addDaysISO(currentDate: string, days: number): string {
+  const date = parseISODate(currentDate);
+  date.setDate(date.getDate() + days);
+  return formatISODate(date);
+}
+
+export function parseRelativeDateToISO(
+  message: string,
+  currentDate: string
+): string | null {
+  const lower = message.toLowerCase();
+
+  if (/\btoday\b|\btonight\b/.test(lower)) return addDaysISO(currentDate, 0);
+  if (/\btomorrow\b/.test(lower)) return addDaysISO(currentDate, 1);
+
+  const inDaysMatch = lower.match(
+    /\bin\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\b/
+  );
+  if (inDaysMatch) {
+    const raw = inDaysMatch[1];
+    const days = NUMBER_WORDS[raw] ?? Number(raw);
+    if (Number.isFinite(days)) return addDaysISO(currentDate, days);
+  }
+
+  return null;
+}
+
+export function parseRequestedWindow(message: string): string | null {
+  const lower = message.toLowerCase();
+  for (const [keyword, window] of Object.entries(TIME_KEYWORDS)) {
+    if (lower.includes(keyword)) return window;
+  }
+  return parseTimeRange(lower) ?? null;
+}
+
+function parseISODate(value: string): Date {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+    return new Date();
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function formatISODate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**
