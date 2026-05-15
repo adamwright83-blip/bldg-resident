@@ -159,6 +159,66 @@ describe("residentAgentClient", () => {
     });
   });
 
+  it("parses nested admin tool output shapes", async () => {
+    vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent/s2s/run-tool");
+    vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return ok({
+          result: {
+            output: {
+              requestId: "req_nested",
+              parentPlanId: "plan_1",
+              status: "pending_operator_review",
+              residentVisibleStatus: "pending_operator_review",
+            },
+          },
+        });
+      }
+      return ok({ output: { planId: "plan_nested" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createAdminAgentClient().runCreateResidentCoordinatedRequestTool(
+        { bldgUserId: 1, serviceCategory: "car_detail", parentPlanId: "plan_1" },
+        { sessionId: "sess_1", conversationId: "conv_1" }
+      )
+    ).resolves.toMatchObject({
+      success: true,
+      requestId: "req_nested",
+      status: "pending_operator_review",
+    });
+  });
+
+  it("treats HTTP 200 missing required IDs as tool failure", async () => {
+    vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent/s2s/run-tool");
+    vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
+    const session = { sessionId: "sess_1", conversationId: "conv_1" };
+    const client = createAdminAgentClient();
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok({})));
+    await expect(client.runCreateLaundryOrderTool(payload, session)).resolves.toMatchObject({
+      success: false,
+      reason: "missing_orderId",
+    });
+    await expect(client.runCreateResidentAgentPlanTool({ bldgUserId: 1 }, session)).resolves.toMatchObject({
+      success: false,
+      reason: "missing_planId",
+    });
+    await expect(
+      client.runCreateResidentCoordinatedRequestTool({ bldgUserId: 1, serviceCategory: "car_detail" }, session)
+    ).resolves.toMatchObject({
+      success: false,
+      reason: "missing_requestId",
+    });
+    await expect(client.runUpdateResidentAgentPlanTool({ bldgUserId: 1, planStatus: "failed" }, session)).resolves.toMatchObject({
+      success: false,
+      reason: "missing_planId",
+    });
+  });
+
   it("treats missing admin agent S2S routes as fallback-eligible", async () => {
     vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent");
     vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");

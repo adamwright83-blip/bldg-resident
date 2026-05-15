@@ -10,6 +10,15 @@ interface DateParseResult {
 }
 
 const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
 const RELATIVE_DATES = ['today', 'tomorrow', 'tonight'];
 const TIME_KEYWORDS = {
   morning: '7-10am',
@@ -34,29 +43,15 @@ const NUMBER_WORDS: Record<string, number> = {
 /**
  * Parse user message for explicit date and time references
  */
-export function parseExplicitDateTime(message: string): DateParseResult {
+export function parseExplicitDateTime(message: string, currentDate?: string): DateParseResult {
   const lower = message.toLowerCase().trim();
+  const currentDateISO = currentDate ?? getCurrentDateISOInLA();
   
   let dateOverride: string | undefined;
   let windowOverride: string | undefined;
 
-  // 1. Check for weekday names
-  for (const day of WEEKDAYS) {
-    if (lower.includes(day)) {
-      dateOverride = getNextWeekday(day);
-      break;
-    }
-  }
-
-  // 2. Check for relative dates (today, tomorrow)
-  if (!dateOverride) {
-    for (const relative of RELATIVE_DATES) {
-      if (lower.includes(relative)) {
-        dateOverride = getRelativeDate(relative);
-        break;
-      }
-    }
-  }
+  const relativeISO = parseRelativeDateToISO(lower, currentDateISO);
+  if (relativeISO) dateOverride = formatDisplayDateFromISO(relativeISO);
 
   // 3. Check for absolute dates (Feb 20, 2/20, February 20)
   if (!dateOverride) {
@@ -99,15 +94,43 @@ export function parseRelativeDateToISO(
   if (/\btomorrow\b/.test(lower)) return addDaysISO(currentDate, 1);
 
   const inDaysMatch = lower.match(
-    /\bin\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\b/
+    /\b(?:in\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\s+from\s+now\b|\bin\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\b/
   );
   if (inDaysMatch) {
-    const raw = inDaysMatch[1];
+    const raw = inDaysMatch[1] ?? inDaysMatch[2];
     const days = NUMBER_WORDS[raw] ?? Number(raw);
     if (Number.isFinite(days)) return addDaysISO(currentDate, days);
   }
 
+  const weekdayMatch = lower.match(/\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+  if (weekdayMatch) {
+    return getWeekdayISO(currentDate, weekdayMatch[2], weekdayMatch[1] as "this" | "next");
+  }
+
+  for (const day of WEEKDAYS) {
+    if (new RegExp(`\\b${day}\\b`).test(lower)) {
+      return getWeekdayISO(currentDate, day, "next");
+    }
+  }
+
   return null;
+}
+
+export function formatDisplayDateFromISO(value: string): string {
+  return formatDate(parseISODate(value));
+}
+
+export function getCurrentDateISOInLA(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : formatISODate(new Date());
 }
 
 export function parseRequestedWindow(message: string): string | null {
@@ -133,6 +156,20 @@ function formatISODate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getWeekdayISO(currentDate: string, dayName: string, modifier: "this" | "next"): string {
+  const current = parseISODate(currentDate);
+  const targetDay = WEEKDAY_INDEX[dayName.toLowerCase()];
+  const currentDay = current.getDay();
+  let daysUntil = targetDay - currentDay;
+
+  // Convention: "this Sunday" means the upcoming Sunday if it is still in the
+  // future this week. "next Sunday" follows the same resident-friendly meaning.
+  if (daysUntil <= 0) daysUntil += 7;
+  if (modifier === "next" && daysUntil === 0) daysUntil = 7;
+
+  return addDaysISO(currentDate, daysUntil);
 }
 
 /**

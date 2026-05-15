@@ -7,7 +7,7 @@ import {
 } from "../db";
 import type { BldgUser } from "../../drizzle/schema";
 import { findDuplicateBooking, getBookingDefaults } from "../bookingLogic";
-import { parseExplicitDateTime } from "../lib/dateParser";
+import { getCurrentDateISOInLA, parseExplicitDateTime } from "../lib/dateParser";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
 import { needsCriticalProfileRecovery } from "../../shared/profileCritical";
 import { inferResidentIntent, isFutureVendorServiceIntent } from "./intentClassifier";
@@ -53,7 +53,10 @@ function parseDisplayDateToISO(displayDate: string): string {
   const todayAtMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (date < todayAtMidnight) date.setFullYear(currentYear + 1);
 
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const isoMonth = String(date.getMonth() + 1).padStart(2, "0");
+  const isoDay = String(date.getDate()).padStart(2, "0");
+  return `${year}-${isoMonth}-${isoDay}`;
 }
 
 function detectSameDay(text: string): boolean {
@@ -91,7 +94,7 @@ export async function runResidentAgent(input: {
   content: string;
   user: BldgUser;
 }): Promise<ResidentAgentResponse> {
-  const currentDate = new Date().toISOString().slice(0, 10);
+  const currentDate = getCurrentDateISOInLA();
   const multiIntentPlan = planResidentMultiIntents({
     content: input.content,
     currentDate,
@@ -158,7 +161,7 @@ async function executeLaundryIntent(input: {
   suppressAssistantMessage?: boolean;
 }): Promise<ResidentAgentResponse> {
   console.log("[ResidentAgent] laundry intent matched");
-  const dateTimeIntent = parseExplicitDateTime(input.content);
+  const dateTimeIntent = parseExplicitDateTime(input.content, getCurrentDateISOInLA());
   const windowOverride =
     dateTimeIntent.dateOverride && !dateTimeIntent.windowOverride
       ? "7–10 AM"
@@ -416,6 +419,7 @@ type PlanItemMetadata = {
   requestId?: unknown;
   orderId?: unknown;
   nextAction: string | null;
+  failureReason?: string | null;
 };
 
 async function executeMultiIntentPlan(input: {
@@ -470,18 +474,33 @@ async function executeMultiIntentPlan(input: {
         session: input.session,
         suppressAssistantMessage: true,
       });
-      booking = laundryResult.booking ?? booking;
+      const laundryConfirmed = hasAdminOrderId(laundryResult.booking?.orderId);
+      if (laundryConfirmed) booking = laundryResult.booking ?? booking;
+      const status = laundryConfirmed
+        ? "confirmed"
+        : laundryResult.booking?.serviceRequestId === 0
+          ? "pending_profile_completion"
+          : "failed";
       items.push({
         serviceCategory: "laundry",
         title: "Laundry",
-        status: laundryResult.booking ? "confirmed" : "failed",
-        residentVisibleStatus: laundryResult.booking ? "confirmed" : "failed",
+        status,
+        residentVisibleStatus: status,
         date: laundryResult.booking?.date ?? intent.requestedDate ?? null,
         window: laundryResult.booking?.window ?? intent.requestedWindow ?? null,
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
         orderId: laundryResult.booking?.orderId ?? null,
-        nextAction: laundryResult.booking ? null : "retry_laundry_booking",
+        nextAction: laundryConfirmed
+          ? null
+          : status === "pending_profile_completion"
+            ? "complete_resident_profile"
+            : "operator_review_required",
+        failureReason: laundryConfirmed
+          ? null
+          : status === "pending_profile_completion"
+            ? "pending_profile_completion"
+            : "missing_orderId_or_admin_execution_failed",
       });
       continue;
     }
@@ -497,6 +516,7 @@ async function executeMultiIntentPlan(input: {
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
         nextAction: "complete_resident_profile",
+        failureReason: "pending_profile_completion",
       });
       continue;
     }
@@ -512,6 +532,7 @@ async function executeMultiIntentPlan(input: {
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
         nextAction: "operator_review_required",
+        failureReason: "missing_parent_planId",
       });
       continue;
     }
@@ -543,18 +564,40 @@ async function executeMultiIntentPlan(input: {
 
     if (coordinatedResult.success) {
       const status = normalizeCoordinatedStatus(coordinatedResult.status);
-      items.push({
-        serviceCategory: intent.type,
-        title: getServiceTitle(intent.type),
-        status,
-        residentVisibleStatus: String(coordinatedResult.residentVisibleStatus ?? status),
-        date: intent.requestedDate ?? null,
-        window: intent.requestedWindow ?? null,
-        deadlineDate: intent.deadlineDate ?? null,
-        deadlineReason: intent.deadlineReason ?? null,
-        requestId: coordinatedResult.requestId,
-        nextAction: String(coordinatedResult.nextAction ?? "provider_or_operator_confirmation"),
-      });
+      if (status) {
+        items.push({
+          serviceCategory: intent.type,
+          title: getServiceTitle(intent.type),
+          status,
+          residentVisibleStatus: String(coordinatedResult.residentVisibleStatus ?? status),
+          date: intent.requestedDate ?? null,
+          window: intent.requestedWindow ?? null,
+          deadlineDate: intent.deadlineDate ?? null,
+          deadlineReason: intent.deadlineReason ?? null,
+          requestId: coordinatedResult.requestId,
+          nextAction: String(coordinatedResult.nextAction ?? "provider_or_operator_confirmation"),
+          failureReason: null,
+        });
+      } else {
+        console.warn("[ResidentAgent] coordinated request returned invalid status", {
+          serviceCategory: intent.type,
+          requestId: coordinatedResult.requestId,
+          status: coordinatedResult.status,
+        });
+        items.push({
+          serviceCategory: intent.type,
+          title: getServiceTitle(intent.type),
+          status: "failed",
+          residentVisibleStatus: "failed",
+          date: intent.requestedDate ?? null,
+          window: intent.requestedWindow ?? null,
+          deadlineDate: intent.deadlineDate ?? null,
+          deadlineReason: intent.deadlineReason ?? null,
+          requestId: coordinatedResult.requestId,
+          nextAction: "operator_review_required",
+          failureReason: "invalid_or_missing_status",
+        });
+      }
     } else {
       console.warn("[ResidentAgent] coordinated request creation failed", {
         serviceCategory: intent.type,
@@ -571,6 +614,7 @@ async function executeMultiIntentPlan(input: {
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
         nextAction: "operator_review_required",
+        failureReason: coordinatedResult.reason,
       });
     }
   }
@@ -618,13 +662,17 @@ async function executeMultiIntentPlan(input: {
   };
 }
 
-function normalizeCoordinatedStatus(status: unknown): string {
-  const raw = typeof status === "string" ? status : "pending_operator_review";
+function normalizeCoordinatedStatus(status: unknown): string | null {
+  const raw = typeof status === "string" ? status : "";
   if (raw === "confirmed") return "confirmed";
   if (raw === "pending_provider_confirmation") return raw;
   if (raw === "pending_operator_review") return raw;
   if (raw === "failed" || raw === "cancelled" || raw === "completed") return raw;
-  return "pending_operator_review";
+  return null;
+}
+
+function hasAdminOrderId(orderId: unknown): boolean {
+  return orderId != null && Number.isFinite(Number(orderId));
 }
 
 function getPlanStatus(items: PlanItemMetadata[]): string {
@@ -639,7 +687,8 @@ function getPlanStatus(items: PlanItemMetadata[]): string {
 
 function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
   const confirmed = items.filter((item) => item.status === "confirmed");
-  const pending = items.filter((item) => item.status.startsWith("pending_"));
+  const pending = items.filter((item) => isQueuedStatus(item.status));
+  const profilePending = items.filter((item) => item.status === "pending_profile_completion");
   const failed = items.filter((item) => item.status === "failed");
   const parts: string[] = [];
 
@@ -667,7 +716,16 @@ function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
     parts.push(`${capitalize(label)} ${failed.length === 1 ? "needs" : "need"} operator review before it can be queued.`);
   }
 
+  if (profilePending.length > 0) {
+    const label = joinLabels(profilePending.map((item) => item.title.toLowerCase()));
+    parts.push(`${capitalize(label)} ${profilePending.length === 1 ? "needs" : "need"} profile completion before it can be booked.`);
+  }
+
   return parts.join(" ");
+}
+
+function isQueuedStatus(status: string): boolean {
+  return status === "pending_operator_review" || status === "pending_provider_confirmation";
 }
 
 function getServiceTitle(type: ResidentMultiIntentType): string {

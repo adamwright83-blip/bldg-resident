@@ -158,6 +158,16 @@ export function createAdminAgentClient(): AdminAgentClient {
           }
 
           const output = normalizeRunToolOutput(body);
+          const missingReason = getMissingRequiredIdReason(toolName, output);
+          if (missingReason) {
+            console.warn(
+              `[ResidentAgent][AdminAgentClient] S2S runTool failure tool=${toolName} status=${res.status} reason=${missingReason}`
+            );
+            return { success: false, reason: missingReason, path: "agent-tool", status: res.status };
+          }
+          console.log(
+            `[ResidentAgent][AdminAgentClient] S2S runTool success tool=${toolName} status=${res.status} requiredId=${getRequiredIdLogValue(toolName, output)}`
+          );
           return { success: true, ...output, path: "agent-tool" };
         }
 
@@ -199,11 +209,63 @@ export function createAdminAgentClient(): AdminAgentClient {
 }
 
 function normalizeRunToolOutput(body: any): Record<string, unknown> {
-  const output = body?.result ?? body?.output ?? body ?? {};
+  const output = {
+    ...asPlainObject(body),
+    ...asPlainObject(body?.result),
+    ...asPlainObject(body?.output),
+    ...asPlainObject(body?.result?.output),
+  };
   if (output && typeof output === "object" && !Array.isArray(output)) {
     return output;
   }
   return { output };
+}
+
+function asPlainObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function hasFiniteId(value: unknown): boolean {
+  return value != null && String(value).trim() !== "" && Number.isFinite(Number(value));
+}
+
+function hasPresentId(value: unknown): boolean {
+  return value != null && String(value).trim() !== "";
+}
+
+function getMissingRequiredIdReason(
+  toolName: string,
+  output: Record<string, unknown>
+): string | null {
+  if (toolName === "createLaundryOrderTool" && !hasFiniteId(output.orderId)) {
+    return "missing_orderId";
+  }
+  if (
+    (toolName === "createResidentAgentPlanTool" || toolName === "updateResidentAgentPlanTool") &&
+    !hasPresentId(output.planId)
+  ) {
+    return "missing_planId";
+  }
+  if (
+    toolName === "createResidentCoordinatedRequestTool" &&
+    !hasPresentId(output.requestId)
+  ) {
+    return "missing_requestId";
+  }
+  return null;
+}
+
+function getRequiredIdLogValue(toolName: string, output: Record<string, unknown>): string {
+  if (toolName === "createLaundryOrderTool") return `orderId:${String(output.orderId ?? "missing")}`;
+  if (toolName === "createResidentAgentPlanTool" || toolName === "updateResidentAgentPlanTool") {
+    return `planId:${String(output.planId ?? "missing")}`;
+  }
+  if (toolName === "createResidentCoordinatedRequestTool") {
+    return `requestId:${String(output.requestId ?? "missing")}`;
+  }
+  return "not_required";
 }
 
 export function shouldUseIntakeFallbackForAgentFailure(result: AdminExecutionResult): boolean {

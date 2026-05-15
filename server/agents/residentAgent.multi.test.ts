@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
   getChatHistory: vi.fn(),
@@ -30,6 +30,10 @@ const completeUser = {
 };
 
 describe("runResidentAgent multi-intent orchestration", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -55,6 +59,27 @@ describe("runResidentAgent multi-intent orchestration", () => {
       scheduled_end_local: "2026-05-16T10:00:00",
       timezone: "America/Los_Angeles",
     });
+  });
+
+  it("passes in two days as Sunday May 17 to the laundry booking path", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T19:00:00.000Z"));
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn().mockResolvedValue(response({ orderId: 456 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runResidentAgent({
+      bldgUserId: 1,
+      content: "do my laundry in two days",
+      user: completeUser as any,
+    });
+
+    expect(bookingMocks.getBookingDefaults).toHaveBeenCalledWith(
+      1,
+      "laundry",
+      "Sunday, May 17",
+      "7–10 AM"
+    );
   });
 
   it("preserves the laundry-only admin order path", async () => {
@@ -137,6 +162,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
     const items = (result.metadata as any).items;
     expect(items.find((item: any) => item.serviceCategory === "laundry")).toMatchObject({
       status: "confirmed",
+      orderId: 456,
     });
     expect(items.find((item: any) => item.serviceCategory === "dog_grooming")).toMatchObject({
       status: "pending_provider_confirmation",
@@ -149,7 +175,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
   });
 
-  it("does not mark coordinated services confirmed unless admin confirms", async () => {
+  it("does not mark coordinated services queued unless admin returns a pending status", async () => {
     const { runResidentAgent } = await import("./residentAgent");
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body));
@@ -169,8 +195,11 @@ describe("runResidentAgent multi-intent orchestration", () => {
       user: completeUser as any,
     });
 
+    expect(result.content).not.toContain("Car detail is queued");
     expect((result.metadata as any).items.find((item: any) => item.serviceCategory === "car_detail")).toMatchObject({
-      status: "pending_operator_review",
+      status: "failed",
+      requestId: "req_1",
+      failureReason: "invalid_or_missing_status",
     });
   });
 
@@ -203,6 +232,76 @@ describe("runResidentAgent multi-intent orchestration", () => {
     expect((result.metadata as any).items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ serviceCategory: "laundry", status: "confirmed" }),
+        expect.objectContaining({ serviceCategory: "car_detail", status: "failed" }),
+      ])
+    );
+  });
+
+  it("does not call laundry booked when admin orderId is missing", async () => {
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_1" });
+      if (body.toolName === "createLaundryOrderTool") return response({});
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return response({
+          requestId: "req_car_detail",
+          status: "pending_operator_review",
+          residentVisibleStatus: "pending_operator_review",
+        });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: "plan_1" });
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content: "laundry tomorrow and car detail",
+      user: completeUser as any,
+    });
+
+    expect(result.content).not.toContain("Laundry is booked");
+    expect(result.content).toContain("Car detail is queued for confirmation");
+    expect(result.content).toContain("Laundry needs operator review");
+    expect((result.metadata as any).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ serviceCategory: "laundry", status: "failed", orderId: null }),
+        expect.objectContaining({
+          serviceCategory: "car_detail",
+          status: "pending_operator_review",
+          requestId: "req_car_detail",
+        }),
+      ])
+    );
+  });
+
+  it("does not call coordinated services queued when admin requestId is missing", async () => {
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_1" });
+      if (body.toolName === "createLaundryOrderTool") return response({ orderId: 456 });
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return response({ status: "pending_operator_review" });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: "plan_1" });
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content: "laundry tomorrow and car detail",
+      user: completeUser as any,
+    });
+
+    expect(result.content).toContain("Laundry is booked");
+    expect(result.content).not.toContain("Car detail is queued");
+    expect(result.content).toContain("Car detail needs operator review");
+    expect((result.metadata as any).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ serviceCategory: "laundry", status: "confirmed", orderId: 456 }),
         expect.objectContaining({ serviceCategory: "car_detail", status: "failed" }),
       ])
     );
