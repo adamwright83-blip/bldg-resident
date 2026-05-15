@@ -9,7 +9,7 @@ import type { BldgUser } from "../../drizzle/schema";
 import { findDuplicateBooking, getBookingDefaults } from "../bookingLogic";
 import { getCurrentDateISOInLA, parseExplicitDateTime } from "../lib/dateParser";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
-import { needsCriticalProfileRecovery } from "../../shared/profileCritical";
+import { getCriticalProfileGaps, needsCriticalProfileRecovery } from "../../shared/profileCritical";
 import { inferResidentIntent, isFutureVendorServiceIntent } from "./intentClassifier";
 import {
   planResidentMultiIntents,
@@ -79,6 +79,8 @@ export interface ResidentAgentResponse {
   role?: "assistant";
   content?: string;
   metadata?: Record<string, unknown>;
+  collectStep?: "name" | "payment";
+  resumeWithPaymentAfterName?: boolean;
   booking?: {
     serviceRequestId: number | null;
     service: string;
@@ -94,21 +96,35 @@ export async function runResidentAgent(input: {
   content: string;
   user: BldgUser;
 }): Promise<ResidentAgentResponse> {
+  const session = await getOrCreateResidentAgentSession(input.bldgUserId);
+  const freshUser = (await getBldgUserById(input.bldgUserId)) ?? input.user;
+  const pendingPlan = readPendingMultiServicePlan(freshUser);
+  if (pendingPlan && !needsCriticalProfileRecovery(freshUser)) {
+    await updateBldgUser(input.bldgUserId, { pendingBookingIntentJson: null } as any);
+    return executeMultiIntentPlan({
+      bldgUserId: input.bldgUserId,
+      content: pendingPlan.originalMessage ?? input.content,
+      user: freshUser,
+      session,
+      intents: pendingPlan.intents,
+    });
+  }
+
   const currentDate = getCurrentDateISOInLA();
   const multiIntentPlan = planResidentMultiIntents({
     content: input.content,
     currentDate,
-    buildingSlug: input.user?.buildingSlug ?? null,
-    unit: input.user?.unit ?? null,
+    buildingSlug: freshUser?.buildingSlug ?? null,
+    buildingName: normalizeBuildingName(freshUser?.buildingSlug ?? null),
+    unit: freshUser?.unit ?? null,
   });
   const intent = inferResidentIntent(input.content);
-  const session = await getOrCreateResidentAgentSession(input.bldgUserId);
 
   if (multiIntentPlan.intents.length > 1) {
     return executeMultiIntentPlan({
       bldgUserId: input.bldgUserId,
       content: input.content,
-      user: input.user,
+      user: freshUser,
       session,
       intents: multiIntentPlan.intents,
     });
@@ -118,7 +134,7 @@ export async function runResidentAgent(input: {
     return executeLaundryIntent({
       bldgUserId: input.bldgUserId,
       content: input.content,
-      user: input.user,
+      user: freshUser,
       session,
     });
   }
@@ -418,6 +434,8 @@ type PlanItemMetadata = {
   deadlineReason: string | null;
   requestId?: unknown;
   orderId?: unknown;
+  origin?: string | null;
+  destination?: string | null;
   nextAction: string | null;
   failureReason?: string | null;
 };
@@ -432,7 +450,15 @@ async function executeMultiIntentPlan(input: {
   const adminAgentClient = createAdminAgentClient();
   const freshUser = (await getBldgUserById(input.bldgUserId)) ?? input.user;
   const residentName = [freshUser?.firstName, freshUser?.lastName].filter(Boolean).join(" ") || null;
-  const canCoordinate = !needsCriticalProfileRecovery(freshUser);
+  const profileGaps = getCriticalProfileGaps(freshUser);
+  const hasBasicContext = Boolean(
+    residentName &&
+      freshUser?.phoneE164 &&
+      freshUser?.buildingSlug &&
+      freshUser?.unit
+  );
+  const needsBasicProfile = !hasBasicContext || profileGaps.missingFirstName || profileGaps.missingLastName;
+  const needsPayment = profileGaps.missingPayment;
 
   let planId: unknown = null;
   if (adminAgentClient.canRunLaundryOrderTool()) {
@@ -465,8 +491,84 @@ async function executeMultiIntentPlan(input: {
     ...input.intents.filter((intent) => intent.type !== "laundry"),
   ];
 
+  if (needsBasicProfile) {
+    await preservePendingMultiServicePlan(input, planId, "pending_basic_profile");
+    for (const intent of executionIntents) {
+      items.push({
+        serviceCategory: intent.type,
+        title: getServiceTitle(intent.type),
+        status: "pending_profile_completion",
+        residentVisibleStatus: "pending_profile_completion",
+        date: intent.requestedDate ?? null,
+        window: intent.requestedWindow ?? null,
+        deadlineDate: intent.deadlineDate ?? null,
+        deadlineReason: intent.deadlineReason ?? null,
+        origin: intent.origin ?? null,
+        destination: intent.destination ?? null,
+        nextAction: "complete_resident_profile",
+        failureReason: "pending_basic_profile",
+      });
+    }
+
+    const metadata = withResidentAgentMetadata(input.session, {
+      type: "multi_service_plan",
+      planId,
+      originalMessage: input.content,
+      items,
+      pendingPlanPreserved: true,
+      statusSummary: buildStatusSummary(items),
+    });
+    const content = buildResidentPlanSummary(items);
+    await insertChatMessage({
+      bldgUserId: input.bldgUserId,
+      role: "assistant",
+      content,
+      metadata,
+    });
+
+    return {
+      handled: true,
+      role: "assistant",
+      content,
+      metadata,
+      booking: null,
+      collectStep: profileGaps.missingFirstName || profileGaps.missingLastName ? "name" : undefined,
+    };
+  }
+
+  if (needsPayment && executionIntents.some((intent) => intent.type === "laundry")) {
+    await preservePendingMultiServicePlan(input, planId, "pending_payment_profile");
+  }
+
   for (const intent of executionIntents) {
     if (intent.type === "laundry") {
+      if (needsPayment) {
+        logChildAction({
+          serviceCategory: "laundry",
+          toolName: "createLaundryOrderTool",
+          success: false,
+          orderId: null,
+          parentPlanId: planId,
+          failureReason: "pending_payment_profile",
+        });
+        items.push({
+          serviceCategory: "laundry",
+          title: "Laundry",
+          status: "pending_profile_completion",
+          residentVisibleStatus: "pending_profile_completion",
+          date: intent.requestedDate ?? null,
+          window: intent.requestedWindow ?? null,
+          deadlineDate: intent.deadlineDate ?? null,
+          deadlineReason: intent.deadlineReason ?? null,
+          orderId: null,
+          origin: null,
+          destination: null,
+          nextAction: "complete_payment_profile",
+          failureReason: "pending_payment_profile",
+        });
+        continue;
+      }
+
       const laundryResult = await executeLaundryIntent({
         bldgUserId: input.bldgUserId,
         content: intent.originalTextSpan,
@@ -481,6 +583,14 @@ async function executeMultiIntentPlan(input: {
         : laundryResult.booking?.serviceRequestId === 0
           ? "pending_profile_completion"
           : "failed";
+      logChildAction({
+        serviceCategory: "laundry",
+        toolName: "createLaundryOrderTool",
+        success: laundryConfirmed,
+        orderId: laundryResult.booking?.orderId ?? null,
+        parentPlanId: planId,
+        failureReason: laundryConfirmed ? null : "missing_orderId_or_admin_execution_failed",
+      });
       items.push({
         serviceCategory: "laundry",
         title: "Laundry",
@@ -491,6 +601,8 @@ async function executeMultiIntentPlan(input: {
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
         orderId: laundryResult.booking?.orderId ?? null,
+        origin: null,
+        destination: null,
         nextAction: laundryConfirmed
           ? null
           : status === "pending_profile_completion"
@@ -505,22 +617,6 @@ async function executeMultiIntentPlan(input: {
       continue;
     }
 
-    if (!canCoordinate) {
-      items.push({
-        serviceCategory: intent.type,
-        title: getServiceTitle(intent.type),
-        status: "pending_profile_completion",
-        residentVisibleStatus: "pending_profile_completion",
-        date: intent.requestedDate ?? null,
-        window: intent.requestedWindow ?? null,
-        deadlineDate: intent.deadlineDate ?? null,
-        deadlineReason: intent.deadlineReason ?? null,
-        nextAction: "complete_resident_profile",
-        failureReason: "pending_profile_completion",
-      });
-      continue;
-    }
-
     if (!planId) {
       items.push({
         serviceCategory: intent.type,
@@ -531,6 +627,8 @@ async function executeMultiIntentPlan(input: {
         window: intent.requestedWindow ?? null,
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
+        origin: intent.origin ?? null,
+        destination: intent.destination ?? null,
         nextAction: "operator_review_required",
         failureReason: "missing_parent_planId",
       });
@@ -562,6 +660,15 @@ async function executeMultiIntentPlan(input: {
       input.session
     );
 
+    logChildAction({
+      serviceCategory: intent.type,
+      toolName: "createResidentCoordinatedRequestTool",
+      success: coordinatedResult.success,
+      requestId: coordinatedResult.success ? coordinatedResult.requestId : null,
+      parentPlanId: planId,
+      failureReason: coordinatedResult.success ? null : coordinatedResult.reason,
+    });
+
     if (coordinatedResult.success) {
       const status = normalizeCoordinatedStatus(coordinatedResult.status);
       if (status) {
@@ -575,6 +682,8 @@ async function executeMultiIntentPlan(input: {
           deadlineDate: intent.deadlineDate ?? null,
           deadlineReason: intent.deadlineReason ?? null,
           requestId: coordinatedResult.requestId,
+          origin: intent.origin ?? null,
+          destination: intent.destination ?? null,
           nextAction: String(coordinatedResult.nextAction ?? "provider_or_operator_confirmation"),
           failureReason: null,
         });
@@ -594,6 +703,8 @@ async function executeMultiIntentPlan(input: {
           deadlineDate: intent.deadlineDate ?? null,
           deadlineReason: intent.deadlineReason ?? null,
           requestId: coordinatedResult.requestId,
+          origin: intent.origin ?? null,
+          destination: intent.destination ?? null,
           nextAction: "operator_review_required",
           failureReason: "invalid_or_missing_status",
         });
@@ -613,6 +724,8 @@ async function executeMultiIntentPlan(input: {
         window: intent.requestedWindow ?? null,
         deadlineDate: intent.deadlineDate ?? null,
         deadlineReason: intent.deadlineReason ?? null,
+        origin: intent.origin ?? null,
+        destination: intent.destination ?? null,
         nextAction: "operator_review_required",
         failureReason: coordinatedResult.reason,
       });
@@ -625,6 +738,7 @@ async function executeMultiIntentPlan(input: {
     planId,
     originalMessage: input.content,
     items,
+    statusSummary: buildStatusSummary(items),
   });
 
   if (planId) {
@@ -659,6 +773,9 @@ async function executeMultiIntentPlan(input: {
     content,
     metadata,
     booking,
+    collectStep: items.some((item) => item.failureReason === "pending_payment_profile")
+      ? "payment"
+      : undefined,
   };
 }
 
@@ -673,6 +790,73 @@ function normalizeCoordinatedStatus(status: unknown): string | null {
 
 function hasAdminOrderId(orderId: unknown): boolean {
   return orderId != null && Number.isFinite(Number(orderId));
+}
+
+function normalizeBuildingName(buildingSlug: string | null): string | null {
+  if (!buildingSlug) return null;
+  if (/^opus(?:la|-la)?$/i.test(buildingSlug)) return "Opus LA";
+  return buildingSlug;
+}
+
+function readPendingMultiServicePlan(user: BldgUser | null | undefined): {
+  originalMessage?: string;
+  intents: ResidentPlannedIntent[];
+} | null {
+  const pending = (user as any)?.pendingBookingIntentJson;
+  if (
+    pending &&
+    pending.type === "multi_service_plan" &&
+    Array.isArray(pending.intents)
+  ) {
+    return {
+      originalMessage: typeof pending.originalMessage === "string" ? pending.originalMessage : undefined,
+      intents: pending.intents,
+    };
+  }
+  return null;
+}
+
+async function preservePendingMultiServicePlan(
+  input: {
+    bldgUserId: number;
+    content: string;
+    session: ResidentAgentSession;
+    intents: ResidentPlannedIntent[];
+  },
+  planId: unknown,
+  reason: string
+): Promise<void> {
+  await updateBldgUser(input.bldgUserId, {
+    pendingBookingIntentJson: {
+      type: "multi_service_plan",
+      originalMessage: input.content,
+      intents: input.intents,
+      planId: planId ?? null,
+      reason,
+      sourceConversationId: input.session.conversationId,
+      sourceSessionId: input.session.sessionId,
+    } as any,
+  } as any);
+}
+
+function logChildAction(input: {
+  serviceCategory: string;
+  toolName: string;
+  success: boolean;
+  requestId?: unknown;
+  orderId?: unknown;
+  parentPlanId?: unknown;
+  failureReason?: unknown;
+}) {
+  console.log("[ResidentAgent][MultiIntentChild]", {
+    serviceCategory: input.serviceCategory,
+    toolName: input.toolName,
+    success: input.success,
+    requestId: input.requestId ?? null,
+    orderId: input.orderId ?? null,
+    parentPlanId: input.parentPlanId ?? null,
+    failureReason: input.failureReason ?? null,
+  });
 }
 
 function getPlanStatus(items: PlanItemMetadata[]): string {
@@ -692,47 +876,95 @@ function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
   const failed = items.filter((item) => item.status === "failed");
   const parts: string[] = [];
 
-  for (const item of confirmed) {
-    if (item.serviceCategory === "laundry") {
-      parts.push(`Laundry is booked${item.date ? ` for ${item.date}` : ""}${item.window ? `, ${item.window}` : ""}.`);
+  if (confirmed.length > 0) {
+    const laundry = confirmed.find((item) => item.serviceCategory === "laundry");
+    if (laundry) {
+      parts.push(`Handled. Laundry is booked${laundry.date ? ` for ${laundry.date}` : ""}${laundry.window ? `, ${laundry.window}` : ""}.`);
     } else {
-      parts.push(`${item.title} is confirmed${item.date ? ` for ${item.date}` : ""}.`);
+      parts.push(`Handled. ${capitalize(joinLabels(confirmed.map((item) => item.title.toLowerCase())))} ${confirmed.length === 1 ? "is" : "are"} confirmed.`);
     }
   }
 
   if (pending.length > 0) {
     const deadline = pending.find((item) => item.deadlineReason || item.deadlineDate);
-    const label = joinLabels(pending.map((item) => item.title.toLowerCase()));
+    const label = joinLabels(pending.map((item) => shortServiceLabel(item)));
     const deadlineText = deadline?.deadlineReason
       ? ` before your ${deadline.deadlineReason.replace(/ visit$/, " arrives")}`
       : deadline?.deadlineDate
         ? ` before ${deadline.deadlineDate}`
         : "";
-    parts.push(`${capitalize(label)} ${pending.length === 1 ? "is" : "are"} queued for confirmation${deadlineText}.`);
+    const prefix = parts.length > 0 ? "I also queued" : "Handled. I queued";
+    parts.push(`${prefix} ${label} for confirmation${deadlineText}.`);
   }
 
   if (failed.length > 0) {
-    const label = joinLabels(failed.map((item) => item.title.toLowerCase()));
-    parts.push(`${capitalize(label)} ${failed.length === 1 ? "needs" : "need"} operator review before it can be queued.`);
+    const label = joinLabels(failed.map((item) => shortServiceLabel(item)));
+    parts.push(`${capitalize(label)} ${failed.length === 1 ? "needs" : "need"} operator review, so I flagged ${failed.length === 1 ? "it" : "them"} instead of pretending ${failed.length === 1 ? "it was" : "they were"} booked.`);
   }
 
   if (profilePending.length > 0) {
-    const label = joinLabels(profilePending.map((item) => item.title.toLowerCase()));
-    parts.push(`${capitalize(label)} ${profilePending.length === 1 ? "needs" : "need"} profile completion before it can be booked.`);
+    const onlyProfilePending = confirmed.length === 0 && pending.length === 0 && failed.length === 0;
+    const label = joinLabels(profilePending.map((item) => shortServiceLabel(item)));
+    const needsPaymentOnly = profilePending.every((item) => item.failureReason === "pending_payment_profile");
+    if (onlyProfilePending) {
+      parts.push(
+        `I have the full plan. Add the missing account details once, then I'll lock ${label} without making you repeat this.`
+      );
+    } else {
+      parts.push(
+        `${capitalize(label)} ${profilePending.length === 1 ? "needs" : "need"} ${needsPaymentOnly ? "payment details" : "account details"} before I can lock ${profilePending.length === 1 ? "it" : "them"}.`
+      );
+    }
   }
 
-  return parts.join(" ");
+  const statusSummary = formatStatusSummary(buildStatusSummary(items));
+  return [parts.join(" "), statusSummary].filter(Boolean).join("\n\n");
 }
 
 function isQueuedStatus(status: string): boolean {
   return status === "pending_operator_review" || status === "pending_provider_confirmation";
 }
 
+function buildStatusSummary(items: PlanItemMetadata[]) {
+  return {
+    confirmed: items.filter((item) => item.status === "confirmed").map(formatSummaryItem),
+    queued: items.filter((item) => isQueuedStatus(item.status)).map(formatSummaryItem),
+    needsReview: items.filter((item) => item.status === "failed").map(formatSummaryItem),
+    needsYou: items.filter((item) => item.status === "pending_profile_completion").map(formatSummaryItem),
+  };
+}
+
+function formatStatusSummary(summary: ReturnType<typeof buildStatusSummary>): string {
+  const lines: string[] = [];
+  if (summary.confirmed.length) lines.push(`Confirmed: ${summary.confirmed.join("; ")}`);
+  if (summary.queued.length) lines.push(`Queued: ${summary.queued.join("; ")}`);
+  if (summary.needsReview.length) lines.push(`Needs review: ${summary.needsReview.join("; ")}`);
+  if (summary.needsYou.length) lines.push(`Needs you: ${summary.needsYou.join("; ")}`);
+  return lines.join("\n");
+}
+
+function formatSummaryItem(item: PlanItemMetadata): string {
+  const details: string[] = [];
+  if (item.date) details.push(item.date);
+  if (item.window) details.push(item.window);
+  if (item.deadlineReason) details.push(`before ${item.deadlineReason.replace(/ visit$/, " arrives")}`);
+  if (item.origin || item.destination) {
+    details.push([item.origin, item.destination].filter(Boolean).join(" to "));
+  }
+  return details.length ? `${item.title} - ${details.join(", ")}` : item.title;
+}
+
+function shortServiceLabel(item: PlanItemMetadata): string {
+  if (item.serviceCategory === "dog_grooming") return "grooming";
+  if (item.serviceCategory === "airport_transport") return "LAX pickup";
+  return item.title.toLowerCase();
+}
+
 function getServiceTitle(type: ResidentMultiIntentType): string {
   const titles: Record<ResidentMultiIntentType, string> = {
     laundry: "Laundry",
     dry_cleaning: "Dry cleaning",
-    dog_grooming: "Grooming",
+    dog_grooming: "Dog grooming",
     car_detail: "Car detail",
     airport_transport: "LAX pickup",
     apartment_cleaning: "Apartment cleaning",

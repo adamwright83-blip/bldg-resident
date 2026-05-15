@@ -29,6 +29,9 @@ const completeUser = {
   stripePaymentMethodId: "pm_test",
 };
 
+const canonicalMessage =
+  "I need a dog groomer before my mother-in-law visits in three days, a car detail, an LAX pickup to Opus, and laundry tomorrow.";
+
 describe("runResidentAgent multi-intent orchestration", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -105,7 +108,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
   });
 
-  it("creates a plan before child requests, passes parentPlanId, updates the plan, and separates confirmed from pending", async () => {
+  it("creates all four canonical child actions and separates confirmed from queued", async () => {
     const { runResidentAgent } = await import("./residentAgent");
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body));
@@ -133,8 +136,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
 
     const result = await runResidentAgent({
       bldgUserId: 1,
-      content:
-        "I need a dog groomer before my mother-in-law visits in three days, and a car detail, and an Uber to pick her up from LAX to Opus LA, oh and do my laundry tomorrow.",
+      content: canonicalMessage,
       user: completeUser as any,
     });
 
@@ -150,11 +152,24 @@ describe("runResidentAgent multi-intent orchestration", () => {
     for (const call of toolCalls.filter((call) => call.toolName === "createResidentCoordinatedRequestTool")) {
       expect(call.input.parentPlanId).toBe("plan_1");
     }
+    expect(toolCalls.filter((call) => call.toolName === "createResidentCoordinatedRequestTool").map((call) => call.input.serviceCategory)).toEqual([
+      "dog_grooming",
+      "car_detail",
+      "airport_transport",
+    ]);
+    expect(toolCalls.find((call) => call.input.serviceCategory === "airport_transport")?.input).toMatchObject({
+      origin: "LAX",
+      destination: "Opus LA",
+    });
     expect(toolCalls.some((call) => call.toolName === "createLaundryOrderTool" && call.input.serviceCategory)).toBe(false);
     expect(toolCalls[5].input.planStatus).toBe("partially_confirmed");
 
+    expect(result.content).toContain("Handled.");
     expect(result.content).toContain("Laundry is booked");
-    expect(result.content).toContain("queued for confirmation");
+    expect(result.content).toContain("I also queued grooming, car detail, and LAX pickup for confirmation");
+    expect(result.content).toContain("Confirmed:");
+    expect(result.content).toContain("Queued:");
+    expect(result.content).not.toContain("Request received");
     expect(result.metadata).toMatchObject({
       type: "multi_service_plan",
       planId: "plan_1",
@@ -166,12 +181,68 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
     expect(items.find((item: any) => item.serviceCategory === "dog_grooming")).toMatchObject({
       status: "pending_provider_confirmation",
-      deadlineDate: expect.any(String),
+      requestId: "req_dog_grooming",
+      deadlineDate: "2026-05-18",
       deadlineReason: "mother-in-law visit",
+    });
+    expect(items.find((item: any) => item.serviceCategory === "car_detail")).toMatchObject({
+      status: "pending_provider_confirmation",
+      requestId: "req_car_detail",
+      deadlineDate: "2026-05-18",
     });
     expect(items.find((item: any) => item.serviceCategory === "airport_transport")).toMatchObject({
       status: "pending_provider_confirmation",
       requestId: "req_airport_transport",
+      origin: "LAX",
+      destination: "Opus LA",
+    });
+  });
+
+  it("multi-intent laundry sends the same admin-visible payload fields as single laundry", async () => {
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn().mockResolvedValue(response({ orderId: 456 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runResidentAgent({
+      bldgUserId: 1,
+      content: "do my laundry tomorrow",
+      user: completeUser as any,
+    });
+    const singleLaundryBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_1" });
+      if (body.toolName === "createLaundryOrderTool") return response({ orderId: 789 });
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return response({ requestId: "req_1", status: "pending_operator_review" });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: "plan_1" });
+      return response({});
+    });
+
+    await runResidentAgent({
+      bldgUserId: 1,
+      content: "laundry tomorrow and car detail",
+      user: completeUser as any,
+    });
+    const multiLaundryBody = fetchMock.mock.calls
+      .map((call) => JSON.parse(call[1].body))
+      .find((body) => body.toolName === "createLaundryOrderTool");
+
+    expect(multiLaundryBody.input).toMatchObject({
+      source: singleLaundryBody.input.source,
+      status: "new",
+      serviceType: singleLaundryBody.input.serviceType,
+      pickupDate: singleLaundryBody.input.pickupDate,
+      pickupWindow: singleLaundryBody.input.pickupWindow,
+      pickupWindowStart: singleLaundryBody.input.pickupWindowStart,
+      pickupWindowEnd: singleLaundryBody.input.pickupWindowEnd,
+      buildingSlug: singleLaundryBody.input.buildingSlug,
+      unit: singleLaundryBody.input.unit,
+      firstName: singleLaundryBody.input.firstName,
+      lastName: singleLaundryBody.input.lastName,
+      phone: singleLaundryBody.input.phone,
     });
   });
 
@@ -262,7 +333,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
 
     expect(result.content).not.toContain("Laundry is booked");
-    expect(result.content).toContain("Car detail is queued for confirmation");
+    expect(result.content).toContain("I queued car detail for confirmation");
     expect(result.content).toContain("Laundry needs operator review");
     expect((result.metadata as any).items).toEqual(
       expect.arrayContaining([
@@ -305,6 +376,150 @@ describe("runResidentAgent multi-intent orchestration", () => {
         expect.objectContaining({ serviceCategory: "car_detail", status: "failed" }),
       ])
     );
+  });
+
+  it("payment-only profile gap preserves laundry and still attempts all coordinated services", async () => {
+    dbMocks.getBldgUserById.mockResolvedValue({
+      ...completeUser,
+      paymentMethodSaved: 0,
+      stripePaymentMethodId: null,
+    });
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_1" });
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return response({
+          requestId: `req_${body.input.serviceCategory}`,
+          status: "pending_operator_review",
+          residentVisibleStatus: "pending_operator_review",
+        });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: "plan_1" });
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content: canonicalMessage,
+      user: completeUser as any,
+    });
+
+    const toolCalls = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(toolCalls.map((call) => call.toolName)).toEqual([
+      "createResidentAgentPlanTool",
+      "createResidentCoordinatedRequestTool",
+      "createResidentCoordinatedRequestTool",
+      "createResidentCoordinatedRequestTool",
+      "updateResidentAgentPlanTool",
+    ]);
+    expect(result.collectStep).toBe("payment");
+    expect(result.content).toContain("I queued grooming, car detail, and LAX pickup for confirmation");
+    expect(result.content).toContain("Laundry needs payment details");
+    expect(dbMocks.updateBldgUser).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        pendingBookingIntentJson: expect.objectContaining({
+          type: "multi_service_plan",
+          intents: expect.arrayContaining([
+            expect.objectContaining({ type: "laundry" }),
+            expect.objectContaining({ type: "car_detail" }),
+            expect.objectContaining({ type: "airport_transport" }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it("basic profile gap preserves the full multi-intent plan without dropping non-laundry items", async () => {
+    dbMocks.getBldgUserById.mockResolvedValue({
+      ...completeUser,
+      firstName: null,
+      lastName: null,
+      unit: null,
+      paymentMethodSaved: 0,
+      stripePaymentMethodId: null,
+    });
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_1" });
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content: canonicalMessage,
+      user: completeUser as any,
+    });
+
+    expect(result.collectStep).toBe("name");
+    expect(result.content).toContain("I have the full plan");
+    expect(result.content).toContain("without making you repeat this");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(dbMocks.updateBldgUser).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        pendingBookingIntentJson: expect.objectContaining({
+          type: "multi_service_plan",
+          intents: expect.arrayContaining([
+            expect.objectContaining({ type: "laundry" }),
+            expect.objectContaining({ type: "dog_grooming" }),
+            expect.objectContaining({ type: "car_detail" }),
+            expect.objectContaining({ type: "airport_transport" }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it("resumes a preserved multi-intent plan after profile completion", async () => {
+    const pendingIntents = [
+      { id: "intent_1", type: "laundry", confidence: 0.93, originalTextSpan: "laundry tomorrow", requestedDate: "2026-05-16" },
+      { id: "intent_2", type: "dog_grooming", confidence: 0.9, originalTextSpan: "dog groomer", deadlineDate: "2026-05-18", deadlineReason: "mother-in-law visit" },
+      { id: "intent_3", type: "car_detail", confidence: 0.88, originalTextSpan: "car detail", deadlineDate: "2026-05-18", deadlineReason: "mother-in-law visit" },
+      { id: "intent_4", type: "airport_transport", confidence: 0.9, originalTextSpan: "LAX pickup to Opus", deadlineDate: "2026-05-18", deadlineReason: "mother-in-law visit", origin: "LAX", destination: "Opus LA" },
+    ];
+    dbMocks.getBldgUserById.mockResolvedValue({
+      ...completeUser,
+      pendingBookingIntentJson: {
+        type: "multi_service_plan",
+        originalMessage: canonicalMessage,
+        intents: pendingIntents,
+      },
+    });
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_1" });
+      if (body.toolName === "createLaundryOrderTool") return response({ orderId: 456 });
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return response({ requestId: `req_${body.input.serviceCategory}`, status: "pending_operator_review" });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: "plan_1" });
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content: "done",
+      user: completeUser as any,
+    });
+
+    expect(dbMocks.updateBldgUser).toHaveBeenCalledWith(1, { pendingBookingIntentJson: null });
+    expect(fetchMock.mock.calls.map((call) => JSON.parse(call[1].body).toolName)).toEqual([
+      "createResidentAgentPlanTool",
+      "createLaundryOrderTool",
+      "createResidentCoordinatedRequestTool",
+      "createResidentCoordinatedRequestTool",
+      "createResidentCoordinatedRequestTool",
+      "updateResidentAgentPlanTool",
+    ]);
+    expect(result.content).toContain("Laundry is booked");
+    expect(result.content).toContain("I also queued grooming, car detail, and LAX pickup");
   });
 });
 

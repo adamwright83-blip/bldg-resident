@@ -196,14 +196,23 @@ function extractAirportRoute(
   text: string,
   input: ResidentMultiIntentPlannerInput
 ): { origin?: string | null; destination?: string | null } {
-  const routeMatch = text.match(/\bfrom\s+([A-Z0-9 .'-]+?)\s+to\s+([A-Z0-9 .'-]+?)(?:,|\.|$|\s+oh\b|\s+and\b)/i);
-  const origin = routeMatch?.[1]?.trim() ?? (/\bLAX\b/i.test(text) ? "LAX" : null);
+  const routeMatch =
+    text.match(/\bfrom\s+([A-Z0-9 .'-]+?)\s+to\s+([A-Z0-9 .'-]+?)(?:,|\.|$|\s+oh\b|\s+and\b)/i) ??
+    text.match(/\bLAX\s+pickup\s+to\s+([A-Z0-9 .'-]+?)(?:,|\.|$|\s+oh\b|\s+and\b)/i);
+  const origin = routeMatch?.[2] ? routeMatch[1]?.trim() : (/\bLAX\b/i.test(text) ? "LAX" : null);
+  const rawDestination = routeMatch?.[2]?.trim() ?? (routeMatch?.[1] && /\bLAX\s+pickup\s+to\b/i.test(text) ? routeMatch[1].trim() : null);
   const destination =
-    routeMatch?.[2]?.trim() ??
+    normalizeDestination(rawDestination) ??
     input.buildingName ??
-    input.buildingSlug ??
+    normalizeDestination(input.buildingSlug) ??
     null;
   return { origin, destination };
+}
+
+function normalizeDestination(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (/^opus(?:\s*la|la)?$/i.test(value.trim())) return "Opus LA";
+  return value.trim();
 }
 
 function buildNotes(

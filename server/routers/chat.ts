@@ -1261,6 +1261,8 @@ export const chatRouter = router({
             content: agentResult.content!,
             booking: agentResult.booking ?? null,
             metadata: agentResult.metadata,
+            collectStep: agentResult.collectStep,
+            resumeWithPaymentAfterName: agentResult.resumeWithPaymentAfterName,
           };
         }
       }

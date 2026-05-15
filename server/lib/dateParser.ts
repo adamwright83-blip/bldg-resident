@@ -90,9 +90,6 @@ export function parseRelativeDateToISO(
 ): string | null {
   const lower = message.toLowerCase();
 
-  if (/\btoday\b|\btonight\b/.test(lower)) return addDaysISO(currentDate, 0);
-  if (/\btomorrow\b/.test(lower)) return addDaysISO(currentDate, 1);
-
   const inDaysMatch = lower.match(
     /\b(?:in\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\s+from\s+now\b|\bin\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+days?\b/
   );
@@ -101,6 +98,9 @@ export function parseRelativeDateToISO(
     const days = NUMBER_WORDS[raw] ?? Number(raw);
     if (Number.isFinite(days)) return addDaysISO(currentDate, days);
   }
+
+  if (/\btoday\b|\btonight\b/.test(lower)) return addDaysISO(currentDate, 0);
+  if (/\btomorrow\b/.test(lower)) return addDaysISO(currentDate, 1);
 
   const weekdayMatch = lower.match(/\b(this|next)\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
   if (weekdayMatch) {
