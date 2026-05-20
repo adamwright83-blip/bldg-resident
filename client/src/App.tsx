@@ -20,6 +20,7 @@ import MarketplacePrototype from "./pages/MarketplacePrototype";
 import CommunityPulse from "./pages/CommunityPulse";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
+import PenPullPrototype from "./components/held/PenPullPrototype";
 import {
   extractNumericHostToken,
   resolveBuildingFromHostname,
@@ -40,6 +41,10 @@ function PageSwitch() {
 
   if (location === "/privacy") {
     return <Privacy />;
+  }
+
+  if (location === "/held-pen-prototype") {
+    return <PenPullPrototype />;
   }
 
   if (/^\/orders\/[^/]+/.test(location)) {
@@ -79,9 +84,11 @@ function App() {
   /** Public product tour — sales/demo; no session or OTP required */
   const isPublicTour =
     location === "/tour" || location.startsWith("/tour/");
+  const isHeldPenPrototype = location === "/held-pen-prototype";
 
   const shouldShowNeutralFallback =
     !isPublicTour &&
+    !isHeldPenPrototype &&
     typeof window !== "undefined" &&
     Boolean(extractNumericHostToken(window.location.hostname)) &&
     !resolveBuildingFromHostname(window.location.hostname);
@@ -105,7 +112,7 @@ function App() {
           />
           {shouldShowNeutralFallback ? (
             <NeutralBuildingFallback />
-          ) : isPublicTour ? (
+          ) : isPublicTour || isHeldPenPrototype ? (
             <PageSwitch />
           ) : (
             <OnboardingFlow>
