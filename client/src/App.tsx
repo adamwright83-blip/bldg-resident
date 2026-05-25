@@ -11,13 +11,10 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import OnboardingFlow from "./components/onboarding/OnboardingFlow";
 import NeutralBuildingFallback from "./components/NeutralBuildingFallback";
-import Home from "./pages/Home";
 import Welcome from "./pages/Welcome";
 import OrderReceipt from "./pages/OrderReceipt";
 import Receipt from "./pages/Receipt";
 import ManusLanding from "./pages/ManusLanding";
-import MarketplacePrototype from "./pages/MarketplacePrototype";
-import CommunityPulse from "./pages/CommunityPulse";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import PenPullPrototype from "./components/held/PenPullPrototype";
@@ -43,7 +40,15 @@ function PageSwitch() {
     return <Privacy />;
   }
 
-  if (location === "/held-pen-prototype") {
+  if (
+    location === "/" ||
+    location === "/chat" ||
+    location.startsWith("/chat/") ||
+    location === "/held-pen-prototype" ||
+    location === "/marketplace" ||
+    location.startsWith("/marketplace/") ||
+    location.startsWith("/pulse")
+  ) {
     return <PenPullPrototype />;
   }
 
@@ -55,24 +60,8 @@ function PageSwitch() {
     return <Receipt />;
   }
 
-  if (location === "/marketplace" || location.startsWith("/marketplace/")) {
-    return <Redirect to="/" />;
-  }
-
-  if (location === "/") {
-    return <MarketplacePrototype />;
-  }
-
-  if (location === "/chat" || location.startsWith("/chat/")) {
-    return <Home />;
-  }
-
   if (location.startsWith("/tour")) {
     return <ManusLanding />;
-  }
-
-  if (location.startsWith("/pulse")) {
-    return <CommunityPulse />;
   }
 
   return <Redirect to="/" />;
@@ -84,11 +73,18 @@ function App() {
   /** Public product tour — sales/demo; no session or OTP required */
   const isPublicTour =
     location === "/tour" || location.startsWith("/tour/");
-  const isHeldPenPrototype = location === "/held-pen-prototype";
+  const isHeldExperience =
+    location === "/" ||
+    location === "/chat" ||
+    location.startsWith("/chat/") ||
+    location === "/held-pen-prototype" ||
+    location === "/marketplace" ||
+    location.startsWith("/marketplace/") ||
+    location.startsWith("/pulse");
 
   const shouldShowNeutralFallback =
     !isPublicTour &&
-    !isHeldPenPrototype &&
+    !isHeldExperience &&
     typeof window !== "undefined" &&
     Boolean(extractNumericHostToken(window.location.hostname)) &&
     !resolveBuildingFromHostname(window.location.hostname);
@@ -112,7 +108,7 @@ function App() {
           />
           {shouldShowNeutralFallback ? (
             <NeutralBuildingFallback />
-          ) : isPublicTour || isHeldPenPrototype ? (
+          ) : isPublicTour || isHeldExperience ? (
             <PageSwitch />
           ) : (
             <OnboardingFlow>
