@@ -37,13 +37,15 @@ import Vault from "@/pages/Vault";
 import Settings from "@/pages/Settings";
 import AccountSheet from "@/components/AccountSheet";
 import { getCriticalProfileGaps } from "@shared/profileCritical";
+import { isResidentAppTestMode } from "@/lib/residentTestMode";
 
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
 const stripePublishableKey =
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
 const stripeInitError = stripePublishableKey ? null : "Stripe publishable key is unavailable.";
-const stripePromise = stripeInitError ? null : loadStripe(stripePublishableKey);
+const stripePromise =
+  stripeInitError || isResidentAppTestMode ? null : loadStripe(stripePublishableKey);
 const PAYMENT_SAVED_MESSAGE = "Card saved. You're all set.";
 
 // ─── Service tile definitions ───
@@ -1942,7 +1944,7 @@ export default function Home() {
                       </div>
                       {msg.metadata.collectType === "payment" ? (
                         <TrustCard collectType="payment" content={msg.content}>
-                          {!stripePromise ? (
+                          {!stripePromise && !isResidentAppTestMode ? (
                             <p className="chat-bubble-text">
                               {stripeInitError || "Card setup is temporarily unavailable."}
                             </p>
@@ -1970,7 +1972,7 @@ export default function Home() {
                       <div className="bldg-avatar" style={{ visibility: "hidden" }}>
                         <BldgLogo size="small" />
                       </div>
-                      {!stripePromise ? (
+                      {!stripePromise && !isResidentAppTestMode ? (
                         <p className="chat-bubble-text">
                           {stripeInitError || "Card setup is temporarily unavailable."}
                         </p>
@@ -2005,7 +2007,7 @@ export default function Home() {
                       </div>
                       <div className="bldg-inline-card">
                         <p className="bldg-inline-card-text">{msg.content}</p>
-                        {!stripePromise ? (
+                        {!stripePromise && !isResidentAppTestMode ? (
                           <p className="bldg-inline-card-text" style={{ opacity: 0.5 }}>
                             {stripeInitError || "Card setup is temporarily unavailable."}
                           </p>

@@ -40,6 +40,7 @@ import { createOpsPickup } from "../opsIntegration";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
+import { isResidentAppTestMode, makeTestOrderId } from "../residentTestMode";
 import {
   getCriticalProfileGaps,
   isStrictPaymentComplete,
@@ -128,6 +129,14 @@ async function postToAdminIntakeAndVerify(
   logPrefix: string
 ): Promise<{ success: true; orderId: number } | { success: false; reason: string }> {
   try {
+    if (isResidentAppTestMode()) {
+      const externalId = (payload as { externalId?: unknown }).externalId;
+      const localId = Number(String(externalId ?? "").match(/\d+/)?.[0] ?? 0);
+      const orderId = makeTestOrderId(localId);
+      console.log(`[ResidentTestMode] Skipping admin intake ${logPrefix}; synthetic orderId=${orderId}`);
+      return { success: true, orderId };
+    }
+
     console.log(`[INTAKE][${logPrefix}] POST attempted to admin intake`);
     const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
       method: "POST",

@@ -11,6 +11,12 @@ import { eq } from "drizzle-orm";
 import { parse as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
+import {
+  TEST_PAYMENT_METHOD_ID,
+  isResidentAppTestMode,
+  makeTestOrderId,
+  makeTestStripeCustomerId,
+} from "../residentTestMode";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 
@@ -85,33 +91,42 @@ export const stripeRouter = router({
 
       let customerId: string;
       let last4: string;
-      try {
-        if (user.stripeCustomerId) {
-          const result = await replacePaymentMethod({
-            customerId: user.stripeCustomerId,
-            newPaymentMethodId: paymentMethodId,
-            oldPaymentMethodId: user.stripePaymentMethodId,
+      const savedPaymentMethodId = isResidentAppTestMode()
+        ? TEST_PAYMENT_METHOD_ID
+        : paymentMethodId;
+      if (isResidentAppTestMode()) {
+        customerId = user.stripeCustomerId || makeTestStripeCustomerId(bldgUserId);
+        last4 = "4242";
+        console.log("[ResidentTestMode] Skipping Stripe payment method save for user", bldgUserId);
+      } else {
+        try {
+          if (user.stripeCustomerId) {
+            const result = await replacePaymentMethod({
+              customerId: user.stripeCustomerId,
+              newPaymentMethodId: paymentMethodId,
+              oldPaymentMethodId: user.stripePaymentMethodId,
+            });
+            customerId = user.stripeCustomerId;
+            last4 = result.last4;
+          } else {
+            const customer = await createStripeCustomer({
+              paymentMethodId,
+              email: undefined,
+              name: user.firstName && user.lastName
+                ? `${user.firstName} ${user.lastName}`
+                : undefined,
+              phone: user.phoneE164,
+            });
+            customerId = customer.customerId;
+            last4 = customer.last4;
+          }
+        } catch (error: any) {
+          console.error("[Stripe] savePaymentMethod failed:", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Stripe customer setup failed. Please verify backend Stripe configuration.",
           });
-          customerId = user.stripeCustomerId;
-          last4 = result.last4;
-        } else {
-          const customer = await createStripeCustomer({
-            paymentMethodId,
-            email: undefined,
-            name: user.firstName && user.lastName
-              ? `${user.firstName} ${user.lastName}`
-              : undefined,
-            phone: user.phoneE164,
-          });
-          customerId = customer.customerId;
-          last4 = customer.last4;
         }
-      } catch (error: any) {
-        console.error("[Stripe] savePaymentMethod failed:", error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Stripe customer setup failed. Please verify backend Stripe configuration.",
-        });
       }
 
       // Update user record
@@ -126,7 +141,7 @@ export const stripeRouter = router({
         .update(bldgUsers)
         .set({
           stripeCustomerId: customerId,
-          stripePaymentMethodId: paymentMethodId, // Store payment method ID
+          stripePaymentMethodId: savedPaymentMethodId,
           paymentMethodSaved: 1,
           cardLast4: last4,
         })
@@ -257,6 +272,15 @@ export const stripeRouter = router({
 
             console.log("[INTAKE] post-payment sending", JSON.stringify(intakePayload, null, 2));
             console.log(`[INTAKE] hasSecret=${Boolean(sharedSecret)} len=${sharedSecret?.length ?? 0} headerName=x-app-shared-secret`);
+
+            if (isResidentAppTestMode()) {
+              const testOrderId = makeTestOrderId(booking.id);
+              await updateServiceRequest(booking.id, { orderId: testOrderId });
+              console.log(
+                `[ResidentTestMode] Skipping post-payment admin intake; stored synthetic orderId=${testOrderId} on service_request #${booking.id}`
+              );
+              continue;
+            }
 
             const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
               method: "POST",

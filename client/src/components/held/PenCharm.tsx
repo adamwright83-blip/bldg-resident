@@ -1,4 +1,9 @@
-import { useState, type MutableRefObject, type PointerEvent } from "react";
+import {
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+  type PointerEvent,
+} from "react";
 
 type PenCharmProps = {
   hitboxRef: MutableRefObject<HTMLButtonElement | null>;
@@ -8,6 +13,8 @@ type PenCharmProps = {
   onPointerUp: (event: PointerEvent<HTMLButtonElement>) => void;
   penAssetSrc: string;
   shadowRef: MutableRefObject<HTMLSpanElement | null>;
+  objectFit?: CSSProperties["objectFit"];
+  transformOrigin?: CSSProperties["transformOrigin"];
   visualRef: MutableRefObject<HTMLElement | null>;
 };
 
@@ -17,15 +24,17 @@ export function PenCharm({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  objectFit = "fill",
   penAssetSrc,
   shadowRef,
+  transformOrigin = "50% 8%",
   visualRef,
 }: PenCharmProps) {
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <button
-      ref={(node) => {
+      ref={node => {
         hitboxRef.current = node;
       }}
       aria-label="Pull pen to tell the building"
@@ -43,7 +52,7 @@ export function PenCharm({
       type="button"
     >
       <span
-        ref={(node) => {
+        ref={node => {
           shadowRef.current = node;
         }}
         className="pointer-events-none absolute left-1/2 top-1/2 rounded-full bg-black/30 blur-[5px]"
@@ -51,18 +60,18 @@ export function PenCharm({
       />
       {imageFailed ? (
         <span
-          ref={(node) => {
+          ref={node => {
             visualRef.current = node;
           }}
           className="pointer-events-none absolute left-1/2 top-1/2 block overflow-hidden rounded-full bg-current"
           style={{
-            transformOrigin: "50% 8%",
+            transformOrigin,
             willChange: "transform, opacity, filter",
           }}
         />
       ) : (
         <img
-          ref={(node) => {
+          ref={node => {
             visualRef.current = node;
           }}
           alt=""
@@ -71,8 +80,8 @@ export function PenCharm({
           onError={() => setImageFailed(true)}
           src={penAssetSrc}
           style={{
-            objectFit: "fill",
-            transformOrigin: "50% 8%",
+            objectFit,
+            transformOrigin,
             willChange: "transform, opacity, filter",
           }}
         />

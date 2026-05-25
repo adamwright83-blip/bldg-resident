@@ -39,6 +39,12 @@ export type PenMetrics = {
   hitHeight: number;
 };
 
+export type SpringConfig = {
+  stiffness: number;
+  damping: number;
+  mass: number;
+};
+
 export type PenPhysicsTuning = {
   anchorRightInset: number;
   anchorY: number;
@@ -56,12 +62,15 @@ export type PenPhysicsTuning = {
   scaleMin: number;
   scaleMax: number;
   ringTopInset: number;
+  dragSpringX: SpringConfig;
+  dragSpringY: SpringConfig;
 };
 
-export type SpringConfig = {
-  stiffness: number;
-  damping: number;
-  mass: number;
+export type PenPhysicsTuningOverrides = Partial<
+  Omit<PenPhysicsTuning, "dragSpringX" | "dragSpringY">
+> & {
+  dragSpringX?: Partial<SpringConfig>;
+  dragSpringY?: Partial<SpringConfig>;
 };
 
 export const DEFAULT_PEN_TUNING: PenPhysicsTuning = {
@@ -81,14 +90,24 @@ export const DEFAULT_PEN_TUNING: PenPhysicsTuning = {
   scaleMin: 0.92,
   scaleMax: 1.08,
   ringTopInset: 5,
+  dragSpringX: { stiffness: 180, damping: 24, mass: 0.8 },
+  dragSpringY: { stiffness: 190, damping: 22, mass: 0.75 },
 };
 
 export function resolvePenTuning(
-  tuning: Partial<PenPhysicsTuning> = {},
+  tuning: PenPhysicsTuningOverrides = {}
 ): PenPhysicsTuning {
   return {
     ...DEFAULT_PEN_TUNING,
     ...tuning,
+    dragSpringX: {
+      ...DEFAULT_PEN_TUNING.dragSpringX,
+      ...tuning.dragSpringX,
+    },
+    dragSpringY: {
+      ...DEFAULT_PEN_TUNING.dragSpringY,
+      ...tuning.dragSpringY,
+    },
   };
 }
 
@@ -107,7 +126,7 @@ export function distance(a: Point, b: Point) {
 export function getPenMetrics(
   width: number,
   height: number,
-  rawTuning?: Partial<PenPhysicsTuning>,
+  rawTuning?: PenPhysicsTuningOverrides
 ): PenMetrics {
   const tuning = resolvePenTuning(rawTuning);
   const scale = clamp(width / 390, tuning.scaleMin, tuning.scaleMax);
@@ -138,7 +157,7 @@ export function getPenRingPoint(
   x: number,
   y: number,
   penHeight: number,
-  ringTopInset = DEFAULT_PEN_TUNING.ringTopInset,
+  ringTopInset = DEFAULT_PEN_TUNING.ringTopInset
 ): Point {
   return {
     x,
@@ -161,7 +180,7 @@ export function buildChainPath(
   metrics: PenMetrics,
   penRing: Point,
   pullRatio: number,
-  swayInfluence: number,
+  swayInfluence: number
 ) {
   const midX = (metrics.anchorX + penRing.x) / 2;
   const midY = (metrics.anchorY + penRing.y) / 2;
@@ -173,9 +192,9 @@ export function buildChainPath(
   const controlY = midY + slack;
 
   return `M ${metrics.anchorX.toFixed(2)} ${metrics.anchorY.toFixed(
-    2,
+    2
   )} Q ${controlX.toFixed(2)} ${controlY.toFixed(2)} ${penRing.x.toFixed(
-    2,
+    2
   )} ${penRing.y.toFixed(2)}`;
 }
 
@@ -184,7 +203,7 @@ export function springStep(
   target: number,
   velocity: number,
   config: SpringConfig,
-  deltaSeconds: number,
+  deltaSeconds: number
 ) {
   const force = -config.stiffness * (current - target);
   const damper = -config.damping * velocity;

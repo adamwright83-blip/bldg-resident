@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./env";
+import { isResidentAppTestMode } from "../residentTestMode";
 
 export type NotificationPayload = {
   title: string;
@@ -67,6 +68,14 @@ export async function notifyOwner(
   payload: NotificationPayload
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
+
+  if (isResidentAppTestMode()) {
+    console.log("[ResidentTestMode] Skipping platform owner notification:", {
+      title,
+      contentLength: content.length,
+    });
+    return true;
+  }
 
   if (!ENV.forgeApiUrl) {
     throw new TRPCError({

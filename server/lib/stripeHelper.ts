@@ -1,11 +1,12 @@
 import Stripe from "stripe";
+import { isResidentAppTestMode } from "../residentTestMode";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-if (!stripeSecretKey) {
+if (!stripeSecretKey && !isResidentAppTestMode()) {
   throw new Error("STRIPE_SECRET_KEY is not configured");
 }
 
-export const stripe = new Stripe(stripeSecretKey, {
+export const stripe = new Stripe(stripeSecretKey || "sk_test_resident_mode_disabled", {
   // @ts-ignore - Using latest API version
   apiVersion: "2024-12-18.acacia" as any,
 });

@@ -9,12 +9,14 @@ import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { SUPPORT_PHONE_SMS } from "@/const";
+import { isResidentAppTestMode } from "@/lib/residentTestMode";
 
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
 const stripePublishableKey =
   import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+const stripePromise =
+  stripePublishableKey && !isResidentAppTestMode ? loadStripe(stripePublishableKey) : null;
 
 function formatPhone(phone: string | null | undefined): string {
   if (!phone) return "—";
@@ -89,7 +91,7 @@ export default function Settings({ onBack, onPaymentSaved }: SettingsProps) {
           </div>
           <div className="settings-payment-block">
             <span className="settings-payment-cta">Add / Update Card</span>
-            {stripePromise ? (
+            {stripePromise || isResidentAppTestMode ? (
               <Elements stripe={stripePromise}>
                 <PaymentMethodForm onSuccess={onPaymentSaved ?? (() => {})} />
               </Elements>

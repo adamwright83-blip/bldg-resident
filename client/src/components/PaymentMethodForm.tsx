@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Lock } from "lucide-react";
+import { TEST_PAYMENT_METHOD_ID, isResidentAppTestMode } from "@/lib/residentTestMode";
 
 interface PaymentMethodFormProps {
   onSuccess: () => void;
@@ -62,6 +63,18 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isResidentAppTestMode) {
+      setLoading(true);
+      try {
+        await savePaymentMethod.mutateAsync({
+          paymentMethodId: TEST_PAYMENT_METHOD_ID,
+        });
+      } catch {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (!stripe || !elements) {
       toast.error(initError || "Secure card fields are still loading.");
@@ -174,7 +187,13 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
           className={wrapCls}
         >
           <form onSubmit={handleSubmit} className="w-full">
-            {!stripe || !elements ? (
+            {isResidentAppTestMode ? (
+              <div className={`mb-4 w-full ${fieldCls}`} style={{ minHeight: "48px" }}>
+                <span className={dark ? "text-sm text-white/50" : "text-sm text-[#4A4540]"}>
+                  Test mode is on. No Stripe card will be created.
+                </span>
+              </div>
+            ) : !stripe || !elements ? (
               <div className={`mb-4 w-full ${fieldCls}`} style={{ minHeight: "48px" }}>
                 <span className={dark ? "text-sm text-white/50" : "text-sm text-[#4A4540]"}>
                   {initError || "Initializing secure card fields..."}
@@ -213,7 +232,7 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
             )}
             <button
               type="submit"
-              disabled={!stripe || !elements || loading}
+              disabled={(!isResidentAppTestMode && (!stripe || !elements)) || loading}
               className={btnCls}
               style={dark ? undefined : { height: '48px' }}
             >

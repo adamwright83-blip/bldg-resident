@@ -1,4 +1,5 @@
 import type { ResidentAgentSession } from "./session";
+import { isResidentAppTestMode, makeTestOrderId } from "../residentTestMode";
 
 export const DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL =
   "https://bldg-admin-api-production.up.railway.app/api/agent/s2s/run-tool";
@@ -83,10 +84,20 @@ export function createAdminAgentClient(): AdminAgentClient {
 
   return {
     canRunLaundryOrderTool() {
+      if (isResidentAppTestMode()) return false;
       return Boolean(process.env.ADMIN_AGENT_S2S_URL && sharedSecret);
     },
 
     async runAdminTool(toolName, input, session) {
+      if (isResidentAppTestMode()) {
+        console.log(`[ResidentTestMode] Skipping admin agent tool=${toolName}`);
+        return {
+          success: false,
+          reason: "resident_test_mode",
+          path: "agent-tool",
+        };
+      }
+
       const targets = getAdminAgentS2SRunToolUrlCandidates();
       if (!process.env.ADMIN_AGENT_S2S_URL || !sharedSecret) {
         return {
@@ -299,6 +310,18 @@ export async function postToAdminIntakeFallbackAndVerify(
   logPrefix: string
 ): Promise<AdminExecutionResult> {
   try {
+    if (isResidentAppTestMode()) {
+      const sourceId =
+        typeof payload.bldgUserId === "number"
+          ? payload.bldgUserId
+          : Number(String(payload.externalId).match(/\d+/)?.[0] ?? 0);
+      const orderId = makeTestOrderId(sourceId);
+      console.log(
+        `[ResidentTestMode] Skipping admin intake fallback target=${adminApiUrl}; synthetic orderId=${orderId}`
+      );
+      return { success: true, orderId, path: "intake-fallback" };
+    }
+
     console.log(`[INTAKE][${logPrefix}] POST attempted to admin intake target=${adminApiUrl}/api/intake/from-bldg`);
     const fwdRes = await fetch(`${adminApiUrl}/api/intake/from-bldg`, {
       method: "POST",

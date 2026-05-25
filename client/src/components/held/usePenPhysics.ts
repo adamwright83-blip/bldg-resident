@@ -18,7 +18,7 @@ import {
   resolvePenTuning,
   springStep,
   type PenMetrics,
-  type PenPhysicsTuning,
+  type PenPhysicsTuningOverrides,
   type PenState,
   type TiltPermissionStatus,
 } from "./penPhysics";
@@ -45,10 +45,11 @@ export type PenUnlockInfo = {
 export type UsePenPhysicsOptions = {
   composerOpen?: boolean;
   debug?: boolean;
+  onComposerPenSwipe?: () => void;
   onUnlock?: (info: PenUnlockInfo) => void;
   reducedMotion?: boolean;
   stageRef: RefObject<HTMLElement | null>;
-  tuning?: Partial<PenPhysicsTuning>;
+  tuning?: PenPhysicsTuningOverrides;
 };
 
 type PhysicsState = {
@@ -64,6 +65,7 @@ type PhysicsState = {
   pointerVX: number;
   pointerVY: number;
   rotation: number;
+  swipeDismissed: boolean;
   targetX: number;
   targetY: number;
   unlockedAt: number;
@@ -83,7 +85,7 @@ function getIdleState(permissionStatus: TiltPermissionStatus): PenState {
 
 function getLocalPoint(
   event: PointerEvent<HTMLElement>,
-  stage: HTMLElement | null,
+  stage: HTMLElement | null
 ) {
   const rect = stage?.getBoundingClientRect();
 
@@ -100,6 +102,7 @@ function getLocalPoint(
 export function usePenPhysics({
   composerOpen = false,
   debug = false,
+  onComposerPenSwipe,
   onUnlock,
   reducedMotion,
   stageRef,
@@ -116,17 +119,16 @@ export function usePenPhysics({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [metrics, setMetrics] = useState(INITIAL_METRICS);
   const [penState, setPenState] = useState<PenState>("idle");
-  const [debugSnapshot, setDebugSnapshot] =
-    useState<PenPhysicsDebugSnapshot>({
-      gamma: 0,
-      penTipY: INITIAL_METRICS.restY + INITIAL_METRICS.penHeight / 2,
-      penX: INITIAL_METRICS.restX,
-      penY: INITIAL_METRICS.restY,
-      pullRatio: 0,
-      state: "idle",
-      targetAngle: 0,
-      unlockY: INITIAL_METRICS.unlockY,
-    });
+  const [debugSnapshot, setDebugSnapshot] = useState<PenPhysicsDebugSnapshot>({
+    gamma: 0,
+    penTipY: INITIAL_METRICS.restY + INITIAL_METRICS.penHeight / 2,
+    penX: INITIAL_METRICS.restX,
+    penY: INITIAL_METRICS.restY,
+    pullRatio: 0,
+    state: "idle",
+    targetAngle: 0,
+    unlockY: INITIAL_METRICS.unlockY,
+  });
 
   const effectiveReducedMotion = reducedMotion ?? prefersReducedMotion;
   const tilt = useDeviceTilt(effectiveReducedMotion);
@@ -135,6 +137,7 @@ export function usePenPhysics({
   const penStateRef = useRef<PenState>("idle");
   const composerOpenRef = useRef(composerOpen);
   const debugRef = useRef(debug);
+  const onComposerPenSwipeRef = useRef(onComposerPenSwipe);
   const onUnlockRef = useRef(onUnlock);
   const reducedMotionRef = useRef(effectiveReducedMotion);
   const tiltAngleRef = useRef(0);
@@ -155,6 +158,7 @@ export function usePenPhysics({
     pointerVX: 0,
     pointerVY: 0,
     rotation: 0,
+    swipeDismissed: false,
     targetX: INITIAL_METRICS.restX,
     targetY: INITIAL_METRICS.restY,
     unlockedAt: 0,
@@ -183,6 +187,7 @@ export function usePenPhysics({
     physics.rotation = 0;
     physics.pointerVX = 0;
     physics.pointerVY = 0;
+    physics.swipeDismissed = false;
     physics.unlockedAt = 0;
     setMachineState(getIdleState(tiltStatusRef.current));
   }, [setMachineState]);
@@ -212,7 +217,7 @@ export function usePenPhysics({
     physics.targetX = nextMetrics.width - tuningRef.current.restRightInset;
     physics.targetY = Math.max(
       nextMetrics.height - 150,
-      nextMetrics.unlockY - nextMetrics.penHeight / 2,
+      nextMetrics.unlockY - nextMetrics.penHeight / 2
     );
     setMachineState("unlocked");
     navigator.vibrate?.(8);
@@ -286,6 +291,10 @@ export function usePenPhysics({
   useEffect(() => {
     tuningRef.current = resolvePenTuning(tuning);
   }, [tuning]);
+
+  useEffect(() => {
+    onComposerPenSwipeRef.current = onComposerPenSwipe;
+  }, [onComposerPenSwipe]);
 
   useEffect(() => {
     onUnlockRef.current = onUnlock;
@@ -376,7 +385,7 @@ export function usePenPhysics({
       const nextMetrics = getPenMetrics(
         rect.width,
         rect.height,
-        tuningRef.current,
+        tuningRef.current
       );
       const sizeChanged =
         Math.abs(previousMetrics.width - nextMetrics.width) > 1 ||
@@ -438,8 +447,8 @@ export function usePenPhysics({
       const swayAngle = reduced ? 0 : tiltAngleRef.current;
       let targetX = physics.targetX;
       let targetY = physics.targetY;
-      let springX = { stiffness: 180, damping: 24, mass: 0.8 };
-      let springY = { stiffness: 190, damping: 22, mass: 0.75 };
+      let springX = tuningRef.current.dragSpringX;
+      let springY = tuningRef.current.dragSpringY;
       let scale = 1;
       let visualOpacity = 1;
       let chainOpacity = 0.52;
@@ -476,8 +485,15 @@ export function usePenPhysics({
         chainOpacity = lerp(0.82, 0.25, elapsed);
         rotationTarget = clamp(physics.rotation * 0.72, -12, 12);
       } else if (currentState === "composerOpen") {
-        targetX = nextMetrics.width - tuningRef.current.restRightInset;
-        targetY = nextMetrics.height - 148;
+        const isComposerSwipeActive =
+          physics.swipeDismissed || physics.pointerId !== null;
+
+        targetX = isComposerSwipeActive
+          ? physics.targetX
+          : nextMetrics.width - tuningRef.current.restRightInset;
+        targetY = isComposerSwipeActive
+          ? physics.targetY
+          : nextMetrics.height - 148;
         springX = { stiffness: 160, damping: 30, mass: 0.8 };
         springY = { stiffness: 160, damping: 30, mass: 0.8 };
         scale = 0.92;
@@ -491,13 +507,13 @@ export function usePenPhysics({
           clamp(
             (Math.atan2(
               physics.x - nextMetrics.anchorX,
-              physics.y - nextMetrics.anchorY,
+              physics.y - nextMetrics.anchorY
             ) *
               180 *
               0.45) /
               Math.PI,
             -18,
-            18,
+            18
           ) +
           clamp(physics.pointerVX / 260, -3, 3) +
           clamp(physics.pointerVY / 900, -2, 2);
@@ -508,14 +524,14 @@ export function usePenPhysics({
         targetX,
         physics.vx,
         springX,
-        deltaSeconds,
+        deltaSeconds
       );
       const nextY = springStep(
         physics.y,
         targetY,
         physics.vy,
         springY,
-        deltaSeconds,
+        deltaSeconds
       );
 
       physics.x = nextX.value;
@@ -553,7 +569,7 @@ export function usePenPhysics({
         physics.x,
         physics.y,
         nextMetrics.penHeight,
-        tuningRef.current.ringTopInset,
+        tuningRef.current.ringTopInset
       );
       const pullRatio = getPullRatio(nextMetrics, penRing);
       const penTipY = getPenTipY(physics.y, nextMetrics.penHeight);
@@ -564,10 +580,9 @@ export function usePenPhysics({
         hitboxRef.current.style.transform = `translate3d(${(
           physics.x -
           nextMetrics.hitWidth / 2
-        ).toFixed(2)}px, ${(
-          physics.y -
-          nextMetrics.hitHeight / 2
-        ).toFixed(2)}px, 0)`;
+        ).toFixed(2)}px, ${(physics.y - nextMetrics.hitHeight / 2).toFixed(
+          2
+        )}px, 0)`;
       }
 
       if (visualRef.current) {
@@ -577,16 +592,16 @@ export function usePenPhysics({
         visualRef.current.style.filter = `drop-shadow(${clamp(
           (physics.x - nextMetrics.restX) * 0.03,
           -1.5,
-          1.5,
+          1.5
         ).toFixed(2)}px ${lerp(5, 8, pullRatio).toFixed(
-          2,
+          2
         )}px ${lerp(5, 9, pullRatio).toFixed(2)}px rgba(28, 22, 16, ${lerp(
           0.24,
           0.34,
-          pullRatio,
+          pullRatio
         ).toFixed(2)}))`;
         visualRef.current.style.transform = `translate(-50%, -50%) rotate(${physics.rotation.toFixed(
-          2,
+          2
         )}deg) scale(${scale.toFixed(3)})`;
       }
 
@@ -594,19 +609,23 @@ export function usePenPhysics({
         shadowRef.current.style.width = `${nextMetrics.penWidth * 1.42}px`;
         shadowRef.current.style.height = `${Math.max(
           5,
-          nextMetrics.penHeight * 0.12,
+          nextMetrics.penHeight * 0.12
         )}px`;
         shadowRef.current.style.opacity = String(lerp(0.1, 0.22, pullRatio));
         shadowRef.current.style.transform = `translate(${(
-          -50 +
-          clamp((physics.x - nextMetrics.restX) * 0.06, -5, 5)
+          -50 + clamp((physics.x - nextMetrics.restX) * 0.06, -5, 5)
         ).toFixed(2)}%, ${(
           nextMetrics.penHeight * 0.46 +
           lerp(4, 7, pullRatio)
         ).toFixed(2)}px) rotate(${(physics.rotation * 0.22).toFixed(2)}deg)`;
       }
 
-      const chainPath = buildChainPath(nextMetrics, penRing, pullRatio, swayAngle);
+      const chainPath = buildChainPath(
+        nextMetrics,
+        penRing,
+        pullRatio,
+        swayAngle
+      );
       const tensionOpacity =
         currentState === "unlocked" || currentState === "composerOpen"
           ? chainOpacity
@@ -620,22 +639,22 @@ export function usePenPhysics({
       if (chainHighlightRef.current) {
         chainHighlightRef.current.setAttribute("d", chainPath);
         chainHighlightRef.current.style.opacity = String(
-          lerp(0.18, 0.46, pullRatio) * chainOpacity,
+          lerp(0.18, 0.46, pullRatio) * chainOpacity
         );
       }
 
       if (chainGlintRef.current) {
         chainGlintRef.current.setAttribute("d", chainPath);
         chainGlintRef.current.style.opacity = String(
-          currentState === "pulling" ? lerp(0.06, 0.42, pullRatio) : 0.04,
+          currentState === "pulling" ? lerp(0.06, 0.42, pullRatio) : 0.04
         );
         chainGlintRef.current.style.strokeDasharray = `${lerp(
           8,
           18,
-          pullRatio,
+          pullRatio
         ).toFixed(1)} ${lerp(94, 58, pullRatio).toFixed(1)}`;
         chainGlintRef.current.style.strokeDashoffset = `${-(now / 80).toFixed(
-          1,
+          1
         )}`;
       }
 
@@ -643,7 +662,7 @@ export function usePenPhysics({
         chainAnchorRef.current.setAttribute("cx", String(nextMetrics.anchorX));
         chainAnchorRef.current.setAttribute("cy", String(nextMetrics.anchorY));
         chainAnchorRef.current.style.opacity = String(
-          currentState === "composerOpen" ? 0.35 : 0.82,
+          currentState === "composerOpen" ? 0.35 : 0.82
         );
       }
 
@@ -671,10 +690,6 @@ export function usePenPhysics({
 
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLButtonElement>) => {
-      if (composerOpenRef.current) {
-        return;
-      }
-
       const physics = physicsRef.current;
       const point = getLocalPoint(event, stageRef.current);
 
@@ -692,9 +707,16 @@ export function usePenPhysics({
       physics.targetY = physics.y;
       physics.pointerVX = 0;
       physics.pointerVY = 0;
+      physics.swipeDismissed = false;
+
+      if (composerOpenRef.current) {
+        setMachineState("composerOpen");
+        return;
+      }
+
       setMachineState("grabbed");
     },
-    [setMachineState, stageRef],
+    [setMachineState, stageRef]
   );
 
   const handlePointerMove = useCallback(
@@ -712,7 +734,7 @@ export function usePenPhysics({
       const deltaSeconds = clamp(
         (now - physics.lastPointerAt) / 1000,
         1 / 120,
-        1 / 18,
+        1 / 18
       );
       const rawTargetX = point.x - physics.grabOffsetX;
       const rawTargetY = point.y - physics.grabOffsetY;
@@ -726,22 +748,59 @@ export function usePenPhysics({
       physics.lastPointerX = point.x;
       physics.lastPointerY = point.y;
       physics.lastPointerAt = now;
+
+      if (composerOpenRef.current && penStateRef.current === "composerOpen") {
+        physics.targetX = rawTargetX;
+        physics.targetY = clamp(
+          rawTargetY,
+          nextMetrics.height - 260,
+          nextMetrics.height - 86
+        );
+
+        const deltaX = point.x - physics.pointerStartX;
+        const deltaY = point.y - physics.pointerStartY;
+        const horizontalSwipe =
+          Math.abs(deltaX) > 92 && Math.abs(deltaX) > Math.abs(deltaY) * 0.72;
+        const offstage =
+          rawTargetX > nextMetrics.width + nextMetrics.penWidth * 0.3 ||
+          rawTargetX < -nextMetrics.penWidth * 0.3;
+
+        if (!physics.swipeDismissed && (horizontalSwipe || offstage)) {
+          physics.swipeDismissed = true;
+          physics.pointerId = null;
+          physics.targetX =
+            deltaX >= 0
+              ? nextMetrics.width + nextMetrics.penWidth * 0.75
+              : -nextMetrics.penWidth * 0.75;
+          try {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          } catch {
+            // Pointer capture may already be gone after a fast swipe.
+          }
+          onComposerPenSwipeRef.current?.();
+        }
+
+        return;
+      }
+
       physics.targetX = clamp(
         resistedTargetX,
         nextMetrics.minX,
-        nextMetrics.maxX,
+        nextMetrics.maxX
       );
       physics.targetY = clamp(rawTargetY, nextMetrics.minY, nextMetrics.maxY);
 
       if (
         penStateRef.current === "grabbed" &&
-        Math.hypot(point.x - physics.pointerStartX, point.y - physics.pointerStartY) >
-          2
+        Math.hypot(
+          point.x - physics.pointerStartX,
+          point.y - physics.pointerStartY
+        ) > 2
       ) {
         setMachineState("pulling");
       }
     },
-    [setMachineState, stageRef],
+    [setMachineState, stageRef]
   );
 
   const handlePointerUp = useCallback(
@@ -757,9 +816,21 @@ export function usePenPhysics({
       } catch {
         // Some browsers release automatically when the pointer ends.
       }
+
+      if (composerOpenRef.current && penStateRef.current === "composerOpen") {
+        physics.pointerId = null;
+        physics.pointerVX = 0;
+        physics.pointerVY = 0;
+        physics.swipeDismissed = false;
+        physics.targetX =
+          metricsRef.current.width - tuningRef.current.restRightInset;
+        physics.targetY = metricsRef.current.height - 148;
+        return;
+      }
+
       finishPull();
     },
-    [finishPull],
+    [finishPull]
   );
 
   const requestMotionPermission = useCallback(async () => {

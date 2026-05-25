@@ -4,6 +4,7 @@
  * When a booking is confirmed in bldg-chat, this helper creates a corresponding
  * pickup record in the ops system so it appears in /admin and /driver views.
  */
+import { isResidentAppTestMode, makeTestOrderId } from "./residentTestMode";
 
 const OPS_API_URL = "https://laundrybutler.bldg.chat/api/intake/from-bldg";
 const OPUS_LA_ADDRESS = "10000 Santa Monica Blvd, Los Angeles, CA 90067";
@@ -89,6 +90,17 @@ function mapServiceType(serviceType: string): "wash-fold" | "dry-cleaning" {
  */
 export async function createOpsPickup(params: CreatePickupParams): Promise<{ success: boolean; orderId?: number; error?: string }> {
   try {
+    if (isResidentAppTestMode()) {
+      const orderId = makeTestOrderId(params.bldgUserId);
+      console.error("[ResidentTestMode] Skipping ops pickup creation; synthetic order:", {
+        orderId,
+        serviceType: params.serviceType,
+        pickupDate: params.pickupDate,
+        pickupWindow: params.pickupWindow,
+      });
+      return { success: true, orderId };
+    }
+
     const payload = {
       source: "bldg.chat",
       bldgUserId: params.bldgUserId, // User ID for receipt notifications

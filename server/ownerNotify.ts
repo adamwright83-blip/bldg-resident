@@ -5,6 +5,7 @@
  * Future: Twilio SMS (guarded by env vars, not enabled by default).
  */
 import { notifyOwner } from "./_core/notification";
+import { isResidentAppTestMode } from "./residentTestMode";
 
 export type OwnerAlertPayload = {
   serviceCategory: string;
@@ -29,9 +30,22 @@ export async function sendOwnerAlert(payload: OwnerAlertPayload): Promise<boolea
     residentName,
     unit,
     scheduledWindow,
+    building,
+    notes,
     vendor,
     action,
   } = payload;
+
+  if (isResidentAppTestMode()) {
+    console.log("[ResidentTestMode] Skipping owner alert:", {
+      action,
+      serviceCategory,
+      residentName,
+      unit,
+      scheduledWindow,
+    });
+    return true;
+  }
 
   // Format the message
   const actionLabel =
