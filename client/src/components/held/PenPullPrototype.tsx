@@ -12,6 +12,7 @@ type PenPullPrototypeProps = {
   onUnlock?: (info: PenUnlockInfo) => void;
   penAssetSrc?: string;
   reducedMotion?: boolean;
+  showDebugControls?: boolean;
   tuning?: PenPhysicsTuningOverrides;
 };
 
@@ -31,6 +32,7 @@ export default function PenPullPrototype({
   onUnlock,
   penAssetSrc = "/held/fountainpenfull.png",
   reducedMotion,
+  showDebugControls = false,
   tuning,
 }: PenPullPrototypeProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -160,7 +162,7 @@ export default function PenPullPrototype({
 
           <img
             alt=""
-            className={`pointer-events-none absolute left-1/2 top-[29%] z-10 w-[92%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
+            className={`pointer-events-none absolute bottom-[-1px] left-1/2 z-10 w-[95%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
               composerOpen ? "opacity-35" : "opacity-100"
             }`}
             draggable={false}
@@ -191,15 +193,6 @@ export default function PenPullPrototype({
             penAssetSrc={penAssetSrc}
             transformOrigin="50% 3%"
           />
-
-          <div
-            className={`pointer-events-none absolute bottom-[9%] left-[8%] z-10 max-w-[240px] text-[18px] leading-6 text-[#3c332a] transition-opacity duration-[260ms] ${
-              composerOpen ? "opacity-0" : "opacity-100"
-            }`}
-          >
-            <p>Pull the pen.</p>
-            <p className="font-serif italic">The cradle wakes.</p>
-          </div>
 
           <div
             className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 transition-transform duration-[420ms] ${
@@ -240,26 +233,28 @@ export default function PenPullPrototype({
             />
           )}
 
-          <div className="absolute bottom-4 left-4 z-50 flex gap-2 text-[11px] text-[#3b3128]">
-            <button
-              className="rounded-full border border-[#a98545]/45 bg-[#fbf6eb]/80 px-3 py-2 shadow-sm backdrop-blur"
-              onClick={() => setDebug(isOpen => !isOpen)}
-              type="button"
-            >
-              debug {debug ? "on" : "off"}
-            </button>
-            {physics.tilt.permissionStatus === "prompt" && (
+          {showDebugControls && (
+            <div className="absolute bottom-4 left-4 z-50 flex gap-2 text-[11px] text-[#3b3128]">
               <button
                 className="rounded-full border border-[#a98545]/45 bg-[#fbf6eb]/80 px-3 py-2 shadow-sm backdrop-blur"
-                onClick={physics.requestMotionPermission}
+                onClick={() => setDebug(isOpen => !isOpen)}
                 type="button"
               >
-                enable motion
+                debug {debug ? "on" : "off"}
               </button>
-            )}
-          </div>
+              {physics.tilt.permissionStatus === "prompt" && (
+                <button
+                  className="rounded-full border border-[#a98545]/45 bg-[#fbf6eb]/80 px-3 py-2 shadow-sm backdrop-blur"
+                  onClick={physics.requestMotionPermission}
+                  type="button"
+                >
+                  enable motion
+                </button>
+              )}
+            </div>
+          )}
 
-          {debug && (
+          {showDebugControls && debug && (
             <PenPhysicsDebugPanel
               fallbackTilt={physics.tilt.fallbackAngle}
               motionStatus={physics.tilt.permissionStatus}

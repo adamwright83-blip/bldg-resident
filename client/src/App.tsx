@@ -49,7 +49,9 @@ function PageSwitch() {
     location.startsWith("/marketplace/") ||
     location.startsWith("/pulse")
   ) {
-    return <PenPullPrototype />;
+    return (
+      <PenPullPrototype showDebugControls={location === "/held-pen-prototype"} />
+    );
   }
 
   if (/^\/orders\/[^/]+/.test(location)) {
