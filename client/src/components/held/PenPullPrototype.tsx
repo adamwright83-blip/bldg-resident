@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { HeldVoiceCaptureTray } from "./HeldVoiceCaptureTray";
 import { PenChain } from "./PenChain";
 import { PenCharm } from "./PenCharm";
 import { PenPhysicsDebugPanel } from "./PenPhysicsDebugPanel";
@@ -24,7 +25,7 @@ const HELD_ASSETS = {
   tray: "/held/nursery-heldscreen.png",
 };
 
-type PrototypeMode = "rest" | "speech" | "typing";
+type PrototypeMode = "rest" | "choice" | "speech" | "typing";
 
 export default function PenPullPrototype({
   composerOpen: controlledComposerOpen,
@@ -40,14 +41,33 @@ export default function PenPullPrototype({
   const [draft, setDraft] = useState("");
   const [internalComposerOpen, setInternalComposerOpen] = useState(false);
   const [mode, setMode] = useState<PrototypeMode>("rest");
-  const speechCloseTimerRef = useRef<number | null>(null);
+  const [speechTranscript, setSpeechTranscript] = useState("");
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
+  const composerVisible = composerOpen && mode !== "speech";
   const microphoneClassName =
-    mode === "speech"
-      ? "translate-y-[140px] opacity-100 scale-100"
+    mode === "choice" || mode === "speech"
+      ? "translate-y-[300px] opacity-100 scale-100"
       : mode === "typing"
-        ? "translate-y-[34px] opacity-80 scale-90"
-        : "-translate-y-[72px] opacity-0 scale-90";
+        ? "-translate-y-[120px] opacity-0 scale-90"
+        : "-translate-y-[120px] opacity-0 scale-90";
+  const enterSpeechMode = () => {
+    setMode("speech");
+
+    if (controlledComposerOpen === undefined) {
+      setInternalComposerOpen(false);
+    }
+  };
+  const enterTypingMode = () => {
+    if (!draft && speechTranscript) {
+      setDraft(speechTranscript);
+    }
+
+    setMode("typing");
+
+    if (controlledComposerOpen === undefined) {
+      setInternalComposerOpen(true);
+    }
+  };
   const physicsTuning = useMemo(
     () => ({
       ...HELD_LARGE_PEN_TUNING,
@@ -65,27 +85,14 @@ export default function PenPullPrototype({
   );
 
   const physics = usePenPhysics({
-    composerOpen,
+    composerOpen: composerVisible,
     debug,
-    onComposerPenSwipe: () => {
-      setMode("speech");
-
-      if (speechCloseTimerRef.current !== null) {
-        window.clearTimeout(speechCloseTimerRef.current);
-      }
-
-      if (controlledComposerOpen === undefined) {
-        speechCloseTimerRef.current = window.setTimeout(() => {
-          setInternalComposerOpen(false);
-          speechCloseTimerRef.current = null;
-        }, 180);
-      }
-    },
+    onComposerPenSwipe: enterSpeechMode,
     onUnlock: info => {
       if (controlledComposerOpen === undefined) {
         setInternalComposerOpen(true);
       }
-      setMode("speech");
+      setMode("choice");
       onUnlock?.(info);
     },
     reducedMotion,
@@ -98,17 +105,10 @@ export default function PenPullPrototype({
       setInternalComposerOpen(false);
     }
     setDraft("");
+    setSpeechTranscript("");
     setMode("rest");
     physics.reset();
   };
-
-  useEffect(() => {
-    return () => {
-      if (speechCloseTimerRef.current !== null) {
-        window.clearTimeout(speechCloseTimerRef.current);
-      }
-    };
-  }, []);
 
   return (
     <main className="min-h-dvh overflow-hidden bg-[#151311] text-[#2C2824] sm:flex sm:items-center sm:justify-center sm:p-4">
@@ -116,7 +116,7 @@ export default function PenPullPrototype({
         <div
           ref={stageRef}
           className="relative h-full w-full overflow-hidden bg-[#f4ecdf]"
-          data-composer-open={composerOpen ? "true" : "false"}
+          data-composer-open={composerVisible ? "true" : "false"}
           data-held-mode={mode}
           style={{
             backgroundImage: `linear-gradient(180deg, rgba(255,252,246,0.72), rgba(244,235,222,0.86)), url(${HELD_ASSETS.paper})`,
@@ -131,11 +131,19 @@ export default function PenPullPrototype({
 
           <img
             alt=""
-            className={`pointer-events-none absolute left-1/2 top-[-154px] z-30 w-[118px] -translate-x-1/2 select-none drop-shadow-[0_16px_26px_rgba(43,28,14,0.24)] transition-[opacity,transform] duration-[440ms] ease-out ${microphoneClassName}`}
+            className={`pointer-events-none absolute left-1/2 top-[-154px] z-30 w-[118px] -translate-x-1/2 select-none drop-shadow-[0_16px_26px_rgba(43,28,14,0.24)] transition-[opacity,transform] duration-[960ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${microphoneClassName}`}
             data-held-mic-mode={mode}
             draggable={false}
             src={HELD_ASSETS.microphone}
           />
+          {(mode === "choice" || mode === "speech") && (
+            <button
+              aria-label="Use microphone"
+              className="absolute left-1/2 top-[118px] z-[60] h-[150px] w-[150px] -translate-x-1/2 rounded-full opacity-0"
+              onClick={enterSpeechMode}
+              type="button"
+            />
+          )}
 
           <header className="pointer-events-none absolute left-[8%] top-[8%] z-20">
             <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
@@ -163,7 +171,7 @@ export default function PenPullPrototype({
           <img
             alt=""
             className={`pointer-events-none absolute bottom-[-1px] left-1/2 z-10 w-[95%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
-              composerOpen ? "opacity-35" : "opacity-100"
+              composerVisible || mode === "speech" ? "opacity-0" : "opacity-100"
             }`}
             draggable={false}
             src={HELD_ASSETS.tray}
@@ -172,31 +180,44 @@ export default function PenPullPrototype({
           <div
             aria-hidden="true"
             className={`pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
-              composerOpen ? "opacity-0" : "opacity-25"
+              composerVisible || mode === "speech" ? "opacity-0" : "opacity-25"
             }`}
           />
 
-          <PenChain
-            {...physics.chainRefs}
-            anchorFill="#9f7528"
-            anchorRadius={2.6}
-            glintStrokeWidth={2.1}
-            highlightStroke="rgba(255, 234, 178, 0.58)"
-            highlightStrokeWidth={0.8}
-            mainStroke="rgba(154, 107, 31, 0.78)"
-            mainStrokeWidth={2}
-          />
-          <PenCharm
-            {...physics.penRefs}
-            {...physics.pointerHandlers}
-            objectFit="contain"
-            penAssetSrc={penAssetSrc}
-            transformOrigin="50% 3%"
+          <HeldVoiceCaptureTray
+            active={mode === "speech"}
+            onEditRequest={enterTypingMode}
+            onTranscriptChange={setSpeechTranscript}
+            transcript={speechTranscript}
           />
 
+          {mode !== "speech" && (
+            <>
+              <PenChain
+                {...physics.chainRefs}
+                anchorFill="#9f7528"
+                anchorRadius={2.6}
+                glintStrokeWidth={2.1}
+                highlightStroke="rgba(255, 234, 178, 0.58)"
+                highlightStrokeWidth={0.8}
+                mainStroke="rgba(154, 107, 31, 0.78)"
+                mainStrokeWidth={2}
+              />
+              <PenCharm
+                {...physics.penRefs}
+                {...physics.pointerHandlers}
+                objectFit="contain"
+                penAssetSrc={penAssetSrc}
+                transformOrigin="50% 3%"
+              />
+            </>
+          )}
+
           <div
-            className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 transition-transform duration-[420ms] ${
-              composerOpen ? "translate-y-0" : "translate-y-[112%]"
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 transition-[opacity,transform] duration-[520ms] ${
+              composerVisible
+                ? "translate-y-0 opacity-100"
+                : "translate-y-[112%] opacity-0"
             }`}
             style={{
               transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
@@ -210,7 +231,7 @@ export default function PenPullPrototype({
             />
           </div>
 
-          {composerOpen && (
+          {composerVisible && (
             <input
               aria-label="Prototype composer input"
               className="absolute bottom-[214px] left-[11%] right-[16%] z-50 h-10 rounded-full border border-[#9f875f]/25 bg-[#fffaf2]/55 px-4 text-[16px] text-[#2c2824] shadow-sm outline-none placeholder:text-[#8f8170]"
@@ -218,19 +239,29 @@ export default function PenPullPrototype({
               onChange={event => {
                 setDraft(event.currentTarget.value);
                 if (event.currentTarget.value.length > 0) {
-                  setMode("typing");
+                  enterTypingMode();
                 }
               }}
               onFocus={() => {
                 if (draft.length > 0) {
-                  setMode("typing");
+                  enterTypingMode();
                 }
               }}
-              onKeyDown={() => setMode("typing")}
+              onKeyDown={enterTypingMode}
               placeholder="Type your message..."
               type="text"
               value={draft}
             />
+          )}
+
+          {mode === "choice" && (
+            <button
+              className="absolute bottom-8 left-1/2 z-[60] -translate-x-1/2 text-[16px] text-[#9a681f] transition-opacity duration-300"
+              onClick={enterSpeechMode}
+              type="button"
+            >
+              Tap to speak
+            </button>
           )}
 
           {showDebugControls && (
