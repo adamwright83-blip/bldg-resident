@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 type VoiceState = "idle" | "mic-entering" | "listening" | "holding";
+type RecognitionStatus =
+  | "idle"
+  | "listening"
+  | "heardVoice"
+  | "textReady"
+  | "unavailable";
 
 type InkPoint = {
   x: number;
@@ -16,6 +22,7 @@ type SpeechRecognitionLike = {
   stop: () => void;
   onend: ((event?: unknown) => void) | null;
   onerror: ((event?: unknown) => void) | null;
+  onstart: (() => void) | null;
   onresult:
     | ((event: {
         results: ArrayLike<{
@@ -117,29 +124,49 @@ export function HeldVoiceCaptureTray({
   const pointsRef = useRef<InkPoint[]>(seedPoints());
   const rafRef = useRef<number | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionRestartRef = useRef<number | null>(null);
   const smoothedAmpRef = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
+  const transcriptRef = useRef(transcript);
   const chainRef = useRef<HTMLImageElement | null>(null);
   const nibRef = useRef<HTMLImageElement | null>(null);
-  const displayTranscript =
-    transcript?.trim() || "Listening for what you need.";
+  const [recognitionStatus, setRecognitionStatus] =
+    useState<RecognitionStatus>("idle");
+  const displayTranscript = transcript?.trim()
+    ? transcript
+    : recognitionStatus === "heardVoice"
+      ? "I hear you. Turning your words into a request."
+      : recognitionStatus === "unavailable"
+        ? "I hear you. Tap the square to type what I missed."
+        : "Listening for what you need.";
 
   useEffect(() => {
     onTranscriptChangeRef.current = onTranscriptChange;
   }, [onTranscriptChange]);
 
   useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
+
+  useEffect(() => {
     if (!active) {
       setVoiceState("idle");
+      setRecognitionStatus("idle");
       return undefined;
     }
 
     let cancelled = false;
+    let recognitionBlocked = false;
 
     const cleanup = () => {
       if (rafRef.current !== null) {
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+
+      if (recognitionRestartRef.current !== null) {
+        window.clearTimeout(recognitionRestartRef.current);
+        recognitionRestartRef.current = null;
       }
 
       recognitionRef.current?.abort();
@@ -214,6 +241,11 @@ export function HeldVoiceCaptureTray({
         analyser.getByteTimeDomainData(data);
         const rawAmp = getAmplitude(data);
         smoothedAmpRef.current = smoothedAmpRef.current * 0.82 + rawAmp * 0.18;
+        if (rawAmp > 0.055 && !transcriptRef.current?.trim()) {
+          setRecognitionStatus(current =>
+            current === "textReady" ? current : "heardVoice"
+          );
+        }
       } else {
         smoothedAmpRef.current = smoothedAmpRef.current * 0.9 + 0.006;
       }
@@ -229,6 +261,7 @@ export function HeldVoiceCaptureTray({
       ) as unknown as (new () => SpeechRecognitionLike) | undefined;
 
       if (!SpeechRecognitionConstructor) {
+        setRecognitionStatus("unavailable");
         return;
       }
 
@@ -236,6 +269,13 @@ export function HeldVoiceCaptureTray({
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "en-US";
+      recognition.onstart = () => {
+        setRecognitionStatus(current =>
+          current === "heardVoice" || current === "textReady"
+            ? current
+            : "listening"
+        );
+      };
       recognition.onresult = event => {
         const words: string[] = [];
 
@@ -245,17 +285,40 @@ export function HeldVoiceCaptureTray({
 
         const nextTranscript = words.join(" ").replace(/\s+/g, " ").trim();
         if (nextTranscript) {
+          setRecognitionStatus("textReady");
           onTranscriptChangeRef.current?.(nextTranscript);
         }
       };
-      recognition.onerror = null;
-      recognition.onend = null;
+      recognition.onerror = event => {
+        const error = String(
+          event && typeof event === "object" && "error" in event
+            ? event.error
+            : ""
+        );
+
+        if (error === "not-allowed" || error === "service-not-allowed") {
+          recognitionBlocked = true;
+          setRecognitionStatus("unavailable");
+        }
+      };
+      recognition.onend = () => {
+        recognitionRef.current = null;
+
+        if (cancelled || recognitionBlocked) {
+          return;
+        }
+
+        recognitionRestartRef.current = window.setTimeout(() => {
+          startSpeechRecognition();
+        }, 260);
+      };
       recognitionRef.current = recognition;
 
       try {
         recognition.start();
       } catch {
         recognitionRef.current = null;
+        setRecognitionStatus("unavailable");
       }
     };
 
@@ -272,6 +335,7 @@ export function HeldVoiceCaptureTray({
         }
 
         setVoiceState("listening");
+        startSpeechRecognition();
         tick();
 
         try {
@@ -290,8 +354,6 @@ export function HeldVoiceCaptureTray({
           audioContextRef.current = audioContext;
           analyserRef.current = analyser;
           dataRef.current = new Uint8Array(analyser.frequencyBinCount);
-
-          startSpeechRecognition();
         } catch {
           analyserRef.current = null;
           dataRef.current = null;
