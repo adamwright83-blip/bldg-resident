@@ -27,6 +27,7 @@ const HELD_ASSETS = {
   crest: "/held/crest-h-flat.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
+  postTokenField: "/held/textfield-posttoken.png",
   tokenCarDetail: "/held/token-cardetail.png",
   tokenDogGroom: "/held/token-doggroom.png",
   tokenLaundry: "/held/token-laundry.png",
@@ -566,16 +567,24 @@ function HeldTransformingState({
         ))}
       </div>
       <div
-        className={`absolute bottom-[8%] left-1/2 z-30 w-[82%] -translate-x-1/2 rounded border border-[#cdbb9d]/70 bg-[#fff8ec]/64 px-5 py-4 shadow-[0_10px_18px_rgba(54,38,23,0.10)] transition-all duration-700 ${
+        className={`absolute bottom-[8%] left-1/2 z-30 w-[84%] -translate-x-1/2 transition-all duration-700 ${
           isHeld ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
         }`}
       >
-        <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
-          Your request
-        </p>
-        <p className="mt-2 font-serif text-[15px] italic leading-5 text-[#2f2923]">
-          {displayRequest || "Working in motion."}
-        </p>
+        <img
+          alt=""
+          className="pointer-events-none w-full select-none drop-shadow-[0_10px_18px_rgba(54,38,23,0.10)]"
+          draggable={false}
+          src={HELD_ASSETS.postTokenField}
+        />
+        <div className="pointer-events-none absolute inset-x-[18%] top-[32%] text-center">
+          <p className="font-serif text-[13px] italic leading-4 text-[#4f4439]">
+            I&apos;m working a motion.
+          </p>
+          <p className="mt-1 font-serif text-[11px] italic leading-4 text-[#7a6d5f]">
+            10:37 held by from here.
+          </p>
+        </div>
       </div>
     </div>
   );
