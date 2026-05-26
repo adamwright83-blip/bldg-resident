@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseHeldVoiceIntent } from "../../server/_core/heldVoiceIntent";
-import { transcribeAudioBuffer } from "../../server/_core/voiceTranscription";
+import { parseHeldCommand } from "./_intent";
+import { transcribeWithOpenAI } from "./_transcribe";
 
 type HeldVoiceCommandBody = {
   audioBase64?: string;
@@ -24,9 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const audioBuffer = Buffer.from(stripDataUrlPrefix(audioBase64), "base64");
-    const transcription = await transcribeAudioBuffer({
+    const transcription = await transcribeWithOpenAI({
       audioBuffer,
-      language: "en",
       mimeType,
       prompt:
         "Transcribe the resident's spoken service request exactly enough for intent parsing. Preserve dates, deadlines, names, locations, flight numbers, allergies, and constraints.",
@@ -40,8 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const rawTranscript = transcription.text.replace(/\s+/g, " ").trim();
-    const parsedIntent = await parseHeldVoiceIntent(rawTranscript);
+    const rawTranscript = transcription.text;
+    const parsedIntent = await parseHeldCommand(rawTranscript);
 
     res.status(200).json({
       rawTranscript,

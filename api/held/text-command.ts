@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseHeldVoiceIntent } from "../../server/_core/heldVoiceIntent";
+import { parseHeldCommand } from "./_intent";
 
 type HeldTextCommandBody = {
   text?: string;
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const parsedIntent = await parseHeldVoiceIntent(rawTranscript);
+    const parsedIntent = await parseHeldCommand(rawTranscript);
 
     res.status(200).json({
       rawTranscript,
