@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseHeldCommand } from "./_intent";
-import { transcribeWithOpenAI } from "./_transcribe";
+import { parseHeldCommand } from "./_intent.js";
+import { transcribeWithOpenAI } from "./_transcribe.js";
 
 type HeldVoiceCommandBody = {
   audioBase64?: string;
