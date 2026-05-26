@@ -26,6 +26,10 @@ const HELD_ASSETS = {
 };
 
 type PrototypeMode = "rest" | "choice" | "speech" | "typing";
+type HeldTextCommandResponse = {
+  displayRequest: string;
+  rawTranscript: string;
+};
 
 export default function PenPullPrototype({
   composerOpen: controlledComposerOpen,
@@ -42,6 +46,9 @@ export default function PenPullPrototype({
   const [internalComposerOpen, setInternalComposerOpen] = useState(false);
   const [mode, setMode] = useState<PrototypeMode>("rest");
   const [speechTranscript, setSpeechTranscript] = useState("");
+  const [typedCommandStatus, setTypedCommandStatus] = useState<
+    "idle" | "summarizing" | "ready" | "error"
+  >("idle");
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
   const composerVisible = composerOpen && mode !== "speech";
   const microphoneClassName =
@@ -66,6 +73,37 @@ export default function PenPullPrototype({
 
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(true);
+    }
+  };
+  const submitTypedCommand = async () => {
+    const text = draft.trim();
+    if (!text || typedCommandStatus === "summarizing") {
+      return;
+    }
+
+    setTypedCommandStatus("summarizing");
+
+    try {
+      const response = await fetch("/api/held/text-command", {
+        body: JSON.stringify({ text }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Text command failed: ${response.status}`);
+      }
+
+      const result = (await response.json()) as HeldTextCommandResponse;
+      const displayRequest = result.displayRequest?.trim() || result.rawTranscript || text;
+      setDraft(displayRequest);
+      setSpeechTranscript(displayRequest);
+      setTypedCommandStatus("ready");
+    } catch (error) {
+      console.error("[PenPullPrototype] typed command failed", error);
+      setTypedCommandStatus("error");
     }
   };
   const physicsTuning = useMemo(
@@ -106,6 +144,7 @@ export default function PenPullPrototype({
     }
     setDraft("");
     setSpeechTranscript("");
+    setTypedCommandStatus("idle");
     setMode("rest");
     physics.reset();
   };
@@ -238,6 +277,7 @@ export default function PenPullPrototype({
               data-testid="held-composer-input"
               onChange={event => {
                 setDraft(event.currentTarget.value);
+                setTypedCommandStatus("idle");
                 if (event.currentTarget.value.length > 0) {
                   enterTypingMode();
                 }
@@ -247,11 +287,39 @@ export default function PenPullPrototype({
                   enterTypingMode();
                 }
               }}
-              onKeyDown={enterTypingMode}
+              onKeyDown={event => {
+                enterTypingMode();
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void submitTypedCommand();
+                }
+              }}
               placeholder="Type your message..."
               type="text"
               value={draft}
             />
+          )}
+
+          {composerVisible && (
+            <button
+              aria-label="Set typed request"
+              className="absolute bottom-[214px] right-[8%] z-[60] h-10 w-10 rounded-full opacity-0"
+              onClick={() => void submitTypedCommand()}
+              type="button"
+            />
+          )}
+
+          {composerVisible && typedCommandStatus !== "idle" && (
+            <p
+              aria-live="polite"
+              className="pointer-events-none absolute bottom-[266px] left-[11%] right-[11%] z-50 text-[12px] italic text-[#8c6a34]"
+            >
+              {typedCommandStatus === "summarizing"
+                ? "Making sense of it."
+                : typedCommandStatus === "ready"
+                  ? "Set it in motion →"
+                  : "I could not read that request yet."}
+            </p>
           )}
 
           {mode === "choice" && (
