@@ -191,7 +191,7 @@ function detectTiming(lower: string) {
 }
 
 function detectDeadline(lower: string) {
-  const returnBy = lower.match(/\b(?:returned?|done|finished|back)\s+(?:by|before)\s+([a-z]+(?:\s+(?:morning|afternoon|evening|night))?)/);
+  const returnBy = lower.match(/\b(?:returned?|return(?:\s+it)?|done|finished|back)\s+(?:by|before)\s+([a-z]+(?:\s+(?:morning|afternoon|evening|night))?)/);
   if (returnBy?.[1]) return returnBy[1];
 
   const before = lower.match(/\bbefore\s+([a-z]+(?:\s+(?:morning|afternoon|evening|night))?)/);
