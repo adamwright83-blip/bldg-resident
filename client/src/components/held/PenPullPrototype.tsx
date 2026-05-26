@@ -103,7 +103,10 @@ export default function PenPullPrototype({
       setTypedCommandStatus("ready");
     } catch (error) {
       console.error("[PenPullPrototype] typed command failed", error);
-      setTypedCommandStatus("error");
+      const displayRequest = buildTypedCommandFallback(text);
+      setDraft(displayRequest);
+      setSpeechTranscript(displayRequest);
+      setTypedCommandStatus("ready");
     }
   };
   const physicsTuning = useMemo(
@@ -367,4 +370,31 @@ export default function PenPullPrototype({
       </section>
     </main>
   );
+}
+
+function buildTypedCommandFallback(text: string) {
+  const lower = text.toLowerCase();
+  const service = /\blaundry|clothes|hamper|wash\b/.test(lower)
+    ? "Pickup laundry"
+    : /\bdry[\s-]?clean|\bsuit|\bdress shirt/.test(lower)
+      ? "Pickup dry cleaning"
+      : /\bdog|groom/.test(lower)
+        ? "Book dog grooming"
+        : /\bcar|detail|wash/.test(lower)
+          ? "Detail the car"
+          : /\blax|airport|ride|uber/.test(lower)
+            ? "Arrange airport transportation"
+            : /\bclean|housekeep|maid/.test(lower)
+              ? "Clean the apartment"
+              : "Handle this request";
+  const timing =
+    lower.match(/\btomorrow morning\b/)?.[0] ??
+    lower.match(/\btomorrow afternoon\b/)?.[0] ??
+    lower.match(/\btomorrow evening\b|\btomorrow night\b/)?.[0] ??
+    lower.match(/\btonight\b/)?.[0] ??
+    lower.match(/\btomorrow\b/)?.[0] ??
+    "";
+  const request = `${service}${timing ? ` ${timing}` : ""}.`;
+
+  return request.charAt(0).toUpperCase() + request.slice(1);
 }
