@@ -663,7 +663,7 @@ function getRequestCopy({
   }
 
   if (voiceStatus === "error") {
-    return "I heard you, but I need you to type this one.";
+    return "I heard your voice, but the request could not be read. Tap the square to type it.";
   }
 
   if (displayRequest.trim()) {
