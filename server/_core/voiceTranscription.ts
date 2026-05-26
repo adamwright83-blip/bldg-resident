@@ -33,6 +33,13 @@ export type TranscribeOptions = {
   prompt?: string; // Optional: custom prompt for the transcription
 };
 
+export type TranscribeBufferOptions = {
+  audioBuffer: Buffer;
+  mimeType: string;
+  language?: string;
+  prompt?: string;
+};
+
 // Native Whisper API segment format
 export type WhisperSegment = {
   id: number;
@@ -192,6 +199,115 @@ export async function transcribeAudio(
       details: error instanceof Error ? error.message : "An unexpected error occurred"
     };
   }
+}
+
+export async function transcribeAudioBuffer(
+  options: TranscribeBufferOptions
+): Promise<TranscriptionResponse | TranscriptionError> {
+  try {
+    const configError = validateTranscriptionConfig();
+    if (configError) return configError;
+
+    const sizeMB = options.audioBuffer.length / (1024 * 1024);
+    if (sizeMB > 16) {
+      return {
+        error: "Audio file exceeds maximum size limit",
+        code: "FILE_TOO_LARGE",
+        details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`,
+      };
+    }
+
+    return await sendBufferToTranscriptionService({
+      audioBuffer: options.audioBuffer,
+      language: options.language,
+      mimeType: options.mimeType,
+      prompt: options.prompt,
+    });
+  } catch (error) {
+    return {
+      error: "Voice transcription failed",
+      code: "SERVICE_ERROR",
+      details: error instanceof Error ? error.message : "An unexpected error occurred",
+    };
+  }
+}
+
+function validateTranscriptionConfig(): TranscriptionError | null {
+  if (!ENV.forgeApiUrl) {
+    return {
+      error: "Voice transcription service is not configured",
+      code: "SERVICE_ERROR",
+      details: "BUILT_IN_FORGE_API_URL is not set",
+    };
+  }
+
+  if (!ENV.forgeApiKey) {
+    return {
+      error: "Voice transcription service authentication is missing",
+      code: "SERVICE_ERROR",
+      details: "BUILT_IN_FORGE_API_KEY is not set",
+    };
+  }
+
+  return null;
+}
+
+async function sendBufferToTranscriptionService(
+  options: Required<Pick<TranscribeBufferOptions, "audioBuffer" | "mimeType">> &
+    Pick<TranscribeBufferOptions, "language" | "prompt">
+): Promise<TranscriptionResponse | TranscriptionError> {
+  const formData = new FormData();
+  const filename = `audio.${getFileExtension(options.mimeType)}`;
+  const audioBlob = new Blob([new Uint8Array(options.audioBuffer)], {
+    type: options.mimeType,
+  });
+
+  formData.append("file", audioBlob, filename);
+  formData.append("model", "whisper-1");
+  formData.append("response_format", "verbose_json");
+  formData.append(
+    "prompt",
+    options.prompt ||
+      (options.language
+        ? `Transcribe the resident's voice command to text. The resident's working language is ${getLanguageName(
+            options.language
+          )}.`
+        : "Transcribe the resident's voice command to text.")
+  );
+
+  const baseUrl = ENV.forgeApiUrl.endsWith("/")
+    ? ENV.forgeApiUrl
+    : `${ENV.forgeApiUrl}/`;
+  const fullUrl = new URL("v1/audio/transcriptions", baseUrl).toString();
+
+  const response = await fetch(fullUrl, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${ENV.forgeApiKey}`,
+      "Accept-Encoding": "identity",
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    return {
+      error: "Transcription service request failed",
+      code: "TRANSCRIPTION_FAILED",
+      details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}`,
+    };
+  }
+
+  const whisperResponse = (await response.json()) as WhisperResponse;
+  if (!whisperResponse.text || typeof whisperResponse.text !== "string") {
+    return {
+      error: "Invalid transcription response",
+      code: "SERVICE_ERROR",
+      details: "Transcription service returned an invalid response format",
+    };
+  }
+
+  return whisperResponse;
 }
 
 /**
