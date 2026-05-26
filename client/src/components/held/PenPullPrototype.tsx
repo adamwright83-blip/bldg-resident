@@ -25,6 +25,7 @@ type PenPullPrototypeProps = {
 const HELD_ASSETS = {
   composer: "/held/nursery-composer.png",
   crest: "/held/crest-h-flat.png",
+  laundryProvider: "/held/laundry-butler-provider.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
   postTokenField: "/held/textfield-posttoken.png",
@@ -51,6 +52,11 @@ type HeldTextCommandResponse = {
     services?: HeldParsedService[];
   };
   rawTranscript: string;
+};
+
+type HeldTokenAsset = {
+  src: string;
+  type: string;
 };
 
 export default function PenPullPrototype({
@@ -465,8 +471,23 @@ function HeldTransformingState({
   isHeld: boolean;
   services: HeldParsedService[];
 }) {
+  const longPressTimerRef = useRef<number | null>(null);
+  const [detailService, setDetailService] = useState<string | null>(null);
   const tokens = getTokenAssets(services, displayRequest);
   const path = getHeldCompositePath(displayRequest, services);
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  const startTokenPress = (token: HeldTokenAsset) => {
+    clearLongPress();
+    longPressTimerRef.current = window.setTimeout(() => {
+      setDetailService(token.type);
+      longPressTimerRef.current = null;
+    }, 420);
+  };
 
   return (
     <div className="absolute inset-0 z-[85] overflow-hidden bg-[#f4ecdf]">
@@ -543,31 +564,44 @@ function HeldTransformingState({
       <img
         alt=""
         className={`pointer-events-none absolute left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
-          isHeld ? "bottom-[14%] opacity-100" : "bottom-[-2%] opacity-80"
+          isHeld ? "bottom-[34%] opacity-100" : "bottom-[-2%] opacity-80"
         }`}
         draggable={false}
         src={HELD_ASSETS.trayClayTokens}
       />
       <div
         className={`absolute left-1/2 z-20 flex w-[72%] -translate-x-1/2 items-end justify-center gap-4 transition-all duration-700 ${
-          isHeld ? "bottom-[31%]" : "bottom-[15%]"
+          isHeld ? "bottom-[52%]" : "bottom-[15%]"
         }`}
       >
         {tokens.map((token, index) => (
-          <img
-            alt=""
+          <button
+            aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
             className={`h-16 w-16 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-[900ms] ${
               isHeld ? "translate-y-0 rotate-0 opacity-100" : "-translate-y-40 rotate-[-12deg] opacity-0"
             }`}
-            draggable={false}
-            key={`${token}-${index}`}
-            src={token}
+            key={`${token.src}-${index}`}
+            onClick={() => {
+              if (token.type === "laundry_pickup") setDetailService(token.type);
+            }}
+            onPointerCancel={clearLongPress}
+            onPointerDown={() => startTokenPress(token)}
+            onPointerLeave={clearLongPress}
+            onPointerUp={clearLongPress}
             style={{ transitionDelay: `${index * 90}ms` }}
-          />
+            type="button"
+          >
+            <img
+              alt=""
+              className="h-full w-full object-contain"
+              draggable={false}
+              src={token.src}
+            />
+          </button>
         ))}
       </div>
       <div
-        className={`absolute bottom-[8%] left-1/2 z-30 w-[84%] -translate-x-1/2 transition-all duration-700 ${
+        className={`absolute bottom-[3%] left-1/2 z-30 w-[84%] -translate-x-1/2 transition-all duration-700 ${
           isHeld ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
         }`}
       >
@@ -586,6 +620,9 @@ function HeldTransformingState({
           </p>
         </div>
       </div>
+      {detailService === "laundry_pickup" && (
+        <LaundryServiceDetail onClose={() => setDetailService(null)} />
+      )}
     </div>
   );
 }
@@ -597,17 +634,89 @@ const INK_NODES = [
   { dx: 56, dy: 282, x: 69, y: 55 },
 ];
 
-function getTokenAssets(services: HeldParsedService[], request: string) {
+function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
+  return (
+    <section className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ecdf] text-[#2d251d]">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,252,246,0.82), rgba(244,235,222,0.92)), url(/held/held-paper-bg.png)",
+          backgroundPosition: "center",
+          backgroundSize: "cover, 420px 420px",
+        }}
+      />
+      <button
+        aria-label="Close service details"
+        className="absolute right-[7%] top-[7%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b78a35]/70 bg-[#fff8ec]/70 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        onClick={onClose}
+        type="button"
+      >
+        H
+      </button>
+      <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[8%]">
+        <p className="text-center font-serif text-[28px] tracking-[0.04em]">
+          HELD.chat
+        </p>
+        <h1 className="mt-5 text-center font-serif text-[48px] italic leading-none">
+          Laundry Butler
+        </h1>
+        <div className="mt-7 flex items-center gap-5">
+          <img
+            alt="Laundry Butler provider holding review certificates"
+            className="h-[132px] w-[132px] rounded-full border border-[#b78a35] object-cover shadow-[0_16px_28px_rgba(45,29,16,0.18)]"
+            draggable={false}
+            src={HELD_ASSETS.laundryProvider}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-serif text-[23px] leading-7">
+              Alex from Laundry Butler
+            </p>
+            <p className="mt-2 text-[28px] tracking-[0.08em] text-[#b1802b]">
+              ★★★★★ <span className="font-serif text-[22px] tracking-normal text-[#2d251d]">5.0</span>
+            </p>
+            <p className="mt-1 font-serif text-[16px] text-[#6a5b4c]">
+              214 resident reviews
+            </p>
+          </div>
+        </div>
+        <div className="mt-7 rounded-[4px] border border-[#d3c3a9] bg-[#fff8ec]/62 px-5 py-4 shadow-[0_14px_26px_rgba(50,35,20,0.10)]">
+          <p className="text-center font-serif text-[18px] italic leading-6">
+            Pickup, wash, fold, and return handled by a resident-vouched provider.
+          </p>
+        </div>
+        <div className="mt-6">
+          <p className="text-center text-[11px] uppercase tracking-[0.32em] text-[#8b7a67]">
+            Service includes
+          </p>
+          <p className="mt-3 text-center font-serif text-[19px] leading-7">
+            Laundry pickup · Wash & fold · Return scheduling
+          </p>
+        </div>
+        <div className="mt-auto">
+          <img
+            alt=""
+            className="mx-auto w-[92%] drop-shadow-[0_18px_28px_rgba(45,29,16,0.20)]"
+            draggable={false}
+            src={HELD_ASSETS.trayClayTokens}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function getTokenAssets(services: HeldParsedService[], request: string): HeldTokenAsset[] {
   const serviceTypes = services.map(service => service.type).join(" ");
   const haystack = `${serviceTypes} ${request}`.toLowerCase();
-  const assets: string[] = [];
+  const assets: HeldTokenAsset[] = [];
 
-  if (/laundry/.test(haystack)) assets.push(HELD_ASSETS.tokenLaundry);
-  if (/dog|groom/.test(haystack)) assets.push(HELD_ASSETS.tokenDogGroom);
-  if (/car|detail|wash/.test(haystack)) assets.push(HELD_ASSETS.tokenCarDetail);
-  if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push(HELD_ASSETS.tokenRide);
+  if (/laundry/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
+  if (/dog|groom/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenDogGroom, type: "dog_grooming" });
+  if (/car|detail|wash/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenCarDetail, type: "car_detail" });
+  if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenRide, type: "ride_airport" });
 
-  return assets.length ? assets : [HELD_ASSETS.tokenLaundry];
+  return assets.length ? assets : [{ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" }];
 }
 
 function inferServicesFromRequest(request: string): HeldParsedService[] {
