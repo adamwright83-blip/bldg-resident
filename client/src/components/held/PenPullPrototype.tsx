@@ -1,4 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  HeldArtistDrawing,
+  type HeldParsedService,
+} from "./HeldArtistDrawing";
 import { HeldVoiceCaptureTray } from "./HeldVoiceCaptureTray";
 import { PenChain } from "./PenChain";
 import { PenCharm } from "./PenCharm";
@@ -22,12 +26,27 @@ const HELD_ASSETS = {
   crest: "/held/crest-h-flat.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
+  tokenCarDetail: "/held/token-cardetail.png",
+  tokenDogGroom: "/held/token-doggroom.png",
+  tokenLaundry: "/held/token-laundry.png",
+  tokenRide: "/held/token-uber_waymo.png",
   tray: "/held/nursery-heldscreen.png",
 };
 
-type PrototypeMode = "rest" | "choice" | "speech" | "typing";
+type PrototypeMode =
+  | "rest"
+  | "choice"
+  | "speech"
+  | "typing"
+  | "requestReady"
+  | "drawing"
+  | "transforming"
+  | "held";
 type HeldTextCommandResponse = {
   displayRequest: string;
+  parsedIntent?: {
+    services?: HeldParsedService[];
+  };
   rawTranscript: string;
 };
 
@@ -45,12 +64,18 @@ export default function PenPullPrototype({
   const [draft, setDraft] = useState("");
   const [internalComposerOpen, setInternalComposerOpen] = useState(false);
   const [mode, setMode] = useState<PrototypeMode>("rest");
+  const [confirmedRequest, setConfirmedRequest] = useState("");
+  const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>([]);
   const [speechTranscript, setSpeechTranscript] = useState("");
   const [typedCommandStatus, setTypedCommandStatus] = useState<
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
-  const composerVisible = composerOpen && mode !== "speech";
+  const composerVisible =
+    composerOpen &&
+    (mode === "choice" || mode === "typing" || mode === "requestReady");
+  const showHomeWorld =
+    mode === "rest" || mode === "choice" || mode === "speech" || mode === "typing" || mode === "requestReady";
   const microphoneClassName =
     mode === "choice" || mode === "speech"
       ? "translate-y-[300px] opacity-100 scale-100"
@@ -100,14 +125,32 @@ export default function PenPullPrototype({
       const displayRequest = result.displayRequest?.trim() || result.rawTranscript || text;
       setDraft(displayRequest);
       setSpeechTranscript(displayRequest);
+      setConfirmedRequest(displayRequest);
+      setConfirmedServices(result.parsedIntent?.services ?? []);
       setTypedCommandStatus("ready");
+      setMode("requestReady");
     } catch (error) {
       console.error("[PenPullPrototype] typed command failed", error);
       const displayRequest = buildTypedCommandFallback(text);
       setDraft(displayRequest);
       setSpeechTranscript(displayRequest);
+      setConfirmedRequest(displayRequest);
+      setConfirmedServices(inferServicesFromRequest(displayRequest));
       setTypedCommandStatus("ready");
+      setMode("requestReady");
     }
+  };
+  const confirmRequest = (request = confirmedRequest, services = confirmedServices) => {
+    const nextRequest = request.trim() || draft.trim() || speechTranscript.trim();
+    if (!nextRequest) return;
+
+    setConfirmedRequest(nextRequest);
+    setConfirmedServices(services.length ? services : inferServicesFromRequest(nextRequest));
+    setTypedCommandStatus("idle");
+    if (controlledComposerOpen === undefined) {
+      setInternalComposerOpen(false);
+    }
+    setMode("drawing");
   };
   const physicsTuning = useMemo(
     () => ({
@@ -141,12 +184,24 @@ export default function PenPullPrototype({
     tuning: physicsTuning,
   });
 
+  useEffect(() => {
+    if (mode !== "transforming") return undefined;
+
+    const timer = window.setTimeout(() => {
+      setMode("held");
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [mode]);
+
   const reset = () => {
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(false);
     }
     setDraft("");
     setSpeechTranscript("");
+    setConfirmedRequest("");
+    setConfirmedServices([]);
     setTypedCommandStatus("idle");
     setMode("rest");
     physics.reset();
@@ -171,13 +226,15 @@ export default function PenPullPrototype({
         >
           <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black sm:block" />
 
-          <img
-            alt=""
-            className={`pointer-events-none absolute left-1/2 top-[-154px] z-30 w-[118px] -translate-x-1/2 select-none drop-shadow-[0_16px_26px_rgba(43,28,14,0.24)] transition-[opacity,transform] duration-[960ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${microphoneClassName}`}
-            data-held-mic-mode={mode}
-            draggable={false}
-            src={HELD_ASSETS.microphone}
-          />
+          {showHomeWorld && (
+            <img
+              alt=""
+              className={`pointer-events-none absolute left-1/2 top-[-154px] z-30 w-[118px] -translate-x-1/2 select-none drop-shadow-[0_16px_26px_rgba(43,28,14,0.24)] transition-[opacity,transform] duration-[960ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${microphoneClassName}`}
+              data-held-mic-mode={mode}
+              draggable={false}
+              src={HELD_ASSETS.microphone}
+            />
+          )}
           {(mode === "choice" || mode === "speech") && (
             <button
               aria-label="Use microphone"
@@ -187,37 +244,41 @@ export default function PenPullPrototype({
             />
           )}
 
-          <header className="pointer-events-none absolute left-[8%] top-[8%] z-20">
+          {showHomeWorld && <header className="pointer-events-none absolute left-[8%] top-[8%] z-20">
             <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
             <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
               Residence 1807 · 12A
             </p>
-          </header>
+          </header>}
 
-          <img
-            alt=""
-            className="pointer-events-none absolute right-[7%] top-[7%] z-20 h-10 w-10 opacity-70"
-            draggable={false}
-            src={HELD_ASSETS.crest}
-          />
+          {showHomeWorld && (
+            <img
+              alt=""
+              className="pointer-events-none absolute right-[7%] top-[7%] z-20 h-10 w-10 opacity-70"
+              draggable={false}
+              src={HELD_ASSETS.crest}
+            />
+          )}
 
-          <section className="pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
+          {showHomeWorld && <section className="pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
             <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
               Held.
             </h1>
             <p className="mt-3 max-w-[160px] text-[14px] leading-5 text-[#55493d]">
               Nothing is in motion yet.
             </p>
-          </section>
+          </section>}
 
-          <img
-            alt=""
-            className={`pointer-events-none absolute bottom-[-1px] left-1/2 z-10 w-[95%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
-              composerVisible || mode === "speech" ? "opacity-0" : "opacity-100"
-            }`}
-            draggable={false}
-            src={HELD_ASSETS.tray}
-          />
+          {showHomeWorld && (
+            <img
+              alt=""
+              className={`pointer-events-none absolute bottom-[-1px] left-1/2 z-10 w-[95%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
+                composerVisible || mode === "speech" ? "opacity-0" : "opacity-100"
+              }`}
+              draggable={false}
+              src={HELD_ASSETS.tray}
+            />
+          )}
 
           <div
             aria-hidden="true"
@@ -228,12 +289,13 @@ export default function PenPullPrototype({
 
           <HeldVoiceCaptureTray
             active={mode === "speech"}
+            onConfirmRequest={(request, services) => confirmRequest(request, services)}
             onEditRequest={enterTypingMode}
             onTranscriptChange={setSpeechTranscript}
             transcript={speechTranscript}
           />
 
-          {mode !== "speech" && (
+          {showHomeWorld && mode !== "speech" && (
             <>
               <PenChain
                 {...physics.chainRefs}
@@ -313,16 +375,19 @@ export default function PenPullPrototype({
           )}
 
           {composerVisible && typedCommandStatus !== "idle" && (
-            <p
+            <button
               aria-live="polite"
-              className="pointer-events-none absolute bottom-[266px] left-[11%] right-[11%] z-50 text-[12px] italic text-[#8c6a34]"
+              className="absolute bottom-[266px] left-[11%] right-[11%] z-50 touch-manipulation text-left text-[12px] italic text-[#8c6a34] transition-transform duration-150 active:scale-[0.99]"
+              disabled={typedCommandStatus === "summarizing"}
+              onClick={() => confirmRequest()}
+              type="button"
             >
               {typedCommandStatus === "summarizing"
                 ? "Making sense of it."
                 : typedCommandStatus === "ready"
                   ? "Set it in motion →"
                   : "I could not read that request yet."}
-            </p>
+            </button>
           )}
 
           {mode === "choice" && (
@@ -366,10 +431,106 @@ export default function PenPullPrototype({
               snapshot={physics.debugSnapshot}
             />
           )}
+
+          {mode === "drawing" && (
+            <HeldArtistDrawing
+              displayRequest={confirmedRequest}
+              onDrawingComplete={() => setMode("transforming")}
+              services={confirmedServices}
+            />
+          )}
+
+          {(mode === "transforming" || mode === "held") && (
+            <HeldTransformingState
+              displayRequest={confirmedRequest}
+              isHeld={mode === "held"}
+              services={confirmedServices}
+            />
+          )}
         </div>
       </section>
     </main>
   );
+}
+
+function HeldTransformingState({
+  displayRequest,
+  isHeld,
+  services,
+}: {
+  displayRequest: string;
+  isHeld: boolean;
+  services: HeldParsedService[];
+}) {
+  const tokens = getTokenAssets(services, displayRequest);
+
+  return (
+    <div className="absolute inset-0 z-[85] overflow-hidden bg-[#f4ecdf]">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,252,246,0.78), rgba(244,235,222,0.9)), url(/held/held-paper-bg.png)",
+          backgroundPosition: "center",
+          backgroundSize: "cover, 420px 420px",
+        }}
+      />
+      <header className="pointer-events-none absolute left-[8%] top-[8%] z-10">
+        <p className="text-[15px] tracking-[0.08em] text-[#2d251d]">HELD.chat</p>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
+          {isHeld ? "Held." : "Taking custody."}
+        </p>
+      </header>
+      <p className="pointer-events-none absolute left-[10%] right-[10%] top-[22%] z-10 text-center font-serif text-[17px] italic leading-6 text-[#3f342b]">
+        {displayRequest}
+      </p>
+      <img
+        alt=""
+        className="pointer-events-none absolute bottom-[-2%] left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
+        draggable={false}
+        src="/held/nursery-tray.png"
+      />
+      <div className="absolute bottom-[15%] left-1/2 z-20 flex w-[72%] -translate-x-1/2 items-end justify-center gap-4">
+        {tokens.map((token, index) => (
+          <img
+            alt=""
+            className={`h-16 w-16 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-700 ${
+              isHeld ? "translate-y-0 opacity-100" : "-translate-y-16 opacity-0"
+            }`}
+            draggable={false}
+            key={`${token}-${index}`}
+            src={token}
+            style={{ transitionDelay: `${index * 90}ms` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getTokenAssets(services: HeldParsedService[], request: string) {
+  const serviceTypes = services.map(service => service.type).join(" ");
+  const haystack = `${serviceTypes} ${request}`.toLowerCase();
+  const assets: string[] = [];
+
+  if (/laundry/.test(haystack)) assets.push(HELD_ASSETS.tokenLaundry);
+  if (/dog|groom/.test(haystack)) assets.push(HELD_ASSETS.tokenDogGroom);
+  if (/car|detail|wash/.test(haystack)) assets.push(HELD_ASSETS.tokenCarDetail);
+  if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push(HELD_ASSETS.tokenRide);
+
+  return assets.length ? assets : [HELD_ASSETS.tokenLaundry];
+}
+
+function inferServicesFromRequest(request: string): HeldParsedService[] {
+  const lower = request.toLowerCase();
+  const services: HeldParsedService[] = [];
+
+  if (/laundry/.test(lower)) services.push({ type: "laundry_pickup" });
+  if (/dog|groom/.test(lower)) services.push({ type: "dog_grooming" });
+  if (/car|detail|wash/.test(lower)) services.push({ type: "car_detail" });
+  if (/airport|ride|uber|waymo|lax/.test(lower)) services.push({ type: "ride_airport" });
+
+  return services.length ? services : [{ type: "other" }];
 }
 
 function buildTypedCommandFallback(text: string) {

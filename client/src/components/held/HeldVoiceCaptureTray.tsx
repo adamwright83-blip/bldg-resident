@@ -42,6 +42,7 @@ type VoiceCommandResponse = {
 
 type HeldVoiceCaptureTrayProps = {
   active: boolean;
+  onConfirmRequest?: (request: string, services: ParsedIntent["services"]) => void;
   onEditRequest: () => void;
   onTranscriptChange?: (transcript: string) => void;
   transcript?: string;
@@ -140,6 +141,7 @@ function blobToBase64(blob: Blob) {
 
 export function HeldVoiceCaptureTray({
   active,
+  onConfirmRequest,
   onEditRequest,
   onTranscriptChange,
   transcript,
@@ -469,32 +471,12 @@ export function HeldVoiceCaptureTray({
     setVoiceStatus("awaiting_confirmation");
   };
 
-  const beginConfirmationDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+  const confirmRequest = async () => {
     if (voiceStatus !== "awaiting_confirmation") return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    updateConfirmationProgress(event);
-  };
-
-  const updateConfirmationProgress = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (voiceStatus !== "awaiting_confirmation") return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const progress = Math.max(
-      0,
-      Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))
-    );
-    setConfirmationProgress(progress);
-  };
-
-  const completeConfirmationDrag = async () => {
-    if (voiceStatus !== "awaiting_confirmation") return;
-    if (confirmationProgress < 0.9) {
-      setConfirmationProgress(0);
-      return;
-    }
-
     setConfirmationProgress(1);
     setVoiceStatus("confirmed");
     await wait(500);
+    onConfirmRequest?.(displayRequest, parsedIntent?.services ?? []);
     setVoiceStatus("complete");
   };
 
@@ -592,16 +574,11 @@ export function HeldVoiceCaptureTray({
         )}
 
         {voiceStatus === "awaiting_confirmation" && (
-          <div
+          <button
             aria-label="Set it in motion"
-            className="absolute bottom-[8%] left-[6%] h-8 w-[72%] touch-none"
-            onPointerDown={beginConfirmationDrag}
-            onPointerMove={updateConfirmationProgress}
-            onPointerUp={completeConfirmationDrag}
-            role="slider"
-            aria-valuemax={100}
-            aria-valuemin={0}
-            aria-valuenow={Math.round(confirmationProgress * 100)}
+            className="absolute bottom-[8%] left-[6%] h-8 w-[72%] touch-manipulation text-left transition-transform duration-150 active:scale-[0.98]"
+            onClick={() => void confirmRequest()}
+            type="button"
           >
             <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-[#b78a38]/28" />
             <div
@@ -619,7 +596,7 @@ export function HeldVoiceCaptureTray({
             <p className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 font-serif text-[13px] text-[#9a681f]">
               Set it in motion →
             </p>
-          </div>
+          </button>
         )}
 
         {voiceStatus === "confirmed" && (
