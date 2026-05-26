@@ -183,6 +183,12 @@ export function HeldVoiceCaptureTray({
     rawTranscript,
     voiceStatus,
   });
+  const requestCopySize =
+    requestCopy.length > 92
+      ? "text-[13px] leading-4"
+      : requestCopy.length > 58
+        ? "text-[14px] leading-[18px]"
+        : "text-[15px] leading-5";
 
   useEffect(() => {
     onTranscriptChangeRef.current = onTranscriptChange;
@@ -547,7 +553,9 @@ export function HeldVoiceCaptureTray({
           draggable={false}
           src={ASSETS.requestCard}
         />
-        <p className="pointer-events-none absolute left-[6%] top-[46%] max-w-[68%] -translate-y-1/2 font-serif text-[15px] italic leading-5 text-[#2f2923]">
+        <p
+          className={`pointer-events-none absolute left-[6%] top-[46%] line-clamp-3 max-w-[68%] -translate-y-1/2 font-serif italic text-[#2f2923] ${requestCopySize}`}
+        >
           {requestCopy}
         </p>
 

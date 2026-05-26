@@ -29,10 +29,12 @@ const HELD_ASSETS = {
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
   postTokenField: "/held/textfield-posttoken.png",
+  requestCard: "/held/your-request-card.png",
   tokenCarDetail: "/held/token-cardetail.png",
   tokenDogGroom: "/held/token-doggroom.png",
   tokenLaundry: "/held/token-laundry.png",
   tokenRide: "/held/token-uber_waymo.png",
+  trayEmptyHeld: "/held/nursery-heldscreen.png",
   trayClayTokens: "/held/nursery-tray-claytokens.png",
   tray: "/held/nursery-heldscreen.png",
 };
@@ -43,6 +45,7 @@ type PrototypeMode =
   | "speech"
   | "typing"
   | "requestReady"
+  | "takingCustody"
   | "drawing"
   | "transforming"
   | "held";
@@ -57,6 +60,25 @@ type HeldTextCommandResponse = {
 type HeldTokenAsset = {
   src: string;
   type: string;
+};
+
+const TOKEN_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
+  1: [{ left: 50, top: 50 }],
+  2: [
+    { left: 42, top: 52 },
+    { left: 60, top: 50 },
+  ],
+  3: [
+    { left: 36, top: 54 },
+    { left: 50, top: 48 },
+    { left: 64, top: 54 },
+  ],
+  4: [
+    { left: 32, top: 55 },
+    { left: 45, top: 49 },
+    { left: 58, top: 50 },
+    { left: 70, top: 56 },
+  ],
 };
 
 export default function PenPullPrototype({
@@ -80,11 +102,18 @@ export default function PenPullPrototype({
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
-  const composerVisible =
+  const composerTrayVisible =
     composerOpen &&
     (mode === "choice" || mode === "typing" || mode === "requestReady");
+  const showTypingInput = mode === "typing";
+  const showRequestReady = mode === "requestReady";
   const showHomeWorld =
-    mode === "rest" || mode === "choice" || mode === "speech" || mode === "typing" || mode === "requestReady";
+    mode === "rest" ||
+    mode === "choice" ||
+    mode === "speech" ||
+    mode === "typing" ||
+    mode === "requestReady" ||
+    mode === "takingCustody";
   const showPenGesture = (showHomeWorld && mode !== "speech") || mode === "held";
   const canReturnToHeld =
     Boolean(confirmedRequest) &&
@@ -120,6 +149,8 @@ export default function PenPullPrototype({
     }
 
     setTypedCommandStatus("summarizing");
+    setConfirmedRequest(text);
+    setMode("requestReady");
 
     try {
       const response = await fetch("/api/held/text-command", {
@@ -153,17 +184,21 @@ export default function PenPullPrototype({
       setMode("requestReady");
     }
   };
-  const confirmRequest = (request = confirmedRequest, services = confirmedServices) => {
+  const beginSetInMotion = (request = confirmedRequest, services = confirmedServices) => {
     const nextRequest = request.trim() || draft.trim() || speechTranscript.trim();
     if (!nextRequest) return;
 
+    console.debug("[HELD] Set it in motion confirmed");
     setConfirmedRequest(nextRequest);
     setConfirmedServices(services.length ? services : inferServicesFromRequest(nextRequest));
     setTypedCommandStatus("idle");
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(false);
     }
-    setMode("drawing");
+    setMode("takingCustody");
+    window.setTimeout(() => {
+      setMode("drawing");
+    }, 500);
   };
   const physicsTuning = useMemo(
     () => ({
@@ -182,7 +217,7 @@ export default function PenPullPrototype({
   );
 
   const physics = usePenPhysics({
-    composerOpen: composerVisible,
+    composerOpen: composerTrayVisible,
     debug,
     onComposerPenSwipe: enterSpeechMode,
     onUnlock: info => {
@@ -239,7 +274,7 @@ export default function PenPullPrototype({
         <div
           ref={stageRef}
           className="relative h-full w-full overflow-hidden bg-[#f4ecdf]"
-          data-composer-open={composerVisible ? "true" : "false"}
+          data-composer-open={composerTrayVisible ? "true" : "false"}
           data-held-mode={mode}
           style={{
             backgroundImage: `linear-gradient(180deg, rgba(255,252,246,0.72), rgba(244,235,222,0.86)), url(${HELD_ASSETS.paper})`,
@@ -307,7 +342,7 @@ export default function PenPullPrototype({
               Held.
             </h1>
             <p className="mt-3 max-w-[160px] text-[14px] leading-5 text-[#55493d]">
-              Nothing is in motion yet.
+              {mode === "takingCustody" ? "Taking custody." : "Nothing is in motion yet."}
             </p>
           </section>}
 
@@ -315,7 +350,7 @@ export default function PenPullPrototype({
             <img
               alt=""
               className={`pointer-events-none absolute bottom-[-1px] left-1/2 z-10 w-[95%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
-                composerVisible || mode === "speech" ? "opacity-0" : "opacity-100"
+                composerTrayVisible || mode === "speech" || mode === "takingCustody" ? "opacity-0" : "opacity-100"
               }`}
               draggable={false}
               src={HELD_ASSETS.tray}
@@ -325,13 +360,13 @@ export default function PenPullPrototype({
           <div
             aria-hidden="true"
             className={`pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
-              composerVisible || mode === "speech" ? "opacity-0" : "opacity-25"
+              composerTrayVisible || mode === "speech" || mode === "takingCustody" ? "opacity-0" : "opacity-25"
             }`}
           />
 
           <HeldVoiceCaptureTray
             active={mode === "speech"}
-            onConfirmRequest={(request, services) => confirmRequest(request, services)}
+            onConfirmRequest={(request, services) => beginSetInMotion(request, services)}
             onEditRequest={enterTypingMode}
             onTranscriptChange={setSpeechTranscript}
             transcript={speechTranscript}
@@ -362,10 +397,10 @@ export default function PenPullPrototype({
           )}
 
           <div
-            className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 transition-[opacity,transform] duration-[520ms] ${
-              composerVisible
-                ? "translate-y-0 opacity-100"
-                : "translate-y-[112%] opacity-0"
+            className={`pointer-events-none absolute bottom-[-6px] left-1/2 z-30 w-[108%] transition-[opacity,transform] duration-[520ms] ${
+              composerTrayVisible
+                ? "translate-x-[-50%] translate-y-0 opacity-100"
+                : "translate-x-[-50%] translate-y-[112%] opacity-0"
             }`}
             style={{
               transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
@@ -379,7 +414,7 @@ export default function PenPullPrototype({
             />
           </div>
 
-          {composerVisible && (
+          {showTypingInput && (
             <input
               aria-label="Prototype composer input"
               className="absolute bottom-[214px] left-[11%] right-[16%] z-50 h-10 rounded-full border border-[#9f875f]/25 bg-[#fffaf2]/55 px-4 text-[16px] text-[#2c2824] shadow-sm outline-none placeholder:text-[#8f8170]"
@@ -409,7 +444,7 @@ export default function PenPullPrototype({
             />
           )}
 
-          {composerVisible && (
+          {showTypingInput && (
             <button
               aria-label="Set typed request"
               className="absolute bottom-[214px] right-[8%] z-[60] h-10 w-10 rounded-full opacity-0"
@@ -418,30 +453,31 @@ export default function PenPullPrototype({
             />
           )}
 
-          {composerVisible && typedCommandStatus !== "idle" && (
-            <button
-              aria-live="polite"
-              className="absolute bottom-[266px] left-[11%] right-[11%] z-50 touch-manipulation text-left text-[12px] italic text-[#8c6a34] transition-transform duration-150 active:scale-[0.99]"
-              disabled={typedCommandStatus === "summarizing"}
-              onClick={() => confirmRequest()}
-              type="button"
-            >
-              {typedCommandStatus === "summarizing"
-                ? "Making sense of it."
-                : typedCommandStatus === "ready"
-                  ? "Set it in motion →"
-                  : "I could not read that request yet."}
-            </button>
-          )}
-
           {mode === "choice" && (
             <button
-              className="absolute bottom-8 left-1/2 z-[60] -translate-x-1/2 text-[16px] text-[#9a681f] transition-opacity duration-300"
-              onClick={enterSpeechMode}
+              aria-label="Start typing"
+              className="absolute bottom-[108px] left-[10%] right-[10%] z-[62] h-[190px] rounded-[18px] opacity-0"
+              onClick={enterTypingMode}
               type="button"
-            >
-              Tap to speak
-            </button>
+            />
+          )}
+
+          {showRequestReady && (
+            <HeldRequestReadyCard
+              displayRequest={confirmedRequest || draft}
+              isWorking={typedCommandStatus === "summarizing"}
+              onConfirm={() => beginSetInMotion()}
+              onEdit={enterTypingMode}
+            />
+          )}
+
+          {mode === "takingCustody" && (
+            <HeldRequestReadyCard
+              displayRequest={confirmedRequest || draft}
+              isStamped
+              onConfirm={() => undefined}
+              onEdit={enterTypingMode}
+            />
           )}
 
           {showDebugControls && (
@@ -497,6 +533,57 @@ export default function PenPullPrototype({
   );
 }
 
+function HeldRequestReadyCard({
+  displayRequest,
+  isStamped = false,
+  isWorking = false,
+  onConfirm,
+  onEdit,
+}: {
+  displayRequest: string;
+  isStamped?: boolean;
+  isWorking?: boolean;
+  onConfirm: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <section className="absolute left-1/2 top-[56%] z-[70] w-[84%] -translate-x-1/2">
+      <div className="relative overflow-hidden rounded-[4px] border border-[#d4c2a5]/80 bg-[#fff8ec]/86 px-5 py-5 shadow-[0_16px_26px_rgba(50,35,20,0.14)] backdrop-blur-[2px]">
+        <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
+          Your request
+        </p>
+        <p className="mt-3 min-h-[54px] font-serif text-[17px] italic leading-6 text-[#2f2923]">
+          {isWorking ? "Making sense of it." : displayRequest || "Making sense of it."}
+        </p>
+        {isStamped && (
+          <span className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[19px] text-[#9a681f]">
+            H
+          </span>
+        )}
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <button
+            className="text-left font-serif text-[13px] italic text-[#7a6d5f] underline decoration-[#b78a38]/30 underline-offset-4"
+            disabled={isStamped}
+            onClick={onEdit}
+            type="button"
+          >
+            Edit request
+          </button>
+          <button
+            aria-label="Set it in motion"
+            className="min-h-11 flex-1 touch-manipulation text-right font-serif text-[16px] text-[#9a681f] transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
+            disabled={isWorking || isStamped}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isStamped ? "Taking custody." : "Set it in motion →"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HeldTransformingState({
   displayRequest,
   isHeld,
@@ -507,9 +594,11 @@ function HeldTransformingState({
   services: HeldParsedService[];
 }) {
   const longPressTimerRef = useRef<number | null>(null);
-  const [detailService, setDetailService] = useState<string | null>(null);
+  const [selectedToken, setSelectedToken] = useState<HeldTokenAsset | null>(null);
+  const [showProvider, setShowProvider] = useState(false);
   const tokens = getTokenAssets(services, displayRequest);
   const path = getHeldCompositePath(displayRequest, services);
+  const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -519,7 +608,8 @@ function HeldTransformingState({
   const startTokenPress = (token: HeldTokenAsset) => {
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
-      setDetailService(token.type);
+      setSelectedToken(token);
+      setShowProvider(false);
       longPressTimerRef.current = null;
     }, 420);
   };
@@ -552,7 +642,9 @@ function HeldTransformingState({
         <div className="relative aspect-[0.78/1] w-full bg-[#f7ecd9]/80 shadow-[0_16px_24px_rgba(50,35,20,0.12)]">
           <svg
             aria-hidden="true"
-            className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
+            className={`absolute inset-[7%] h-[86%] w-[86%] overflow-visible transition-all duration-[1000ms] ${
+              isHeld ? "-translate-y-10 opacity-0" : "translate-y-0 opacity-100"
+            }`}
             preserveAspectRatio="xMidYMid meet"
             viewBox="0 0 430 260"
           >
@@ -566,22 +658,6 @@ function HeldTransformingState({
               strokeWidth="2"
             />
           </svg>
-          {INK_NODES.map((node, index) => (
-            <span
-              aria-hidden="true"
-              className="absolute h-3.5 w-3.5 rounded-full border border-[#f6dfa0]/50 bg-[#c99736] shadow-[0_0_16px_rgba(190,132,36,0.54)] transition-all duration-[1100ms]"
-              key={`${node.x}-${node.y}`}
-              style={{
-                left: `${node.x}%`,
-                opacity: isHeld ? 0 : 1,
-                top: `${node.y}%`,
-                transform: isHeld
-                  ? `translate3d(${node.dx}px, ${node.dy}px, 0) scale(0.7)`
-                  : "translate3d(0, 0, 0) scale(1)",
-                transitionDelay: `${index * 70}ms`,
-              }}
-            />
-          ))}
         </div>
       </section>
 
@@ -604,28 +680,33 @@ function HeldTransformingState({
           isHeld ? "bottom-[34%] opacity-100" : "bottom-[-2%] opacity-80"
         }`}
         draggable={false}
-        src={HELD_ASSETS.trayClayTokens}
+        src={HELD_ASSETS.trayEmptyHeld}
       />
       <div
-        className={`absolute left-1/2 z-20 flex w-[72%] -translate-x-1/2 items-end justify-center gap-4 transition-all duration-700 ${
-          isHeld ? "bottom-[52%]" : "bottom-[15%]"
+        className={`absolute left-1/2 z-20 h-[30%] w-[82%] -translate-x-1/2 transition-all duration-700 ${
+          isHeld ? "bottom-[39%]" : "bottom-[15%]"
         }`}
       >
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className={`h-16 w-16 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-[900ms] ${
-              isHeld ? "translate-y-0 rotate-0 opacity-100" : "-translate-y-40 rotate-[-12deg] opacity-0"
+            className={`absolute h-[62px] w-[62px] -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-[900ms] ${
+              isHeld ? "scale-100 rotate-0 opacity-100" : "translate-y-[-150px] scale-75 rotate-[-12deg] opacity-0"
             }`}
             key={`${token.src}-${index}`}
             onClick={() => {
-              if (token.type === "laundry_pickup") setDetailService(token.type);
+              setSelectedToken(token);
+              setShowProvider(false);
             }}
             onPointerCancel={clearLongPress}
             onPointerDown={() => startTokenPress(token)}
             onPointerLeave={clearLongPress}
             onPointerUp={clearLongPress}
-            style={{ transitionDelay: `${index * 90}ms` }}
+            style={{
+              left: `${tokenPositions[index]?.left ?? 50}%`,
+              top: `${tokenPositions[index]?.top ?? 50}%`,
+              transitionDelay: `${index * 90}ms`,
+            }}
             type="button"
           >
             <img
@@ -650,10 +731,12 @@ function HeldTransformingState({
         />
         <div className="pointer-events-none absolute inset-x-[18%] top-[32%] text-center">
           <p className="font-serif text-[13px] italic leading-4 text-[#4f4439]">
-            Pull the pen for what&apos;s next.
+            {tokens.length === 1
+              ? `${getServiceLabel(tokens[0].type)} is in motion.`
+              : `${tokens.length} things are in motion.`}
           </p>
           <p className="mt-1 font-serif text-[11px] italic leading-4 text-[#7a6d5f]">
-            More to hold? Pull the pen.
+            Pull the pen for what&apos;s next.
           </p>
         </div>
         <span
@@ -661,19 +744,110 @@ function HeldTransformingState({
           className="pointer-events-none absolute right-[8.5%] top-[23%] h-[52%] w-[15%] rounded-r-[18px] bg-[#f8eddd]"
         />
       </div>
-      {detailService === "laundry_pickup" && (
-        <LaundryServiceDetail onClose={() => setDetailService(null)} />
+      {selectedToken && !showProvider && (
+        <HeldServiceVitrine
+          displayRequest={displayRequest}
+          onClose={() => setSelectedToken(null)}
+          onViewProvider={() => setShowProvider(true)}
+          token={selectedToken}
+        />
+      )}
+      {selectedToken?.type === "laundry_pickup" && showProvider && (
+        <LaundryServiceDetail onClose={() => setShowProvider(false)} />
       )}
     </div>
   );
 }
 
-const INK_NODES = [
-  { dx: -54, dy: 232, x: 31, y: 39 },
-  { dx: -18, dy: 266, x: 46, y: 52 },
-  { dx: 24, dy: 248, x: 58, y: 40 },
-  { dx: 56, dy: 282, x: 69, y: 55 },
-];
+function HeldServiceVitrine({
+  displayRequest,
+  onClose,
+  onViewProvider,
+  token,
+}: {
+  displayRequest: string;
+  onClose: () => void;
+  onViewProvider: () => void;
+  token: HeldTokenAsset;
+}) {
+  const isLaundry = token.type === "laundry_pickup";
+
+  return (
+    <section className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ecdf] text-[#2d251d]">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,252,246,0.84), rgba(244,235,222,0.92)), url(/held/held-paper-bg.png)",
+          backgroundPosition: "center",
+          backgroundSize: "cover, 420px 420px",
+        }}
+      />
+      <button
+        aria-label="Close service vitrine"
+        className="absolute right-[7%] top-[7%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b78a35]/70 bg-[#fff8ec]/74 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        onClick={onClose}
+        type="button"
+      >
+        H
+      </button>
+      <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[8%]">
+        <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
+          Vitrine
+        </p>
+        <h1 className="mt-9 font-serif text-[44px] leading-none">
+          {getServiceLabel(token.type)}
+        </h1>
+        <p className="mt-2 max-w-[210px] font-serif text-[15px] italic leading-5 text-[#5c4c3e]">
+          Held in motion.
+        </p>
+
+        <div className="mt-8 rounded-[6px] border border-[#d1bea0]/80 bg-[#fff8ec]/58 p-7 shadow-[0_18px_32px_rgba(50,35,20,0.12)]">
+          <div className="mx-auto grid h-[170px] w-[220px] place-items-center rounded-[4px] bg-[#eee1cd]/60 shadow-inner">
+            <img
+              alt=""
+              className="h-24 w-24 object-contain drop-shadow-[0_16px_18px_rgba(42,28,16,0.18)]"
+              draggable={false}
+              src={token.src}
+            />
+          </div>
+          <p className="mt-6 text-center text-[11px] uppercase tracking-[0.28em] text-[#8b7a67]">
+            Current state
+          </p>
+          <p className="mt-3 text-center font-serif text-[18px] italic leading-6 text-[#332b24]">
+            {displayRequest || `${getServiceLabel(token.type)} is in motion.`}
+          </p>
+        </div>
+
+        <div className="mt-6 flex items-center justify-center gap-6 font-serif text-[15px] text-[#9a681f]">
+          {isLaundry && (
+            <button
+              className="underline decoration-[#b78a38]/35 underline-offset-4"
+              onClick={onViewProvider}
+              type="button"
+            >
+              View provider
+            </button>
+          )}
+          <button
+            className="underline decoration-[#b78a38]/35 underline-offset-4"
+            type="button"
+          >
+            Reschedule
+          </button>
+        </div>
+
+        <img
+          alt=""
+          className="pointer-events-none mt-auto w-full select-none opacity-95 mix-blend-multiply drop-shadow-[0_18px_24px_rgba(45,29,16,0.18)]"
+          draggable={false}
+          src={HELD_ASSETS.trayEmptyHeld}
+        />
+      </div>
+    </section>
+  );
+}
 
 function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
   return (
@@ -758,6 +932,15 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
   if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenRide, type: "ride_airport" });
 
   return assets.length ? assets : [{ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" }];
+}
+
+function getServiceLabel(type: string) {
+  if (type === "laundry_pickup") return "Laundry pickup";
+  if (type === "dog_grooming") return "Theo's grooming";
+  if (type === "car_detail") return "Car detail";
+  if (type === "ride_airport") return "Airport pickup";
+  if (type === "haircut") return "Haircut";
+  return "Service";
 }
 
 function inferServicesFromRequest(request: string): HeldParsedService[] {

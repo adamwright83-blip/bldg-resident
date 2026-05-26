@@ -17,6 +17,7 @@ const ASSETS = {
   pen: "/held/fountainpenfull.png",
 };
 
+// PLACEHOLDER_PATHS: replace with final locked Picasso SVGs.
 const COMPOSITE_PATHS = {
   car_detail:
     "M40 145 C70 118 113 118 139 145 C158 165 189 166 210 145 C236 118 280 119 304 146 C322 166 352 164 367 145 C381 129 392 139 386 158 C374 199 307 202 286 164 C275 145 249 145 238 164 C216 203 147 203 126 164 C115 145 87 145 76 164 C64 184 36 176 40 145",
@@ -153,8 +154,18 @@ export function HeldArtistDrawing({
         </p>
       </header>
 
-      <section className="absolute left-1/2 top-[17%] z-10 w-[66%] -translate-x-1/2">
-        <div className="relative aspect-[0.78/1] w-full overflow-visible bg-[#f7ecd9]/88 shadow-[0_16px_24px_rgba(50,35,20,0.16)]">
+      <section className="absolute left-1/2 top-[16%] z-10 w-[66%] -translate-x-1/2">
+        <div
+          className="relative aspect-[0.78/1] w-full overflow-visible bg-[#f7ecd9]/88 shadow-[0_16px_24px_rgba(50,35,20,0.16)]"
+          style={{
+            backgroundImage:
+              "linear-gradient(180deg, rgba(255,248,235,0.86), rgba(245,232,210,0.74)), url(/held/yourrequest-texture.png)",
+            backgroundPosition: "center",
+            backgroundSize: "cover, 260px 260px",
+            clipPath:
+              "polygon(1% 0, 99% 1%, 100% 98%, 96% 100%, 73% 99%, 49% 100%, 24% 99%, 0 98%, 1% 74%, 0 49%, 1% 24%)",
+          }}
+        >
           <svg
             aria-label="Composite service drawing"
             className={`absolute inset-[7%] h-[86%] w-[86%] overflow-visible transition-opacity duration-700 ${
@@ -183,10 +194,13 @@ export function HeldArtistDrawing({
             src={ASSETS.pen}
             style={penStyle}
           />
+          <p className="pointer-events-none absolute bottom-[8%] right-[12%] z-10 font-serif text-[18px] italic text-[#2a2520]/75">
+            Held.
+          </p>
         </div>
       </section>
 
-      <p className="pointer-events-none absolute left-[12%] right-[12%] top-[62%] z-10 text-center font-serif text-[14px] italic leading-5 text-[#4a3d32]">
+      <p className="pointer-events-none absolute left-[12%] right-[12%] top-[61%] z-10 text-center font-serif text-[14px] italic leading-5 text-[#4a3d32]">
         One line. One record.
       </p>
 
