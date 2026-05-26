@@ -85,6 +85,7 @@ export default function PenPullPrototype({
     (mode === "choice" || mode === "typing" || mode === "requestReady");
   const showHomeWorld =
     mode === "rest" || mode === "choice" || mode === "speech" || mode === "typing" || mode === "requestReady";
+  const showPenGesture = (showHomeWorld && mode !== "speech") || mode === "held";
   const microphoneClassName =
     mode === "choice" || mode === "speech"
       ? "translate-y-[300px] opacity-100 scale-100"
@@ -198,7 +199,7 @@ export default function PenPullPrototype({
 
     const timer = window.setTimeout(() => {
       setMode("held");
-    }, 900);
+    }, 2200);
 
     return () => window.clearTimeout(timer);
   }, [mode]);
@@ -304,12 +305,13 @@ export default function PenPullPrototype({
             transcript={speechTranscript}
           />
 
-          {showHomeWorld && mode !== "speech" && (
+          {showPenGesture && (
             <>
               <PenChain
                 {...physics.chainRefs}
                 anchorFill="#9f7528"
                 anchorRadius={2.6}
+                className={mode === "held" ? "z-[88]" : "z-30"}
                 glintStrokeWidth={2.1}
                 highlightStroke="rgba(255, 234, 178, 0.58)"
                 highlightStrokeWidth={0.8}
@@ -319,6 +321,7 @@ export default function PenPullPrototype({
               <PenCharm
                 {...physics.penRefs}
                 {...physics.pointerHandlers}
+                className={mode === "held" ? "z-[92]" : "z-40"}
                 objectFit="contain"
                 penAssetSrc={penAssetSrc}
                 transformOrigin="50% 3%"
@@ -489,6 +492,8 @@ function HeldTransformingState({
     }, 420);
   };
 
+  useEffect(() => clearLongPress, []);
+
   return (
     <div className="absolute inset-0 z-[85] overflow-hidden bg-[#f4ecdf]">
       <div
@@ -532,7 +537,7 @@ function HeldTransformingState({
           {INK_NODES.map((node, index) => (
             <span
               aria-hidden="true"
-              className="absolute h-2.5 w-2.5 rounded-full bg-[#a77724] shadow-[0_0_10px_rgba(167,119,36,0.34)] transition-all duration-700"
+              className="absolute h-3.5 w-3.5 rounded-full border border-[#f6dfa0]/50 bg-[#c99736] shadow-[0_0_16px_rgba(190,132,36,0.54)] transition-all duration-[1100ms]"
               key={`${node.x}-${node.y}`}
               style={{
                 left: `${node.x}%`,
@@ -613,12 +618,16 @@ function HeldTransformingState({
         />
         <div className="pointer-events-none absolute inset-x-[18%] top-[32%] text-center">
           <p className="font-serif text-[13px] italic leading-4 text-[#4f4439]">
-            I&apos;m working a motion.
+            Pull the pen for what&apos;s next.
           </p>
           <p className="mt-1 font-serif text-[11px] italic leading-4 text-[#7a6d5f]">
-            10:37 held by from here.
+            More to hold? Pull the pen.
           </p>
         </div>
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-[8.5%] top-[23%] h-[52%] w-[15%] rounded-r-[18px] bg-[#f8eddd]"
+        />
       </div>
       {detailService === "laundry_pickup" && (
         <LaundryServiceDetail onClose={() => setDetailService(null)} />

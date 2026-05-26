@@ -19,7 +19,7 @@ export function PenChain({
   anchorRef,
   anchorFill = "rgba(91, 77, 58, 0.76)",
   anchorRadius = 2.1,
-  className = "",
+  className = "z-30",
   glintRef,
   glintStrokeWidth = 1.2,
   highlightRef,
@@ -34,7 +34,7 @@ export function PenChain({
   return (
     <svg
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 z-30 h-full w-full ${className}`}
+      className={`pointer-events-none absolute inset-0 h-full w-full ${className}`}
       focusable="false"
     >
       <defs>

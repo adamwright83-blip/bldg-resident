@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export type HeldParsedService = {
   type: string;
@@ -76,13 +76,23 @@ export function HeldArtistDrawing({
   );
   const duration = useMemo(() => getDuration(services), [services]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const svgPath = pathRef.current;
     if (!svgPath) return undefined;
 
     const totalLength = svgPath.getTotalLength();
     svgPath.style.strokeDasharray = `${totalLength}`;
     svgPath.style.strokeDashoffset = `${totalLength}`;
+    const start = svgPath.getPointAtLength(0);
+    const nextStart = svgPath.getPointAtLength(3);
+    const startAngle =
+      (Math.atan2(nextStart.y - start.y, nextStart.x - start.x) * 180) / Math.PI;
+
+    setPenStyle({
+      left: `${(start.x / 430) * 100}%`,
+      top: `${(start.y / 260) * 100}%`,
+      transform: `translate(-45%, -88%) rotate(${(startAngle + 82).toFixed(2)}deg)`,
+    });
 
     let startedAt = 0;
     let holdTimer: number | null = null;
@@ -167,7 +177,9 @@ export function HeldArtistDrawing({
           <img
             alt=""
             className="pointer-events-none absolute z-20 h-[58%] select-none drop-shadow-[0_14px_20px_rgba(35,24,12,0.24)] transition-[opacity] duration-500"
+            decoding="sync"
             draggable={false}
+            loading="eager"
             src={ASSETS.pen}
             style={penStyle}
           />
@@ -180,8 +192,9 @@ export function HeldArtistDrawing({
 
       <img
         alt=""
-        className="pointer-events-none absolute bottom-[-1%] left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
+        className="pointer-events-none absolute bottom-[-1%] left-1/2 z-10 w-[96%] -translate-x-1/2 select-none mix-blend-multiply drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
         draggable={false}
+        loading="eager"
         src={ASSETS.cradle}
       />
     </div>

@@ -13,6 +13,7 @@ type PenCharmProps = {
   onPointerUp: (event: PointerEvent<HTMLButtonElement>) => void;
   penAssetSrc: string;
   shadowRef: MutableRefObject<HTMLSpanElement | null>;
+  className?: string;
   objectFit?: CSSProperties["objectFit"];
   transformOrigin?: CSSProperties["transformOrigin"];
   visualRef: MutableRefObject<HTMLElement | null>;
@@ -24,6 +25,7 @@ export function PenCharm({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  className = "z-40",
   objectFit = "fill",
   penAssetSrc,
   shadowRef,
@@ -38,7 +40,7 @@ export function PenCharm({
         hitboxRef.current = node;
       }}
       aria-label="Pull pen to tell the building"
-      className="absolute left-0 top-0 z-40 flex items-center justify-center rounded-full border-0 bg-transparent p-0 text-[#2C2824] outline-none focus-visible:ring-2 focus-visible:ring-[#C9A96E]/65"
+      className={`absolute left-0 top-0 flex items-center justify-center rounded-full border-0 bg-transparent p-0 text-[#2C2824] outline-none focus-visible:ring-2 focus-visible:ring-[#C9A96E]/65 ${className}`}
       onPointerCancel={onPointerCancel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
