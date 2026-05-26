@@ -13,8 +13,8 @@ type HeldArtistDrawingProps = {
 };
 
 const ASSETS = {
+  cradle: "/held/nursery-cradle.png",
   pen: "/held/fountainpenfull.png",
-  tray: "/held/nursery-tray.png",
 };
 
 const COMPOSITE_PATHS = {
@@ -32,7 +32,10 @@ const COMPOSITE_PATHS = {
     "M42 162 C75 128 126 128 157 160 C180 184 214 183 235 158 C258 130 304 129 334 157 C358 179 377 171 383 149 C386 192 325 204 293 169 C273 148 245 148 226 169 C195 204 131 203 105 166 C89 143 61 144 42 162",
 };
 
-function choosePath(displayRequest: string, services: HeldParsedService[] = []) {
+export function getHeldCompositePath(
+  displayRequest: string,
+  services: HeldParsedService[] = []
+) {
   const serviceTypes = services.map(service => service.type).join(" ");
   const haystack = `${displayRequest} ${serviceTypes}`.toLowerCase();
 
@@ -68,7 +71,7 @@ export function HeldArtistDrawing({
   });
   const [isComplete, setIsComplete] = useState(false);
   const path = useMemo(
-    () => choosePath(displayRequest, services),
+    () => getHeldCompositePath(displayRequest, services),
     [displayRequest, services]
   );
   const duration = useMemo(() => getDuration(services), [services]);
@@ -140,8 +143,8 @@ export function HeldArtistDrawing({
         </p>
       </header>
 
-      <section className="absolute left-1/2 top-[19%] z-10 w-[82%] -translate-x-1/2">
-        <div className="relative aspect-[1.38/1] w-full overflow-visible rounded-[2px] bg-[#f7ecd9]/82 shadow-[0_14px_28px_rgba(50,35,20,0.12)]">
+      <section className="absolute left-1/2 top-[17%] z-10 w-[66%] -translate-x-1/2">
+        <div className="relative aspect-[0.78/1] w-full overflow-visible bg-[#f7ecd9]/88 shadow-[0_16px_24px_rgba(50,35,20,0.16)]">
           <svg
             aria-label="Composite service drawing"
             className={`absolute inset-[7%] h-[86%] w-[86%] overflow-visible transition-opacity duration-700 ${
@@ -171,15 +174,15 @@ export function HeldArtistDrawing({
         </div>
       </section>
 
-      <p className="pointer-events-none absolute left-[10%] right-[10%] top-[56%] z-10 text-center font-serif text-[15px] italic leading-5 text-[#4a3d32]">
-        {displayRequest}
+      <p className="pointer-events-none absolute left-[12%] right-[12%] top-[62%] z-10 text-center font-serif text-[14px] italic leading-5 text-[#4a3d32]">
+        One line. One record.
       </p>
 
       <img
         alt=""
-        className="pointer-events-none absolute bottom-[-2%] left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
+        className="pointer-events-none absolute bottom-[-1%] left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
         draggable={false}
-        src={ASSETS.tray}
+        src={ASSETS.cradle}
       />
     </div>
   );

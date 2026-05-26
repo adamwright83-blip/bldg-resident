@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  getHeldCompositePath,
   HeldArtistDrawing,
   type HeldParsedService,
 } from "./HeldArtistDrawing";
@@ -30,6 +31,7 @@ const HELD_ASSETS = {
   tokenDogGroom: "/held/token-doggroom.png",
   tokenLaundry: "/held/token-laundry.png",
   tokenRide: "/held/token-uber_waymo.png",
+  trayClayTokens: "/held/nursery-tray-claytokens.png",
   tray: "/held/nursery-heldscreen.png",
 };
 
@@ -463,6 +465,7 @@ function HeldTransformingState({
   services: HeldParsedService[];
 }) {
   const tokens = getTokenAssets(services, displayRequest);
+  const path = getHeldCompositePath(displayRequest, services);
 
   return (
     <div className="absolute inset-0 z-[85] overflow-hidden bg-[#f4ecdf]">
@@ -481,21 +484,79 @@ function HeldTransformingState({
           {isHeld ? "Held." : "Taking custody."}
         </p>
       </header>
-      <p className="pointer-events-none absolute left-[10%] right-[10%] top-[22%] z-10 text-center font-serif text-[17px] italic leading-6 text-[#3f342b]">
-        {displayRequest}
-      </p>
+
+      <section
+        className={`absolute left-1/2 top-[18%] z-10 w-[66%] -translate-x-1/2 transition-all duration-700 ${
+          isHeld ? "-translate-y-6 opacity-0" : "translate-y-0 opacity-100"
+        }`}
+      >
+        <div className="relative aspect-[0.78/1] w-full bg-[#f7ecd9]/80 shadow-[0_16px_24px_rgba(50,35,20,0.12)]">
+          <svg
+            aria-hidden="true"
+            className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
+            preserveAspectRatio="xMidYMid meet"
+            viewBox="0 0 430 260"
+          >
+            <path
+              d={path}
+              fill="none"
+              opacity="0.18"
+              stroke="#1A1A1A"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+            />
+          </svg>
+          {INK_NODES.map((node, index) => (
+            <span
+              aria-hidden="true"
+              className="absolute h-2.5 w-2.5 rounded-full bg-[#a77724] shadow-[0_0_10px_rgba(167,119,36,0.34)] transition-all duration-700"
+              key={`${node.x}-${node.y}`}
+              style={{
+                left: `${node.x}%`,
+                opacity: isHeld ? 0 : 1,
+                top: `${node.y}%`,
+                transform: isHeld
+                  ? `translate3d(${node.dx}px, ${node.dy}px, 0) scale(0.7)`
+                  : "translate3d(0, 0, 0) scale(1)",
+                transitionDelay: `${index * 70}ms`,
+              }}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section
+        className={`pointer-events-none absolute left-[9%] top-[13%] z-20 transition-all duration-700 ${
+          isHeld ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+        }`}
+      >
+        <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
+          Held.
+        </h1>
+        <p className="mt-2 max-w-[170px] text-[13px] italic leading-5 text-[#55493d]">
+          {tokens.length === 1 ? "One thing is in motion." : `${tokens.length} things are in motion.`}
+        </p>
+      </section>
+
       <img
         alt=""
-        className="pointer-events-none absolute bottom-[-2%] left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
+        className={`pointer-events-none absolute left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
+          isHeld ? "bottom-[14%] opacity-100" : "bottom-[-2%] opacity-80"
+        }`}
         draggable={false}
-        src="/held/nursery-tray.png"
+        src={HELD_ASSETS.trayClayTokens}
       />
-      <div className="absolute bottom-[15%] left-1/2 z-20 flex w-[72%] -translate-x-1/2 items-end justify-center gap-4">
+      <div
+        className={`absolute left-1/2 z-20 flex w-[72%] -translate-x-1/2 items-end justify-center gap-4 transition-all duration-700 ${
+          isHeld ? "bottom-[31%]" : "bottom-[15%]"
+        }`}
+      >
         {tokens.map((token, index) => (
           <img
             alt=""
-            className={`h-16 w-16 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-700 ${
-              isHeld ? "translate-y-0 opacity-100" : "-translate-y-16 opacity-0"
+            className={`h-16 w-16 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-[900ms] ${
+              isHeld ? "translate-y-0 rotate-0 opacity-100" : "-translate-y-40 rotate-[-12deg] opacity-0"
             }`}
             draggable={false}
             key={`${token}-${index}`}
@@ -504,9 +565,28 @@ function HeldTransformingState({
           />
         ))}
       </div>
+      <div
+        className={`absolute bottom-[8%] left-1/2 z-30 w-[82%] -translate-x-1/2 rounded border border-[#cdbb9d]/70 bg-[#fff8ec]/64 px-5 py-4 shadow-[0_10px_18px_rgba(54,38,23,0.10)] transition-all duration-700 ${
+          isHeld ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+        }`}
+      >
+        <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
+          Your request
+        </p>
+        <p className="mt-2 font-serif text-[15px] italic leading-5 text-[#2f2923]">
+          {displayRequest || "Working in motion."}
+        </p>
+      </div>
     </div>
   );
 }
+
+const INK_NODES = [
+  { dx: -54, dy: 232, x: 31, y: 39 },
+  { dx: -18, dy: 266, x: 46, y: 52 },
+  { dx: 24, dy: 248, x: 58, y: 40 },
+  { dx: 56, dy: 282, x: 69, y: 55 },
+];
 
 function getTokenAssets(services: HeldParsedService[], request: string) {
   const serviceTypes = services.map(service => service.type).join(" ");
