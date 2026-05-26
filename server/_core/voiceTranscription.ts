@@ -205,9 +205,6 @@ export async function transcribeAudioBuffer(
   options: TranscribeBufferOptions
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
-    const configError = validateTranscriptionConfig();
-    if (configError) return configError;
-
     const sizeMB = options.audioBuffer.length / (1024 * 1024);
     if (sizeMB > 16) {
       return {
@@ -216,6 +213,18 @@ export async function transcribeAudioBuffer(
         details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`,
       };
     }
+
+    if (process.env.OPENAI_API_KEY) {
+      return await sendBufferToOpenAITranscriptionService({
+        audioBuffer: options.audioBuffer,
+        language: options.language,
+        mimeType: options.mimeType,
+        prompt: options.prompt,
+      });
+    }
+
+    const configError = validateTranscriptionConfig();
+    if (configError) return configError;
 
     return await sendBufferToTranscriptionService({
       audioBuffer: options.audioBuffer,
@@ -250,6 +259,76 @@ function validateTranscriptionConfig(): TranscriptionError | null {
   }
 
   return null;
+}
+
+async function sendBufferToOpenAITranscriptionService(
+  options: Required<Pick<TranscribeBufferOptions, "audioBuffer" | "mimeType">> &
+    Pick<TranscribeBufferOptions, "language" | "prompt">
+): Promise<TranscriptionResponse | TranscriptionError> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return {
+      error: "OpenAI transcription service authentication is missing",
+      code: "SERVICE_ERROR",
+      details: "OPENAI_API_KEY is not set",
+    };
+  }
+
+  const formData = new FormData();
+  const filename = `audio.${getFileExtension(options.mimeType)}`;
+  const audioBlob = new Blob([new Uint8Array(options.audioBuffer)], {
+    type: options.mimeType,
+  });
+
+  formData.append("file", audioBlob, filename);
+  formData.append("model", "whisper-1");
+  formData.append("response_format", "verbose_json");
+  formData.append(
+    "prompt",
+    options.prompt ||
+      (options.language
+        ? `Transcribe the resident's voice command to text. The resident's working language is ${getLanguageName(
+            options.language
+          )}.`
+        : "Transcribe the resident's voice command to text.")
+  );
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "Accept-Encoding": "identity",
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    return {
+      error: "OpenAI transcription request failed",
+      code: "TRANSCRIPTION_FAILED",
+      details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}`,
+    };
+  }
+
+  const whisperResponse = (await response.json()) as Partial<WhisperResponse> & {
+    text?: string;
+  };
+  if (!whisperResponse.text || typeof whisperResponse.text !== "string") {
+    return {
+      error: "Invalid OpenAI transcription response",
+      code: "SERVICE_ERROR",
+      details: "OpenAI returned an invalid transcription response format",
+    };
+  }
+
+  return {
+    task: whisperResponse.task ?? "transcribe",
+    language: whisperResponse.language ?? options.language ?? "en",
+    duration: whisperResponse.duration ?? 0,
+    text: whisperResponse.text,
+    segments: whisperResponse.segments ?? [],
+  };
 }
 
 async function sendBufferToTranscriptionService(
