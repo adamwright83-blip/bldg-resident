@@ -760,12 +760,13 @@ export function usePenPhysics({
         const deltaX = point.x - physics.pointerStartX;
         const deltaY = point.y - physics.pointerStartY;
         const horizontalSwipe =
-          Math.abs(deltaX) > 92 && Math.abs(deltaX) > Math.abs(deltaY) * 0.72;
+          deltaX > 70 && Math.abs(deltaX) > Math.abs(deltaY) * 0.58;
+        const rightFlick =
+          physics.pointerVX > 680 && Math.abs(deltaY) < 120 && deltaX > 28;
         const offstage =
-          rawTargetX > nextMetrics.width + nextMetrics.penWidth * 0.3 ||
-          rawTargetX < -nextMetrics.penWidth * 0.3;
+          rawTargetX > nextMetrics.width + nextMetrics.penWidth * 0.18;
 
-        if (!physics.swipeDismissed && (horizontalSwipe || offstage)) {
+        if (!physics.swipeDismissed && (horizontalSwipe || rightFlick || offstage)) {
           physics.swipeDismissed = true;
           physics.pointerId = null;
           physics.targetX =

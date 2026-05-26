@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -46,6 +46,7 @@ type PrototypeMode =
   | "speech"
   | "typing"
   | "requestReady"
+  | "editingRequest"
   | "takingCustody"
   | "drawing"
   | "transforming"
@@ -92,9 +93,11 @@ export default function PenPullPrototype({
   tuning,
 }: PenPullPrototypeProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [debug, setDebug] = useState(defaultDebug);
   const [draft, setDraft] = useState("");
+  const [editDraft, setEditDraft] = useState("");
   const [internalComposerOpen, setInternalComposerOpen] = useState(false);
   const [mode, setMode] = useState<PrototypeMode>("rest");
   const [confirmedRequest, setConfirmedRequest] = useState("");
@@ -114,11 +117,12 @@ export default function PenPullPrototype({
     mode === "speech" ||
     mode === "typing" ||
     mode === "requestReady" ||
+    mode === "editingRequest" ||
     mode === "takingCustody";
   const showPenGesture = (showHomeWorld && mode !== "speech") || mode === "held";
   const canReturnToHeld =
     Boolean(confirmedRequest) &&
-    (mode === "choice" || mode === "speech" || mode === "typing" || mode === "requestReady");
+    (mode === "choice" || mode === "speech" || mode === "typing" || mode === "requestReady" || mode === "editingRequest");
   const microphoneClassName =
     mode === "choice" || mode === "speech"
       ? "translate-y-[300px] opacity-100 scale-100"
@@ -148,8 +152,43 @@ export default function PenPullPrototype({
       inputRef.current?.focus({ preventScroll: true });
     });
   };
-  const submitTypedCommand = async () => {
-    const text = draft.trim();
+  const parseTextCommand = async (text: string) => {
+    const response = await fetch("/api/held/text-command", {
+      body: JSON.stringify({ text }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Text command failed: ${response.status}`);
+    }
+
+    return (await response.json()) as HeldTextCommandResponse;
+  };
+  const applyTextCommandResult = (text: string, result: HeldTextCommandResponse) => {
+    const displayRequest = result.displayRequest?.trim() || result.rawTranscript || text;
+    setDraft(displayRequest);
+    setEditDraft(displayRequest);
+    setSpeechTranscript(displayRequest);
+    setConfirmedRequest(displayRequest);
+    setConfirmedServices(result.parsedIntent?.services ?? []);
+    setTypedCommandStatus("ready");
+    setMode("requestReady");
+  };
+  const applyTextCommandFallback = (text: string) => {
+    const displayRequest = buildTypedCommandFallback(text);
+    setDraft(displayRequest);
+    setEditDraft(displayRequest);
+    setSpeechTranscript(displayRequest);
+    setConfirmedRequest(displayRequest);
+    setConfirmedServices(inferServicesFromRequest(displayRequest));
+    setTypedCommandStatus("ready");
+    setMode("requestReady");
+  };
+  const submitTypedCommand = async (overrideText?: string) => {
+    const text = (overrideText ?? draft).trim();
     if (!text || typedCommandStatus === "summarizing") {
       return;
     }
@@ -159,36 +198,30 @@ export default function PenPullPrototype({
     setMode("requestReady");
 
     try {
-      const response = await fetch("/api/held/text-command", {
-        body: JSON.stringify({ text }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Text command failed: ${response.status}`);
-      }
-
-      const result = (await response.json()) as HeldTextCommandResponse;
-      const displayRequest = result.displayRequest?.trim() || result.rawTranscript || text;
-      setDraft(displayRequest);
-      setSpeechTranscript(displayRequest);
-      setConfirmedRequest(displayRequest);
-      setConfirmedServices(result.parsedIntent?.services ?? []);
-      setTypedCommandStatus("ready");
-      setMode("requestReady");
+      const result = await parseTextCommand(text);
+      applyTextCommandResult(text, result);
     } catch (error) {
       console.error("[PenPullPrototype] typed command failed", error);
-      const displayRequest = buildTypedCommandFallback(text);
-      setDraft(displayRequest);
-      setSpeechTranscript(displayRequest);
-      setConfirmedRequest(displayRequest);
-      setConfirmedServices(inferServicesFromRequest(displayRequest));
-      setTypedCommandStatus("ready");
-      setMode("requestReady");
+      applyTextCommandFallback(text);
     }
+  };
+  const enterRequestEditMode = (requestOverride?: string) => {
+    const nextText = requestOverride?.trim() || confirmedRequest || draft || speechTranscript;
+    setEditDraft(nextText);
+    setTypedCommandStatus("idle");
+    setMode("editingRequest");
+    if (controlledComposerOpen === undefined) {
+      setInternalComposerOpen(false);
+    }
+    window.requestAnimationFrame(() => {
+      editRequestInputRef.current?.focus({ preventScroll: true });
+      editRequestInputRef.current?.setSelectionRange(nextText.length, nextText.length);
+    });
+  };
+  const submitEditedRequest = () => {
+    const text = editDraft.trim();
+    if (!text) return;
+    void submitTypedCommand(text);
   };
   const beginSetInMotion = (request = confirmedRequest, services = confirmedServices) => {
     const nextRequest = request.trim() || draft.trim() || speechTranscript.trim();
@@ -355,7 +388,7 @@ export default function PenPullPrototype({
           {showHomeWorld && (
             <img
               alt=""
-              className={`pointer-events-none absolute bottom-[-1px] left-1/2 z-10 w-[95%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
+              className={`pointer-events-none absolute bottom-[-18px] left-1/2 z-10 w-[112%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
                 composerTrayVisible || mode === "speech" || mode === "takingCustody" ? "opacity-0" : "opacity-100"
               }`}
               draggable={false}
@@ -373,7 +406,7 @@ export default function PenPullPrototype({
           <HeldVoiceCaptureTray
             active={mode === "speech"}
             onConfirmRequest={(request, services) => beginSetInMotion(request, services)}
-            onEditRequest={enterTypingMode}
+            onEditRequest={enterRequestEditMode}
             onTranscriptChange={setSpeechTranscript}
             transcript={speechTranscript}
           />
@@ -403,7 +436,7 @@ export default function PenPullPrototype({
           )}
 
           <div
-            className={`pointer-events-none absolute bottom-[-6px] left-1/2 z-30 w-[108%] transition-[opacity,transform] duration-[520ms] ${
+            className={`pointer-events-none absolute bottom-[-18px] left-1/2 z-30 w-[118%] transition-[opacity,transform] duration-[520ms] ${
               composerTrayVisible
                 ? "translate-x-[-50%] translate-y-0 opacity-100"
                 : "translate-x-[-50%] translate-y-[112%] opacity-0"
@@ -419,6 +452,12 @@ export default function PenPullPrototype({
               src={HELD_ASSETS.composer}
             />
           </div>
+
+          {mode === "choice" && (
+            <p className="pointer-events-none absolute bottom-[292px] left-[13%] right-[22%] z-[42] font-serif text-[15px] italic leading-5 text-[#2f2923]/80">
+              Type below. Flick the pen right to speak.
+            </p>
+          )}
 
           {mode === "typing" && (
             <input
@@ -469,8 +508,12 @@ export default function PenPullPrototype({
             <HeldRequestReadyCard
               displayRequest={confirmedRequest || draft}
               isWorking={typedCommandStatus === "summarizing"}
-              onConfirm={() => beginSetInMotion()}
-              onEdit={enterTypingMode}
+              onConfirm={() => {
+                console.debug("[HELD] Set it in motion tapped from typed request");
+                beginSetInMotion();
+              }}
+              onEdit={enterRequestEditMode}
+              onRequestTap={enterRequestEditMode}
             />
           )}
 
@@ -479,7 +522,20 @@ export default function PenPullPrototype({
               displayRequest={confirmedRequest || draft}
               isStamped
               onConfirm={() => undefined}
-              onEdit={enterTypingMode}
+              onEdit={enterRequestEditMode}
+            />
+          )}
+
+          {mode === "editingRequest" && (
+            <HeldRequestReadyCard
+              displayRequest={editDraft}
+              editInputRef={editRequestInputRef}
+              editValue={editDraft}
+              isEditing
+              isWorking={typedCommandStatus === "summarizing"}
+              onConfirm={submitEditedRequest}
+              onEdit={enterRequestEditMode}
+              onEditChange={setEditDraft}
             />
           )}
 
@@ -538,16 +594,26 @@ export default function PenPullPrototype({
 
 function HeldRequestReadyCard({
   displayRequest,
+  editInputRef,
+  editValue = "",
+  isEditing = false,
   isStamped = false,
   isWorking = false,
   onConfirm,
   onEdit,
+  onEditChange,
+  onRequestTap,
 }: {
   displayRequest: string;
+  editInputRef?: RefObject<HTMLTextAreaElement | null>;
+  editValue?: string;
+  isEditing?: boolean;
   isStamped?: boolean;
   isWorking?: boolean;
   onConfirm: () => void;
   onEdit: () => void;
+  onEditChange?: (value: string) => void;
+  onRequestTap?: () => void;
 }) {
   return (
     <section className="absolute left-1/2 top-[56%] z-[70] w-[84%] -translate-x-1/2">
@@ -555,9 +621,31 @@ function HeldRequestReadyCard({
         <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
           Your request
         </p>
-        <p className="mt-3 min-h-[54px] font-serif text-[17px] italic leading-6 text-[#2f2923]">
-          {isWorking ? "Making sense of it." : displayRequest || "Making sense of it."}
-        </p>
+        {isEditing ? (
+          <textarea
+            ref={editInputRef}
+            aria-label="Edit your request"
+            className="mt-3 min-h-[86px] w-full resize-none rounded-[3px] border border-[#d8c8ad]/65 bg-[#fffaf2]/70 px-3 py-2 font-serif text-[17px] italic leading-6 text-[#2f2923] outline-none focus:border-[#b78a38]/70"
+            onChange={event => onEditChange?.(event.currentTarget.value)}
+            onKeyDown={event => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                onConfirm();
+              }
+            }}
+            value={editValue}
+          />
+        ) : (
+          <button
+            aria-label="Edit request text"
+            className="mt-3 block min-h-[54px] w-full text-left font-serif text-[17px] italic leading-6 text-[#2f2923]"
+            disabled={isStamped || isWorking}
+            onClick={onRequestTap}
+            type="button"
+          >
+            {isWorking ? "Making sense of it." : displayRequest || "Making sense of it."}
+          </button>
+        )}
         {isStamped && (
           <span className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[19px] text-[#9a681f]">
             H
@@ -570,16 +658,16 @@ function HeldRequestReadyCard({
             onClick={onEdit}
             type="button"
           >
-            Edit request
+            {isEditing ? "Editing" : "Edit request"}
           </button>
           <button
             aria-label="Set it in motion"
-            className="min-h-11 flex-1 touch-manipulation text-right font-serif text-[16px] text-[#9a681f] transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
-            disabled={isWorking || isStamped}
+            className="min-h-12 flex-1 touch-manipulation text-right font-serif text-[16px] text-[#9a681f] transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
+            disabled={isWorking || isStamped || (isEditing && !editValue.trim())}
             onClick={onConfirm}
             type="button"
           >
-            {isStamped ? "Taking custody." : "Set it in motion →"}
+            {isStamped ? "Taking custody." : isEditing ? "Done →" : "Set it in motion →"}
           </button>
         </div>
       </div>
@@ -682,7 +770,7 @@ function HeldTransformingState({
 
       <img
         alt=""
-        className={`pointer-events-none absolute left-1/2 z-10 w-[96%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
+        className={`pointer-events-none absolute left-1/2 z-10 w-[112%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
           isHeld ? "bottom-[34%] opacity-100" : "bottom-[-2%] opacity-80"
         }`}
         draggable={false}

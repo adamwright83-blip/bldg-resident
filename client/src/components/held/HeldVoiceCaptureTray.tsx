@@ -17,6 +17,12 @@ type InkPoint = {
   y: number;
 };
 
+type InkMark = {
+  id: number;
+  x: number;
+  y: number;
+};
+
 type ParsedIntent = {
   display_request: string;
   services: Array<{
@@ -43,7 +49,7 @@ type VoiceCommandResponse = {
 type HeldVoiceCaptureTrayProps = {
   active: boolean;
   onConfirmRequest?: (request: string, services: ParsedIntent["services"]) => void;
-  onEditRequest: () => void;
+  onEditRequest: (request?: string) => void;
   onTranscriptChange?: (transcript: string) => void;
   transcript?: string;
 };
@@ -151,6 +157,7 @@ export function HeldVoiceCaptureTray({
   const [rawTranscript, setRawTranscript] = useState("");
   const [liveTranscript, setLiveTranscript] = useState("");
   const [displayRequest, setDisplayRequest] = useState(transcript ?? "");
+  const [inkMarks, setInkMarks] = useState<InkMark[]>([]);
   const [parsedIntent, setParsedIntent] = useState<ParsedIntent | null>(null);
   const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(
     null
@@ -163,9 +170,14 @@ export function HeldVoiceCaptureTray({
   const chunksRef = useRef<Blob[]>([]);
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const heardVoiceRef = useRef(false);
+  const lastWaveOffsetRef = useRef(0);
   const lastVoiceAtRef = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const liveInkDotRef = useRef<HTMLSpanElement | null>(null);
+  const nibHitboxRef = useRef<HTMLButtonElement | null>(null);
   const nibRef = useRef<HTMLImageElement | null>(null);
+  const nibXRef = useRef(76);
+  const nibYRef = useRef(53);
   const onTranscriptChangeRef = useRef(onTranscriptChange);
   const pathRef = useRef<SVGPathElement | null>(null);
   const pointsRef = useRef<InkPoint[]>(seedPoints());
@@ -293,13 +305,16 @@ export function HeldVoiceCaptureTray({
     const updateInkLine = () => {
       const points = pointsRef.current;
       const amp = Math.max(smoothedAmpRef.current, 0.035);
+      const speechAmp = Math.min(1, amp * 1.65);
       const time = performance.now() / 1000;
       const organicWave =
-        Math.sin(time * 5.2) * amp * 18 +
-        Math.sin(time * 2.1) * amp * 9 +
-        Math.sin(time * 11) * amp * 3;
+        Math.sin(time * 4.4) * speechAmp * 20 +
+        Math.sin(time * 7.6 + Math.sin(time * 1.2)) * speechAmp * 8 +
+        Math.sin(time * 12.5) * speechAmp * 2.5;
       const silenceDrift = Math.sin(time * 1.2) * 1.2;
-      const y = BASELINE_Y + organicWave + silenceDrift;
+      const targetOffset = organicWave + silenceDrift;
+      lastWaveOffsetRef.current += (targetOffset - lastWaveOffsetRef.current) * 0.22;
+      const y = BASELINE_Y + lastWaveOffsetRef.current;
 
       points.push({ x: END_X, y });
 
@@ -313,16 +328,31 @@ export function HeldVoiceCaptureTray({
         pointsRef.current.shift();
       }
 
-      pathRef.current?.setAttribute("d", buildSmoothPath(pointsRef.current));
+      if (pathRef.current) {
+        pathRef.current.setAttribute("d", buildSmoothPath(pointsRef.current));
+        pathRef.current.style.strokeWidth = `${(1.45 + speechAmp * 0.95).toFixed(2)}`;
+      }
 
       const livePoint = pointsRef.current[pointsRef.current.length - 1];
       if (livePoint && nibRef.current) {
         const xPercent = 14 + livePoint.x * 0.66;
         const yPercent = 43 + livePoint.y * 0.2;
-        const tilt = 5 + Math.min(10, amp * 8);
+        const tilt = 5 + Math.min(10, speechAmp * 8);
+        nibXRef.current += (xPercent - nibXRef.current) * 0.26;
+        nibYRef.current += (yPercent - nibYRef.current) * 0.26;
         nibRef.current.style.transform = `translate(-22%, -82%) rotate(${tilt.toFixed(2)}deg)`;
-        nibRef.current.style.left = `${xPercent.toFixed(2)}%`;
-        nibRef.current.style.top = `${yPercent.toFixed(2)}%`;
+        nibRef.current.style.left = `${nibXRef.current.toFixed(2)}%`;
+        nibRef.current.style.top = `${nibYRef.current.toFixed(2)}%`;
+      }
+
+      if (liveInkDotRef.current) {
+        liveInkDotRef.current.style.left = `${nibXRef.current.toFixed(2)}%`;
+        liveInkDotRef.current.style.top = `${nibYRef.current.toFixed(2)}%`;
+      }
+
+      if (nibHitboxRef.current) {
+        nibHitboxRef.current.style.left = `${nibXRef.current.toFixed(2)}%`;
+        nibHitboxRef.current.style.top = `${nibYRef.current.toFixed(2)}%`;
       }
     };
 
@@ -367,6 +397,7 @@ export function HeldVoiceCaptureTray({
         setRawTranscript("");
         setLiveTranscript("");
         setDisplayRequest("");
+        setInkMarks([]);
         setParsedIntent(null);
         setClarificationQuestion(null);
         setClarificationOptions([]);
@@ -374,6 +405,7 @@ export function HeldVoiceCaptureTray({
         heardVoiceRef.current = false;
         lastVoiceAtRef.current = 0;
         recordingStartedAtRef.current = 0;
+        lastWaveOffsetRef.current = 0;
         chunksRef.current = [];
         pointsRef.current = seedPoints();
         pathRef.current?.setAttribute("d", buildSmoothPath(pointsRef.current));
@@ -472,6 +504,21 @@ export function HeldVoiceCaptureTray({
 
   const requestCardStamped =
     voiceStatus === "confirmed" || voiceStatus === "complete";
+  const editableRequestText = displayRequest || liveTranscript || rawTranscript || transcript || "";
+  const canEditRequest =
+    voiceStatus === "awaiting_confirmation" ||
+    voiceStatus === "clarifying" ||
+    voiceStatus === "error";
+  const addInkMark = () => {
+    const id = Date.now();
+    setInkMarks(current => [
+      ...current.slice(-2),
+      { id, x: nibXRef.current, y: nibYRef.current },
+    ]);
+    window.setTimeout(() => {
+      setInkMarks(current => current.filter(mark => mark.id !== id));
+    }, 720);
+  };
 
   return (
     <div
@@ -503,10 +550,41 @@ export function HeldVoiceCaptureTray({
             stroke="#1f1a16"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth="2.15"
+            strokeWidth="1.8"
             style={{ opacity: 0.9 }}
           />
         </svg>
+        <span
+          ref={liveInkDotRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute z-[19] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1f1a16]/70 blur-[0.5px]"
+          style={{
+            left: `${nibXRef.current}%`,
+            top: `${nibYRef.current}%`,
+          }}
+        />
+        {inkMarks.map(mark => (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[18] h-3 w-3 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-[#1f1a16]/35 blur-[1px]"
+            key={mark.id}
+            style={{
+              left: `${mark.x}%`,
+              top: `${mark.y - 1}%`,
+            }}
+          />
+        ))}
+        <button
+          ref={nibHitboxRef}
+          aria-label="Nudge ink nib"
+          className="pointer-events-auto absolute z-[21] h-[22%] w-[18%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0"
+          onClick={addInkMark}
+          style={{
+            left: `${nibXRef.current}%`,
+            top: `${nibYRef.current}%`,
+          }}
+          type="button"
+        />
         <img
           ref={nibRef}
           alt=""
@@ -534,6 +612,14 @@ export function HeldVoiceCaptureTray({
         >
           {requestCopy}
         </p>
+        {canEditRequest && (
+          <button
+            aria-label="Edit heard request"
+            className="absolute left-[5%] top-[24%] h-[48%] w-[70%] rounded opacity-0"
+            onClick={() => onEditRequest(editableRequestText)}
+            type="button"
+          />
+        )}
 
         {requestCardStamped && (
           <div className="pointer-events-none absolute right-[15%] top-[43%] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[18px] text-[#9a681f]">
@@ -560,7 +646,7 @@ export function HeldVoiceCaptureTray({
         {voiceStatus === "awaiting_confirmation" && (
           <button
             aria-label="Set it in motion"
-            className="absolute bottom-[8%] left-[6%] h-8 w-[72%] touch-manipulation text-left transition-transform duration-150 active:scale-[0.98]"
+            className="absolute bottom-[5%] left-[6%] min-h-11 w-[72%] touch-manipulation text-left transition-transform duration-150 active:scale-[0.98]"
             onClick={() => void confirmRequest()}
             type="button"
           >
@@ -592,7 +678,7 @@ export function HeldVoiceCaptureTray({
         <button
           aria-label="Open composer"
           className="absolute right-[5%] top-[26%] h-[48%] w-[15%] rounded opacity-0"
-          onClick={onEditRequest}
+          onClick={() => onEditRequest(editableRequestText)}
           type="button"
         />
       </div>
