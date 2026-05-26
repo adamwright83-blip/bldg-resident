@@ -394,7 +394,7 @@ export default function PenPullPrototype({
               <PenCharm
                 {...physics.penRefs}
                 {...physics.pointerHandlers}
-                className={mode === "held" ? "z-[92]" : "z-40"}
+                className={mode === "held" ? "z-[92]" : "z-[80]"}
                 objectFit="contain"
                 penAssetSrc={penAssetSrc}
                 transformOrigin="50% 3%"
@@ -420,11 +420,11 @@ export default function PenPullPrototype({
             />
           </div>
 
-          {(mode === "choice" || mode === "typing") && (
+          {mode === "typing" && (
             <input
               ref={inputRef}
               aria-label="Type your request"
-              className="absolute bottom-[214px] left-[11%] right-[16%] z-50 h-10 border-0 bg-transparent px-4 font-serif text-[16px] italic text-[#2c2824] outline-none placeholder:text-transparent"
+              className="absolute bottom-[214px] left-[11%] right-[31%] z-50 h-12 rounded-[6px] border border-[#d5c2a4]/70 bg-[#fff8ec]/78 px-4 font-serif text-[16px] italic text-[#2c2824] shadow-[0_8px_18px_rgba(50,35,20,0.10)] outline-none placeholder:text-transparent"
               data-testid="held-composer-input"
               onChange={event => {
                 setDraft(event.currentTarget.value);
@@ -443,7 +443,7 @@ export default function PenPullPrototype({
               }}
               placeholder=""
               type="text"
-              value={mode === "typing" || mode === "choice" ? draft : ""}
+              value={draft}
             />
           )}
 
@@ -459,7 +459,7 @@ export default function PenPullPrototype({
           {mode === "choice" && (
             <button
               aria-label="Start typing"
-              className="absolute bottom-[108px] left-[10%] right-[10%] z-[62] h-[190px] rounded-[18px] opacity-0"
+              className="absolute bottom-[108px] left-[10%] right-[38%] z-[45] h-[190px] rounded-[18px] opacity-0"
               onClick={enterTypingMode}
               type="button"
             />
@@ -597,6 +597,7 @@ function HeldTransformingState({
   services: HeldParsedService[];
 }) {
   const longPressTimerRef = useRef<number | null>(null);
+  const longPressOpenedRef = useRef(false);
   const [selectedToken, setSelectedToken] = useState<HeldTokenAsset | null>(null);
   const [showProvider, setShowProvider] = useState(false);
   const tokens = getTokenAssets(services, displayRequest);
@@ -610,9 +611,11 @@ function HeldTransformingState({
   };
   const startTokenPress = (token: HeldTokenAsset) => {
     clearLongPress();
+    longPressOpenedRef.current = false;
     longPressTimerRef.current = window.setTimeout(() => {
+      longPressOpenedRef.current = true;
       setSelectedToken(token);
-      setShowProvider(false);
+      setShowProvider(token.type === "laundry_pickup");
       longPressTimerRef.current = null;
     }, 420);
   };
@@ -697,7 +700,13 @@ function HeldTransformingState({
               isHeld ? "scale-100 rotate-0 opacity-100" : "translate-y-[-150px] scale-75 rotate-[-12deg] opacity-0"
             }`}
             key={`${token.src}-${index}`}
-            onClick={() => {
+            onClick={event => {
+              if (longPressOpenedRef.current) {
+                event.preventDefault();
+                longPressOpenedRef.current = false;
+                return;
+              }
+
               setSelectedToken(token);
               setShowProvider(false);
             }}

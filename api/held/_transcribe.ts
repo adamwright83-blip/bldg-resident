@@ -16,10 +16,11 @@ export async function transcribeWithOpenAI(input: {
     };
   }
 
+  const mimeType = normalizeAudioMimeType(input.mimeType);
   const formData = new FormData();
-  const filename = `audio.${getFileExtension(input.mimeType)}`;
+  const filename = `held-voice-request.${getFileExtension(mimeType)}`;
   const audioBlob = new Blob([new Uint8Array(input.audioBuffer)], {
-    type: input.mimeType,
+    type: mimeType,
   });
 
   formData.append("file", audioBlob, filename);
@@ -65,15 +66,26 @@ export async function transcribeWithOpenAI(input: {
 
 function getFileExtension(mimeType: string) {
   const mimeToExt: Record<string, string> = {
+    "audio/aac": "aac",
     "audio/m4a": "m4a",
     "audio/mp3": "mp3",
     "audio/mp4": "m4a",
     "audio/mpeg": "mp3",
     "audio/ogg": "ogg",
+    "audio/oga": "oga",
     "audio/wav": "wav",
     "audio/wave": "wav",
     "audio/webm": "webm",
+    "video/mp4": "m4a",
+    "video/webm": "webm",
   };
 
-  return mimeToExt[mimeType] || "audio";
+  return mimeToExt[normalizeAudioMimeType(mimeType)] || "webm";
+}
+
+function normalizeAudioMimeType(mimeType: string) {
+  const compact = mimeType.split(";")[0]?.trim().toLowerCase();
+  if (!compact) return "audio/webm";
+  if (compact === "audio/x-m4a") return "audio/m4a";
+  return compact;
 }

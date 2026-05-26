@@ -49,6 +49,7 @@ type HeldVoiceCaptureTrayProps = {
 };
 
 const ASSETS = {
+  nib: "/held/nib-ink.png",
   requestCard: "/held/your-request-card.png",
   tray: "/held/audiomode-nursery-tray.png",
 };
@@ -164,6 +165,7 @@ export function HeldVoiceCaptureTray({
   const heardVoiceRef = useRef(false);
   const lastVoiceAtRef = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const nibRef = useRef<HTMLImageElement | null>(null);
   const onTranscriptChangeRef = useRef(onTranscriptChange);
   const pathRef = useRef<SVGPathElement | null>(null);
   const pointsRef = useRef<InkPoint[]>(seedPoints());
@@ -312,6 +314,16 @@ export function HeldVoiceCaptureTray({
       }
 
       pathRef.current?.setAttribute("d", buildSmoothPath(pointsRef.current));
+
+      const livePoint = pointsRef.current[pointsRef.current.length - 1];
+      if (livePoint && nibRef.current) {
+        const xPercent = 14 + livePoint.x * 0.66;
+        const yPercent = 43 + livePoint.y * 0.2;
+        const tilt = 5 + Math.min(10, amp * 8);
+        nibRef.current.style.transform = `translate(-22%, -82%) rotate(${tilt.toFixed(2)}deg)`;
+        nibRef.current.style.left = `${xPercent.toFixed(2)}%`;
+        nibRef.current.style.top = `${yPercent.toFixed(2)}%`;
+      }
     };
 
     const tick = () => {
@@ -495,6 +507,19 @@ export function HeldVoiceCaptureTray({
             style={{ opacity: 0.9 }}
           />
         </svg>
+        <img
+          ref={nibRef}
+          alt=""
+          className="pointer-events-none absolute z-20 h-[22%] select-none drop-shadow-[0_8px_12px_rgba(42,28,16,0.18)]"
+          draggable={false}
+          src={ASSETS.nib}
+          style={{
+            left: "76%",
+            top: "53%",
+            transform: "translate(-22%, -82%) rotate(7deg)",
+            transformOrigin: "50% 92%",
+          }}
+        />
       </div>
 
       <div className="pointer-events-auto absolute left-1/2 top-[67%] z-40 w-[82%] -translate-x-1/2">
@@ -599,7 +624,7 @@ function getRequestCopy({
   }
 
   if (voiceStatus === "error") {
-    return "I heard your voice, but the request could not be read. Tap the square to type it.";
+    return "I caught the motion, not the words. Try once more, or write it.";
   }
 
   if (displayRequest.trim()) {

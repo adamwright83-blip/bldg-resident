@@ -13,16 +13,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const body = req.body as HeldVoiceCommandBody;
-  const audioBase64 = body.audioBase64?.trim();
-  const mimeType = body.mimeType?.trim() || "audio/webm";
-
-  if (!audioBase64) {
-    res.status(400).json({ error: "Audio is required." });
-    return;
-  }
-
   try {
+    const body = readVoiceBody(req.body);
+    const audioBase64 = body.audioBase64?.trim();
+    const mimeType = body.mimeType?.trim() || "audio/webm";
+
+    if (!audioBase64) {
+      res.status(400).json({ error: "Audio is required.", code: "missing_audio" });
+      return;
+    }
+
     const audioBuffer = Buffer.from(stripDataUrlPrefix(audioBase64), "base64");
     const transcription = await transcribeWithOpenAI({
       audioBuffer,
@@ -31,10 +31,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "Transcribe the resident's spoken service request exactly enough for intent parsing. Preserve dates, deadlines, names, locations, flight numbers, allergies, and constraints.",
     });
 
-    if ("error" in transcription) {
-      res.status(502).json({
-        error: transcription.error,
+    if (!transcription.ok) {
+      console.error("[HeldVoiceCommandAPI] transcription failed", {
+        code: "transcription_failed",
         details: transcription.details,
+        error: transcription.error,
+        mimeType,
+      });
+      res.status(502).json({
+        code: "transcription_failed",
+        error: transcription.error,
       });
       return;
     }
@@ -53,9 +59,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error("[HeldVoiceCommandAPI] voice command failed", error);
     res.status(500).json({
+      code: "voice_command_failed",
       error: "Voice command processing failed.",
     });
   }
+}
+
+function readVoiceBody(body: unknown): HeldVoiceCommandBody {
+  if (!body) return {};
+
+  if (typeof body === "string") {
+    try {
+      const parsed = JSON.parse(body) as HeldVoiceCommandBody;
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return body && typeof body === "object" ? (body as HeldVoiceCommandBody) : {};
 }
 
 function stripDataUrlPrefix(value: string) {
