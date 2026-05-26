@@ -49,8 +49,6 @@ type HeldVoiceCaptureTrayProps = {
 };
 
 const ASSETS = {
-  chain: "/held/fountainpen-chain.png",
-  nib: "/held/nib-ink.png",
   requestCard: "/held/your-request-card.png",
   tray: "/held/audiomode-nursery-tray.png",
 };
@@ -161,13 +159,11 @@ export function HeldVoiceCaptureTray({
 
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const chainRef = useRef<HTMLImageElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const heardVoiceRef = useRef(false);
   const lastVoiceAtRef = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const nibRef = useRef<HTMLImageElement | null>(null);
   const onTranscriptChangeRef = useRef(onTranscriptChange);
   const pathRef = useRef<SVGPathElement | null>(null);
   const pointsRef = useRef<InkPoint[]>(seedPoints());
@@ -316,30 +312,6 @@ export function HeldVoiceCaptureTray({
       }
 
       pathRef.current?.setAttribute("d", buildSmoothPath(pointsRef.current));
-
-      const livePoint = pointsRef.current[pointsRef.current.length - 1];
-      if (!livePoint) {
-        return;
-      }
-
-      const nibX = 14 + livePoint.x * 0.62;
-      const nibY = 42 + livePoint.y * 0.18;
-      const nibRotation = 6 + amp * 5;
-
-      if (nibRef.current) {
-        nibRef.current.style.left = `${nibX}%`;
-        nibRef.current.style.top = `${nibY}%`;
-        nibRef.current.style.transform = `translate(-36%, -73%) rotate(${nibRotation.toFixed(
-          2
-        )}deg)`;
-      }
-
-      if (chainRef.current) {
-        chainRef.current.style.left = `${nibX - 1.4}%`;
-        chainRef.current.style.height = `${Math.max(28, nibY + 7).toFixed(
-          2
-        )}%`;
-      }
     };
 
     const tick = () => {
@@ -523,27 +495,6 @@ export function HeldVoiceCaptureTray({
             style={{ opacity: 0.9 }}
           />
         </svg>
-        <img
-          ref={chainRef}
-          alt=""
-          className="absolute top-[-63%] z-20 w-[4.8%] origin-top select-none object-fill"
-          draggable={false}
-          src={ASSETS.chain}
-          style={{ left: "70.9%", height: "55%" }}
-        />
-        <img
-          ref={nibRef}
-          alt=""
-          className="absolute z-30 w-[16%] select-none drop-shadow-[0_8px_12px_rgba(35,24,12,0.22)]"
-          draggable={false}
-          src={ASSETS.nib}
-          style={{
-            left: "72%",
-            top: "51%",
-            transform: "translate(-36%, -73%) rotate(7deg)",
-            transition: "transform 80ms linear, left 80ms linear, top 80ms linear",
-          }}
-        />
       </div>
 
       <div className="pointer-events-auto absolute left-1/2 top-[67%] z-40 w-[82%] -translate-x-1/2">

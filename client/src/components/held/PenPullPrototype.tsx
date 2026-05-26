@@ -25,6 +25,7 @@ type PenPullPrototypeProps = {
 const HELD_ASSETS = {
   composer: "/held/nursery-composer.png",
   crest: "/held/crest-h-flat.png",
+  galleryBench: "/held/nursery-cradle.png",
   laundryProvider: "/held/laundry-butler-provider.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
@@ -91,6 +92,7 @@ export default function PenPullPrototype({
   tuning,
 }: PenPullPrototypeProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [debug, setDebug] = useState(defaultDebug);
   const [draft, setDraft] = useState("");
   const [internalComposerOpen, setInternalComposerOpen] = useState(false);
@@ -105,7 +107,6 @@ export default function PenPullPrototype({
   const composerTrayVisible =
     composerOpen &&
     (mode === "choice" || mode === "typing" || mode === "requestReady");
-  const showTypingInput = mode === "typing";
   const showRequestReady = mode === "requestReady";
   const showHomeWorld =
     mode === "rest" ||
@@ -141,6 +142,11 @@ export default function PenPullPrototype({
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(true);
     }
+
+    inputRef.current?.focus({ preventScroll: true });
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
   };
   const submitTypedCommand = async () => {
     const text = draft.trim();
@@ -414,10 +420,11 @@ export default function PenPullPrototype({
             />
           </div>
 
-          {showTypingInput && (
+          {(mode === "choice" || mode === "typing") && (
             <input
-              aria-label="Prototype composer input"
-              className="absolute bottom-[214px] left-[11%] right-[16%] z-50 h-10 rounded-full border border-[#9f875f]/25 bg-[#fffaf2]/55 px-4 text-[16px] text-[#2c2824] shadow-sm outline-none placeholder:text-[#8f8170]"
+              ref={inputRef}
+              aria-label="Type your request"
+              className="absolute bottom-[214px] left-[11%] right-[16%] z-50 h-10 border-0 bg-transparent px-4 font-serif text-[16px] italic text-[#2c2824] outline-none placeholder:text-transparent"
               data-testid="held-composer-input"
               onChange={event => {
                 setDraft(event.currentTarget.value);
@@ -426,11 +433,7 @@ export default function PenPullPrototype({
                   enterTypingMode();
                 }
               }}
-              onFocus={() => {
-                if (draft.length > 0) {
-                  enterTypingMode();
-                }
-              }}
+              onFocus={() => enterTypingMode()}
               onKeyDown={event => {
                 enterTypingMode();
                 if (event.key === "Enter") {
@@ -438,15 +441,15 @@ export default function PenPullPrototype({
                   void submitTypedCommand();
                 }
               }}
-              placeholder="Type your message..."
+              placeholder=""
               type="text"
-              value={draft}
+              value={mode === "typing" || mode === "choice" ? draft : ""}
             />
           )}
 
-          {showTypingInput && (
+          {mode === "typing" && (
             <button
-              aria-label="Set typed request"
+              aria-label="Set it in motion"
               className="absolute bottom-[214px] right-[8%] z-[60] h-10 w-10 rounded-full opacity-0"
               onClick={() => void submitTypedCommand()}
               type="button"
@@ -842,7 +845,7 @@ function HeldServiceVitrine({
           alt=""
           className="pointer-events-none mt-auto w-full select-none opacity-95 mix-blend-multiply drop-shadow-[0_18px_24px_rgba(45,29,16,0.18)]"
           draggable={false}
-          src={HELD_ASSETS.trayEmptyHeld}
+          src={HELD_ASSETS.galleryBench}
         />
       </div>
     </section>
