@@ -38,8 +38,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         error: transcription.error,
         mimeType,
       });
+      const includeDiagnostics = req.headers["x-held-diagnostics"] === "1";
       res.status(502).json({
         code: "transcription_failed",
+        ...(includeDiagnostics && transcription.details
+          ? { diagnostics: transcription.details }
+          : {}),
         error: transcription.error,
       });
       return;
