@@ -40,6 +40,8 @@ describe("runResidentAgent multi-intent orchestration", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T19:00:00.000Z"));
     vi.stubEnv("ADMIN_AGENT_S2S_URL", "https://admin.example/api/agent/s2s/run-tool");
     vi.stubEnv("ADMIN_AGENT_SHARED_SECRET", "secret");
     vi.stubEnv("APP_SHARED_API_SECRET", "intake-secret");

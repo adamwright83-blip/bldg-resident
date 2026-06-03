@@ -17,8 +17,12 @@ export function isResidentAppTestMode(): boolean {
 
   if (explicit && FALSE_VALUES.has(explicit)) return false;
 
+  if (explicit == null) {
+    if (process.env.NODE_ENV === "test") return false;
+    return process.env.NODE_ENV !== "production";
+  }
+
   return (
-    explicit == null ||
     envFlag("RESIDENT_APP_TEST_MODE") ||
     envFlag("APP_TEST_MODE") ||
     envFlag("BLDG_TEST_MODE")

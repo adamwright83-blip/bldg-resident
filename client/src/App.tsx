@@ -110,7 +110,7 @@ function App() {
           />
           {shouldShowNeutralFallback ? (
             <NeutralBuildingFallback />
-          ) : isPublicTour || isHeldExperience ? (
+          ) : isPublicTour ? (
             <PageSwitch />
           ) : (
             <OnboardingFlow>

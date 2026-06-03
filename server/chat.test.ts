@@ -5,7 +5,9 @@
  * No multi-step flows, no questions.
  */
 import { describe, expect, it, vi } from "vitest";
+import { SignJWT } from "jose";
 import { appRouter } from "./routers";
+import { getBldgUserById } from "./db";
 import type { TrpcContext } from "./_core/context";
 
 // Mock the LLM module — returns auto-booking confirmation with metadata markers
@@ -49,6 +51,9 @@ vi.mock("./opsIntegration", () => ({
 
 // Mock date parser
 vi.mock("./lib/dateParser", () => ({
+  getCurrentDateISOInLA: vi.fn().mockReturnValue("2026-02-19"),
+  parseRelativeDateToISO: vi.fn().mockReturnValue(null),
+  parseRequestedWindow: vi.fn().mockReturnValue(null),
   parseExplicitDateTime: vi.fn().mockReturnValue({
     hasExplicitDate: false,
     dateOverride: null,
@@ -130,6 +135,26 @@ function createAnonymousContext(): TrpcContext {
   };
 }
 
+async function createAuthenticatedContext(): Promise<TrpcContext> {
+  vi.stubEnv("JWT_SECRET", "test-secret");
+  const token = await new SignJWT({ bldgUserId: 1 })
+    .setProtectedHeader({ alg: "HS256" })
+    .sign(new TextEncoder().encode("test-secret"));
+
+  return {
+    user: null,
+    req: {
+      protocol: "https",
+      headers: {
+        cookie: `bldg_session=${token}`,
+      },
+    } as TrpcContext["req"],
+    res: {
+      clearCookie: vi.fn(),
+    } as unknown as TrpcContext["res"],
+  };
+}
+
 // ─── Chat router tests ───
 
 describe("chat.getHistory", () => {
@@ -142,6 +167,7 @@ describe("chat.getHistory", () => {
     expect(result).toEqual({
       messages: [],
       user: null,
+      session: { bldgUserId: null },
       onboardingComplete: false,
     });
   });
@@ -160,7 +186,19 @@ describe("chat.clearHistory", () => {
 
 describe("chat.sendMessage", () => {
   it("auto-books a service and returns booking metadata", async () => {
-    const ctx = createAnonymousContext();
+    vi.stubEnv("RESIDENT_APP_TEST_MODE", "1");
+    vi.mocked(getBldgUserById).mockResolvedValue({
+      id: 1,
+      phoneE164: "+15555550100",
+      firstName: "Ada",
+      lastName: "Lovelace",
+      unit: "12A",
+      buildingSlug: "opus",
+      paymentMethodSaved: 1,
+      stripeCustomerId: "cus_test",
+      stripePaymentMethodId: "pm_test",
+    } as any);
+    const ctx = await createAuthenticatedContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.chat.sendMessage({
@@ -175,15 +213,15 @@ describe("chat.sendMessage", () => {
 
     // Verify booking metadata is returned
     expect(result.booking).toMatchObject({
-      service: "laundry",
+      service: "Laundry",
       date: "Thursday, Feb 20",
       window: "7–10 AM",
       recurrence: "weekly",
+      orderId: expect.any(Number),
     });
 
     // Verify confirmation message includes key phrases
-    expect(result.content).toContain("Done");
-    expect(result.content).toContain("Modify / Cancel");
+    expect(result.content).toContain("Laundry booked");
   });
 
   it("rejects empty messages", async () => {

@@ -1,4 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { Elements } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+import { PaymentMethodForm } from "@/components/PaymentMethodForm";
+import { isResidentAppTestMode } from "@/lib/residentTestMode";
+import { trpc } from "@/lib/trpc";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -47,10 +60,13 @@ type PrototypeMode =
   | "typing"
   | "requestReady"
   | "editingRequest"
+  | "collectName"
+  | "collectPayment"
   | "takingCustody"
   | "drawing"
   | "transforming"
-  | "held";
+  | "held"
+  | "orderError";
 type HeldTextCommandResponse = {
   displayRequest: string;
   parsedIntent?: {
@@ -63,6 +79,25 @@ type HeldTokenAsset = {
   src: string;
   type: string;
 };
+
+type HeldAgentResponse = {
+  content?: string;
+  booking?: {
+    serviceRequestId?: number | null;
+    service?: string | null;
+    date?: string | null;
+    window?: string | null;
+    recurrence?: string | null;
+    orderId?: number | null;
+  } | null;
+  collectStep?: "name" | "payment";
+};
+
+const STRIPE_PUBLISHABLE_FALLBACK =
+  "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
+const stripePublishableKey =
+  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
+const stripePromise = isResidentAppTestMode ? null : loadStripe(stripePublishableKey);
 
 const TOKEN_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
   1: [{ left: 50, top: 50 }],
@@ -102,10 +137,21 @@ export default function PenPullPrototype({
   const [mode, setMode] = useState<PrototypeMode>("rest");
   const [confirmedRequest, setConfirmedRequest] = useState("");
   const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>([]);
+  const [heldAgentMessage, setHeldAgentMessage] = useState("");
+  const [heldAgentStatus, setHeldAgentStatus] = useState<
+    "idle" | "booking" | "needs_name" | "needs_payment" | "confirmed" | "error"
+  >("idle");
+  const [lastOrderId, setLastOrderId] = useState<number | null>(null);
+  const [nameFirst, setNameFirst] = useState("");
+  const [nameLast, setNameLast] = useState("");
+  const [pendingOrderRequest, setPendingOrderRequest] = useState("");
+  const [pendingOrderServices, setPendingOrderServices] = useState<HeldParsedService[]>([]);
   const [speechTranscript, setSpeechTranscript] = useState("");
   const [typedCommandStatus, setTypedCommandStatus] = useState<
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
+  const sendMessageMutation = trpc.chat.sendMessage.useMutation();
+  const saveNameMutation = trpc.chat.saveName.useMutation();
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
   const composerTrayVisible =
     composerOpen &&
@@ -118,11 +164,22 @@ export default function PenPullPrototype({
     mode === "typing" ||
     mode === "requestReady" ||
     mode === "editingRequest" ||
-    mode === "takingCustody";
+    mode === "collectName" ||
+    mode === "collectPayment" ||
+    mode === "takingCustody" ||
+    mode === "orderError";
   const showPenGesture = (showHomeWorld && mode !== "speech") || mode === "held";
   const canReturnToHeld =
     Boolean(confirmedRequest) &&
-    (mode === "choice" || mode === "speech" || mode === "typing" || mode === "requestReady" || mode === "editingRequest");
+    Boolean(lastOrderId) &&
+    (mode === "choice" ||
+      mode === "speech" ||
+      mode === "typing" ||
+      mode === "requestReady" ||
+      mode === "editingRequest" ||
+      mode === "collectName" ||
+      mode === "collectPayment" ||
+      mode === "orderError");
   const microphoneClassName =
     mode === "choice" || mode === "speech"
       ? "translate-y-[300px] opacity-100 scale-100"
@@ -130,6 +187,8 @@ export default function PenPullPrototype({
         ? "-translate-y-[120px] opacity-0 scale-90"
         : "-translate-y-[120px] opacity-0 scale-90";
   const enterSpeechMode = () => {
+    inputRef.current?.blur();
+    editRequestInputRef.current?.blur();
     setMode("speech");
 
     if (controlledComposerOpen === undefined) {
@@ -223,21 +282,122 @@ export default function PenPullPrototype({
     if (!text) return;
     void submitTypedCommand(text);
   };
-  const beginSetInMotion = (request = confirmedRequest, services = confirmedServices) => {
+  const handleHeldAgentResponse = (
+    response: HeldAgentResponse,
+    request: string,
+    services: HeldParsedService[]
+  ) => {
+    if (response.collectStep === "name") {
+      setPendingOrderRequest(request);
+      setPendingOrderServices(services);
+      setHeldAgentStatus("needs_name");
+      setHeldAgentMessage(
+        response.content ||
+          "I have the pickup ready. Add your name once, then I can set it in motion."
+      );
+      setMode("collectName");
+      return;
+    }
+
+    if (response.collectStep === "payment") {
+      setPendingOrderRequest(request);
+      setPendingOrderServices(services);
+      setHeldAgentStatus("needs_payment");
+      setHeldAgentMessage(
+        response.content ||
+          "I have the pickup ready. Add a card once, then I can set it in motion."
+      );
+      setMode("collectPayment");
+      return;
+    }
+
+    const orderId = Number(response.booking?.orderId ?? NaN);
+    if (response.booking && Number.isFinite(orderId) && orderId > 0) {
+      const nextServices = services.length
+        ? services
+        : inferServicesFromRequest(`${request} ${response.booking.service ?? ""}`);
+      setConfirmedRequest(request);
+      setConfirmedServices(nextServices);
+      setPendingOrderRequest("");
+      setPendingOrderServices([]);
+      setLastOrderId(orderId);
+      setHeldAgentStatus("confirmed");
+      setHeldAgentMessage(response.content || "Taking custody.");
+      setMode("takingCustody");
+      window.setTimeout(() => {
+        setMode("drawing");
+      }, 500);
+      return;
+    }
+
+    setPendingOrderRequest(request);
+    setPendingOrderServices(services);
+    setHeldAgentStatus("error");
+    setHeldAgentMessage(
+      response.content ||
+        "This did not set in motion yet. I kept the request here so you can try again."
+    );
+    setMode("orderError");
+  };
+  const beginSetInMotion = async (request = confirmedRequest, services = confirmedServices) => {
     const nextRequest = request.trim() || draft.trim() || speechTranscript.trim();
-    if (!nextRequest) return;
+    if (!nextRequest || heldAgentStatus === "booking" || sendMessageMutation.isPending) return;
 
     console.debug("[HELD] Set it in motion confirmed");
     setConfirmedRequest(nextRequest);
-    setConfirmedServices(services.length ? services : inferServicesFromRequest(nextRequest));
+    const nextServices = services.length ? services : inferServicesFromRequest(nextRequest);
+    setConfirmedServices(nextServices);
+    setPendingOrderRequest(nextRequest);
+    setPendingOrderServices(nextServices);
+    setHeldAgentStatus("booking");
+    setHeldAgentMessage("Taking custody.");
     setTypedCommandStatus("idle");
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(false);
     }
     setMode("takingCustody");
-    window.setTimeout(() => {
-      setMode("drawing");
-    }, 500);
+
+    try {
+      const response = (await sendMessageMutation.mutateAsync({
+        content: nextRequest,
+      })) as HeldAgentResponse;
+      handleHeldAgentResponse(response, nextRequest, nextServices);
+    } catch (error) {
+      console.error("[HELD] Set it in motion failed", error);
+      setHeldAgentStatus("error");
+      setHeldAgentMessage(
+        "This did not set in motion yet. I kept the request here so you can try again."
+      );
+      setMode("orderError");
+    }
+  };
+  const retryPendingOrder = () => {
+    const request = pendingOrderRequest || confirmedRequest || draft || speechTranscript;
+    const services = pendingOrderServices.length
+      ? pendingOrderServices
+      : confirmedServices.length
+        ? confirmedServices
+        : inferServicesFromRequest(request);
+    void beginSetInMotion(request, services);
+  };
+  const submitHeldName = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const firstName = nameFirst.trim();
+    if (!firstName || saveNameMutation.isPending) return;
+
+    try {
+      await saveNameMutation.mutateAsync({
+        firstName,
+        lastName: nameLast.trim() || undefined,
+      });
+      setHeldAgentMessage(`Good to meet you, ${firstName}. Taking custody.`);
+      retryPendingOrder();
+    } catch (error) {
+      console.error("[HELD] name save failed", error);
+      setHeldAgentStatus("error");
+      setHeldAgentMessage("I could not save the name yet. Try once more.");
+      setMode("orderError");
+    }
   };
   const physicsTuning = useMemo(
     () => ({
@@ -279,6 +439,8 @@ export default function PenPullPrototype({
 
     setDraft("");
     setSpeechTranscript("");
+    setHeldAgentStatus("idle");
+    setHeldAgentMessage("");
     setTypedCommandStatus("idle");
     setMode("held");
     physics.reset();
@@ -302,6 +464,11 @@ export default function PenPullPrototype({
     setSpeechTranscript("");
     setConfirmedRequest("");
     setConfirmedServices([]);
+    setHeldAgentMessage("");
+    setHeldAgentStatus("idle");
+    setLastOrderId(null);
+    setPendingOrderRequest("");
+    setPendingOrderServices([]);
     setTypedCommandStatus("idle");
     setMode("rest");
     physics.reset();
@@ -381,15 +548,30 @@ export default function PenPullPrototype({
               Held.
             </h1>
             <p className="mt-3 max-w-[160px] text-[14px] leading-5 text-[#55493d]">
-              {mode === "takingCustody" ? "Taking custody." : "Nothing is in motion yet."}
+              {mode === "takingCustody"
+                ? "Taking custody."
+                : mode === "collectName"
+                  ? "Name this motion."
+                  : mode === "collectPayment"
+                    ? "Secure it once."
+                    : mode === "orderError"
+                      ? "Not set yet."
+                      : "Nothing is in motion yet."}
             </p>
           </section>}
 
           {showHomeWorld && (
             <img
               alt=""
-              className={`pointer-events-none absolute bottom-[-18px] left-1/2 z-10 w-[112%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
-                composerTrayVisible || mode === "speech" || mode === "takingCustody" ? "opacity-0" : "opacity-100"
+              className={`pointer-events-none absolute bottom-[-34px] left-1/2 z-10 w-[130%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
+                composerTrayVisible ||
+                mode === "speech" ||
+                mode === "collectName" ||
+                mode === "collectPayment" ||
+                mode === "takingCustody" ||
+                mode === "orderError"
+                  ? "opacity-0"
+                  : "opacity-100"
               }`}
               draggable={false}
               src={HELD_ASSETS.tray}
@@ -399,13 +581,20 @@ export default function PenPullPrototype({
           <div
             aria-hidden="true"
             className={`pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
-              composerTrayVisible || mode === "speech" || mode === "takingCustody" ? "opacity-0" : "opacity-25"
+              composerTrayVisible ||
+              mode === "speech" ||
+              mode === "collectName" ||
+              mode === "collectPayment" ||
+              mode === "takingCustody" ||
+              mode === "orderError"
+                ? "opacity-0"
+                : "opacity-25"
             }`}
           />
 
           <HeldVoiceCaptureTray
             active={mode === "speech"}
-            onConfirmRequest={(request, services) => beginSetInMotion(request, services)}
+            onConfirmRequest={(request, services) => void beginSetInMotion(request, services)}
             onEditRequest={enterRequestEditMode}
             onTranscriptChange={setSpeechTranscript}
             transcript={speechTranscript}
@@ -436,7 +625,7 @@ export default function PenPullPrototype({
           )}
 
           <div
-            className={`pointer-events-none absolute bottom-[-18px] left-1/2 z-30 w-[118%] transition-[opacity,transform] duration-[520ms] ${
+            className={`pointer-events-none absolute bottom-[-32px] left-1/2 z-30 w-[128%] transition-[opacity,transform] duration-[520ms] ${
               composerTrayVisible
                 ? "translate-x-[-50%] translate-y-0 opacity-100"
                 : "translate-x-[-50%] translate-y-[112%] opacity-0"
@@ -510,7 +699,7 @@ export default function PenPullPrototype({
               isWorking={typedCommandStatus === "summarizing"}
               onConfirm={() => {
                 console.debug("[HELD] Set it in motion tapped from typed request");
-                beginSetInMotion();
+                void beginSetInMotion();
               }}
               onEdit={enterRequestEditMode}
               onRequestTap={enterRequestEditMode}
@@ -523,6 +712,67 @@ export default function PenPullPrototype({
               isStamped
               onConfirm={() => undefined}
               onEdit={enterRequestEditMode}
+            />
+          )}
+
+          {mode === "collectName" && (
+            <HeldLaunchRecoveryCard
+              actionLabel={saveNameMutation.isPending ? "Saving..." : "Continue →"}
+              message={heldAgentMessage}
+              onRetry={retryPendingOrder}
+              title="Your name"
+            >
+              <form className="mt-4 space-y-3" onSubmit={submitHeldName}>
+                <input
+                  autoComplete="given-name"
+                  className="h-12 w-full rounded-[4px] border border-[#d4c2a5]/80 bg-[#fffaf2]/78 px-4 font-serif text-[16px] text-[#2f2923] outline-none placeholder:text-[#8a7a68]"
+                  onChange={event => setNameFirst(event.currentTarget.value)}
+                  placeholder="First name"
+                  value={nameFirst}
+                />
+                <input
+                  autoComplete="family-name"
+                  className="h-12 w-full rounded-[4px] border border-[#d4c2a5]/80 bg-[#fffaf2]/78 px-4 font-serif text-[16px] text-[#2f2923] outline-none placeholder:text-[#8a7a68]"
+                  onChange={event => setNameLast(event.currentTarget.value)}
+                  placeholder="Last name"
+                  value={nameLast}
+                />
+                <button
+                  className="min-h-12 w-full text-right font-serif text-[16px] text-[#9a681f] disabled:opacity-50"
+                  disabled={!nameFirst.trim() || saveNameMutation.isPending}
+                  type="submit"
+                >
+                  {saveNameMutation.isPending ? "Saving..." : "Continue →"}
+                </button>
+              </form>
+            </HeldLaunchRecoveryCard>
+          )}
+
+          {mode === "collectPayment" && (
+            <HeldLaunchRecoveryCard
+              actionLabel="Retry"
+              message={heldAgentMessage}
+              onRetry={retryPendingOrder}
+              title="Payment"
+            >
+              <div className="mt-4">
+                <Elements stripe={stripePromise}>
+                  <PaymentMethodForm
+                    dark
+                    defaultCardholderName={[nameFirst, nameLast].filter(Boolean).join(" ")}
+                    onSuccess={retryPendingOrder}
+                  />
+                </Elements>
+              </div>
+            </HeldLaunchRecoveryCard>
+          )}
+
+          {mode === "orderError" && (
+            <HeldLaunchRecoveryCard
+              actionLabel={sendMessageMutation.isPending ? "Trying..." : "Try again →"}
+              message={heldAgentMessage}
+              onRetry={retryPendingOrder}
+              title="Almost"
             />
           )}
 
@@ -589,6 +839,43 @@ export default function PenPullPrototype({
         </div>
       </section>
     </main>
+  );
+}
+
+function HeldLaunchRecoveryCard({
+  actionLabel,
+  children,
+  message,
+  onRetry,
+  title,
+}: {
+  actionLabel: string;
+  children?: ReactNode;
+  message: string;
+  onRetry: () => void;
+  title: string;
+}) {
+  return (
+    <section className="absolute left-1/2 top-[48%] z-[74] w-[84%] -translate-x-1/2">
+      <div className="rounded-[4px] border border-[#d4c2a5]/80 bg-[#fff8ec]/88 px-5 py-5 shadow-[0_18px_30px_rgba(50,35,20,0.16)] backdrop-blur-[2px]">
+        <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
+          {title}
+        </p>
+        <p className="mt-3 font-serif text-[17px] italic leading-6 text-[#2f2923]">
+          {message || "I have the pickup ready."}
+        </p>
+        {children}
+        {!children && (
+          <button
+            className="mt-4 min-h-12 w-full text-right font-serif text-[16px] text-[#9a681f] transition-transform active:scale-[0.98]"
+            onClick={onRetry}
+            type="button"
+          >
+            {actionLabel}
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -770,7 +1057,7 @@ function HeldTransformingState({
 
       <img
         alt=""
-        className={`pointer-events-none absolute left-1/2 z-10 w-[112%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
+        className={`pointer-events-none absolute left-1/2 z-10 w-[124%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
           isHeld ? "bottom-[34%] opacity-100" : "bottom-[-2%] opacity-80"
         }`}
         draggable={false}

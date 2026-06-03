@@ -1304,30 +1304,34 @@ export const chatRouter = router({
           const recoveryMode = needsCriticalProfileRecovery(freshUser);
 
           if (recoveryMode) {
+            const profileGaps = getCriticalProfileGaps(freshUser);
+            const collectStep =
+              profileGaps.missingFirstName || profileGaps.missingLastName ? "name" : "payment";
+            const recoveryContent =
+              collectStep === "name"
+                ? "I have the pickup ready. Add your name once, then I can set it in motion."
+                : "I have the pickup ready. Add a card once, then I can set it in motion.";
             // Duplicate guard: if pending intent already exists for same service, don't overwrite
             const existingPending = (freshUser as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
             if (existingPending?.serviceType === simpleService) {
               const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
-              const confirmText = `${serviceLabel} booked for ${existingPending.date ?? defaults.date}, ${existingPending.window ?? defaults.window}.`;
               return {
                 role: "assistant" as const,
-                content: confirmText,
+                content: recoveryContent,
+                collectStep,
                 booking: {
                   serviceRequestId: 0,
                   service: serviceLabel,
                   date: existingPending.date ?? defaults.date,
                   window: existingPending.window ?? defaults.window,
                   recurrence: existingPending.recurrence ?? defaults.recurrence,
+                  orderId: null,
                 },
               };
             }
 
             const fpSameDay = detectSameDay(input.content);
             const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
-            const confirmText =
-              fpSameDay && simpleService === "dry-cleaning"
-                ? `Dry Cleaning booked for ${defaults.date}, ${defaults.window}. Same-day requested. If we pick up before 8:30am, we'll process it for same-day return.`
-                : `${serviceLabel} booked for ${defaults.date}, ${defaults.window}.`;
             const pendingIntent = {
               serviceType: simpleService,
               timeWindow: defaults.window,
@@ -1348,19 +1352,29 @@ export const chatRouter = router({
               await insertChatMessage({
                 bldgUserId,
                 role: "assistant",
-                content: confirmText,
-                metadata: { type: "booking", tutorial: true, service: serviceLabel, date: defaults.date, window: defaults.window, recurrence: defaults.recurrence },
+                content: recoveryContent,
+                metadata: {
+                  type: "onboarding_collect",
+                  collectType: collectStep,
+                  service: serviceLabel,
+                  date: defaults.date,
+                  window: defaults.window,
+                  recurrence: defaults.recurrence,
+                  sameDay: fpSameDay && simpleService === "dry-cleaning",
+                },
               });
             }
             return {
               role: "assistant" as const,
-              content: confirmText,
+              content: recoveryContent,
+              collectStep,
               booking: {
                 serviceRequestId: 0,
                 service: serviceLabel,
                 date: defaults.date,
                 window: defaults.window,
                 recurrence: defaults.recurrence,
+                orderId: null,
               },
             };
           }
@@ -1380,6 +1394,7 @@ export const chatRouter = router({
           let serviceRequestId: number | null = null;
           let intakeSuccess = false;
           let intakeFailureReason: string | null = null;
+          let adminOrderId: number | null = null;
 
           const adminApiUrl = (
             process.env.ADMIN_API_URL ||
@@ -1465,6 +1480,7 @@ export const chatRouter = router({
             await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
             console.log(`[BookingConfirm][FastPath] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
             intakeSuccess = true;
+            adminOrderId = intakeResult.orderId;
           } else {
             intakeFailureReason = (intakeResult as { reason: string }).reason;
             console.warn(`[INTAKE][FastPath] intake failed: reason=${intakeFailureReason}`);
@@ -1507,6 +1523,7 @@ export const chatRouter = router({
                 type: "booking",
                 serviceRequestId,
                 ...bookingMeta,
+                orderId: adminOrderId,
               },
             });
           }
@@ -1520,6 +1537,7 @@ export const chatRouter = router({
               date: defaults.date,
               window: defaults.window,
               recurrence: defaults.recurrence,
+              orderId: adminOrderId,
             },
           };
         }
@@ -1870,25 +1888,32 @@ export const chatRouter = router({
           const recoveryModeLlm = needsCriticalProfileRecovery(freshUserForTutorial);
 
           if (isLaundryOrDryCleaning(serviceCategory) && recoveryModeLlm) {
+            const profileGaps = getCriticalProfileGaps(freshUserForTutorial);
+            const collectStep =
+              profileGaps.missingFirstName || profileGaps.missingLastName ? "name" : "payment";
+            const recoveryContent =
+              collectStep === "name"
+                ? "I have the pickup ready. Add your name once, then I can set it in motion."
+                : "I have the pickup ready. Add a card once, then I can set it in motion.";
             const existingPending = (freshUserForTutorial as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
             if (existingPending?.serviceType === serviceCategory) {
               const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
-              const confirmText = `${serviceLabel} booked for ${existingPending.date ?? bookingMeta.date}, ${existingPending.window ?? bookingMeta.window}.`;
               return {
                 role: "assistant" as const,
-                content: confirmText,
+                content: recoveryContent,
+                collectStep,
                 booking: {
                   serviceRequestId: 0,
                   service: serviceLabel,
                   date: existingPending.date ?? bookingMeta.date,
                   window: existingPending.window ?? bookingMeta.window,
                   recurrence: existingPending.recurrence ?? bookingMeta.recurrence ?? null,
+                  orderId: null,
                 },
               };
             }
 
             const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
-            const confirmText = `${serviceLabel} booked for ${bookingMeta.date}, ${bookingMeta.window}.`;
             const pendingIntent = {
               serviceType: serviceCategory,
               timeWindow: bookingMeta.window,
@@ -1909,19 +1934,28 @@ export const chatRouter = router({
               await insertChatMessage({
                 bldgUserId,
                 role: "assistant",
-                content: confirmText,
-                metadata: { type: "booking", tutorial: true, service: serviceLabel, date: bookingMeta.date, window: bookingMeta.window, recurrence: bookingMeta.recurrence },
+                content: recoveryContent,
+                metadata: {
+                  type: "onboarding_collect",
+                  collectType: collectStep,
+                  service: serviceLabel,
+                  date: bookingMeta.date,
+                  window: bookingMeta.window,
+                  recurrence: bookingMeta.recurrence,
+                },
               });
             }
             return {
               role: "assistant" as const,
-              content: confirmText,
+              content: recoveryContent,
+              collectStep,
               booking: {
                 serviceRequestId: 0,
                 service: serviceLabel,
                 date: bookingMeta.date,
                 window: bookingMeta.window,
                 recurrence: bookingMeta.recurrence ?? null,
+                orderId: null,
               },
             };
           }
@@ -1970,6 +2004,7 @@ export const chatRouter = router({
           // For laundry and dry-cleaning: MUST await admin intake and verify success before confirming
           let intakeSuccess = true;
           let llmIntakeFailureReason: string | null = null;
+          let llmAdminOrderId: number | null = null;
           if (isLaundryOrDryCleaning(serviceCategory)) {
             const adminApiUrl = (
               process.env.ADMIN_API_URL ||
@@ -2029,6 +2064,7 @@ export const chatRouter = router({
             if (intakeResult.success) {
               await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
               console.log(`[BookingConfirm][LLM] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
+              llmAdminOrderId = intakeResult.orderId;
             } else {
               llmIntakeFailureReason = (intakeResult as { reason: string }).reason;
               intakeSuccess = false;
@@ -2154,6 +2190,7 @@ export const chatRouter = router({
                   type: "booking",
                   serviceRequestId,
                   ...bookingMeta,
+                  orderId: llmAdminOrderId,
                 }
               : null,
           });
@@ -2169,6 +2206,7 @@ export const chatRouter = router({
                 date: bookingMeta.date,
                 window: bookingMeta.window,
                 recurrence: bookingMeta.recurrence,
+                orderId: llmAdminOrderId,
               }
             : null,
         };

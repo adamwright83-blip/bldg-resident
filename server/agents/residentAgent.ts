@@ -191,15 +191,22 @@ async function executeLaundryIntent(input: {
   const freshUser = await getBldgUserById(input.bldgUserId);
 
   if (needsCriticalProfileRecovery(freshUser)) {
+    const profileGaps = getCriticalProfileGaps(freshUser);
+    const collectStep =
+      profileGaps.missingFirstName || profileGaps.missingLastName ? "name" : "payment";
+    const recoveryContent =
+      collectStep === "name"
+        ? "I have the pickup ready. Add your name once, then I can set it in motion."
+        : "I have the pickup ready. Add a card once, then I can set it in motion.";
     const existingPending = (freshUser as any)?.pendingBookingIntentJson as
       | { serviceType?: string; date?: string; window?: string; recurrence?: string }
       | null;
     if (existingPending?.serviceType === "laundry") {
-      const confirmText = `Laundry booked for ${existingPending.date ?? defaults.date}, ${existingPending.window ?? defaults.window}.`;
       return {
         handled: true,
         role: "assistant",
-        content: confirmText,
+        content: recoveryContent,
+        collectStep,
         booking: {
           serviceRequestId: 0,
           service: "Laundry",
@@ -226,15 +233,14 @@ async function executeLaundryIntent(input: {
       pendingBookingIntentJson: pendingIntent as any,
     } as any);
 
-    const confirmText = `Laundry booked for ${defaults.date}, ${defaults.window}.`;
     if (!input.suppressAssistantMessage) {
       await insertChatMessage({
         bldgUserId: input.bldgUserId,
         role: "assistant",
-        content: confirmText,
+        content: recoveryContent,
         metadata: withResidentAgentMetadata(input.session, {
-          type: "booking",
-          tutorial: true,
+          type: "onboarding_collect",
+          collectType: collectStep,
           service: "Laundry",
           date: defaults.date,
           window: defaults.window,
@@ -246,7 +252,8 @@ async function executeLaundryIntent(input: {
     return {
       handled: true,
       role: "assistant",
-      content: confirmText,
+      content: recoveryContent,
+      collectStep,
       booking: {
         serviceRequestId: 0,
         service: "Laundry",

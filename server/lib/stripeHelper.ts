@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import { isResidentAppTestMode } from "../residentTestMode";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-if (!stripeSecretKey && !isResidentAppTestMode()) {
+if (!stripeSecretKey && !isResidentAppTestMode() && process.env.NODE_ENV !== "test") {
   throw new Error("STRIPE_SECRET_KEY is not configured");
 }
 

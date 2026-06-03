@@ -16,7 +16,7 @@ const explicitMode = [
 
 export const isResidentAppTestMode =
   explicitMode == null
-    ? true
+    ? !import.meta.env.PROD
     : FALSE_VALUES.has(explicitMode)
       ? false
       : envFlag("VITE_RESIDENT_APP_TEST_MODE") ||
