@@ -20,7 +20,7 @@ export async function transcribeWithOpenAI(input: {
 
   const mimeType = normalizeAudioMimeType(input.mimeType);
   const filename = `held-voice-request.${getFileExtension(mimeType)}`;
-  const model = process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || "gpt-4o-mini-transcribe";
+  const model = process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || "whisper-1";
   const prompt =
     input.prompt ??
     "Transcribe the resident's service request. Preserve names, dates, locations, deadlines, return-by constraints, and other important details.";
