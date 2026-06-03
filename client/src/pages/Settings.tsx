@@ -14,9 +14,11 @@ import { isResidentAppTestMode } from "@/lib/residentTestMode";
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
 const stripePublishableKey =
-  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
+  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ||
+  (import.meta.env.DEV ? STRIPE_PUBLISHABLE_FALLBACK : "");
+const stripeInitError = stripePublishableKey ? null : "Stripe publishable key is unavailable.";
 const stripePromise =
-  stripePublishableKey && !isResidentAppTestMode ? loadStripe(stripePublishableKey) : null;
+  stripeInitError || isResidentAppTestMode ? null : loadStripe(stripePublishableKey);
 
 function formatPhone(phone: string | null | undefined): string {
   if (!phone) return "—";
