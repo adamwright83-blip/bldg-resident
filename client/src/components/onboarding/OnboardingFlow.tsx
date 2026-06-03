@@ -43,6 +43,12 @@ function markOnboardingComplete() {
   } catch {}
 }
 
+function clearOnboardingComplete() {
+  try {
+    localStorage.removeItem(ONBOARDING_KEY);
+  } catch {}
+}
+
 function getHostnameBuilding(): { slug: string; displayName: string } | null {
   if (typeof window === "undefined") return null;
   const token = extractNumericHostToken(window.location.hostname);
@@ -102,10 +108,14 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
           if (json?.authenticated) {
             markOnboardingComplete();
             setStep("done");
+          } else {
+            clearOnboardingComplete();
+            setStep("identity");
           }
         }
       } catch {
-        // No-op: fall back to normal onboarding when session check fails.
+        clearOnboardingComplete();
+        setStep("identity");
       } finally {
         if (active) setCheckingSession(false);
       }

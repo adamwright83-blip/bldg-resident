@@ -96,8 +96,10 @@ type HeldAgentResponse = {
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
 const stripePublishableKey =
-  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() || STRIPE_PUBLISHABLE_FALLBACK;
-const stripePromise = isResidentAppTestMode ? null : loadStripe(stripePublishableKey);
+  import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ||
+  (import.meta.env.DEV ? STRIPE_PUBLISHABLE_FALLBACK : "");
+const stripePromise =
+  isResidentAppTestMode || !stripePublishableKey ? null : loadStripe(stripePublishableKey);
 
 const TOKEN_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
   1: [{ left: 50, top: 50 }],
@@ -383,12 +385,13 @@ export default function PenPullPrototype({
   const submitHeldName = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const firstName = nameFirst.trim();
-    if (!firstName || saveNameMutation.isPending) return;
+    const lastName = nameLast.trim();
+    if (!firstName || !lastName || saveNameMutation.isPending) return;
 
     try {
       await saveNameMutation.mutateAsync({
         firstName,
-        lastName: nameLast.trim() || undefined,
+        lastName,
       });
       setHeldAgentMessage(`Good to meet you, ${firstName}. Taking custody.`);
       retryPendingOrder();
@@ -739,7 +742,7 @@ export default function PenPullPrototype({
                 />
                 <button
                   className="min-h-12 w-full text-right font-serif text-[16px] text-[#9a681f] disabled:opacity-50"
-                  disabled={!nameFirst.trim() || saveNameMutation.isPending}
+                  disabled={!nameFirst.trim() || !nameLast.trim() || saveNameMutation.isPending}
                   type="submit"
                 >
                   {saveNameMutation.isPending ? "Saving..." : "Continue →"}

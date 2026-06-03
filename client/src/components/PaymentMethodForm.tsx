@@ -23,7 +23,9 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
   const elements = useElements();
   const publishableKey =
     import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ||
-    "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
+    (import.meta.env.DEV
+      ? "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2"
+      : "");
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [last4, setLast4] = useState<string | null>(null);
