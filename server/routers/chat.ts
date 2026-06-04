@@ -37,6 +37,7 @@ import {
 } from "../bookingLogic";
 import { sendOwnerAlert } from "../ownerNotify";
 import { createOpsPickup } from "../opsIntegration";
+import { withDefaultReturnBy } from "../intakeReturnBy";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
@@ -170,7 +171,7 @@ async function postToAdminIntakeAndVerify(
         "Content-Type": "application/json",
         "x-app-shared-secret": sharedSecret || "",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(withDefaultReturnBy(payload)),
     });
 
     const responseText = await fwdRes.text().catch(() => "(no body)");

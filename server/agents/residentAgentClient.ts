@@ -1,5 +1,6 @@
 import type { ResidentAgentSession } from "./session";
 import { isResidentAppTestMode, makeTestOrderId } from "../residentTestMode";
+import { withDefaultReturnBy } from "../intakeReturnBy";
 
 export const DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL =
   "https://bldg-admin-api-production.up.railway.app/api/agent/s2s/run-tool";
@@ -332,7 +333,7 @@ export async function postToAdminIntakeFallbackAndVerify(
         "Content-Type": "application/json",
         "x-app-shared-secret": sharedSecret || "",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(withDefaultReturnBy(payload)),
     });
 
     const responseText = await fwdRes.text().catch(() => "(no body)");

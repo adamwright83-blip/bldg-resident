@@ -5,6 +5,7 @@ import { createStripeCustomer, replacePaymentMethod } from "../lib/stripeHelper"
 import { getBldgUserById, insertChatMessage, updateBldgUser, getServiceRequests, updateServiceRequest, createServiceRequest, hasShownOnboarding, markOnboardingShown } from "../db";
 import { getOnboardingMessage } from "./chat";
 import { createOpsPickup } from "../opsIntegration";
+import { withDefaultReturnBy } from "../intakeReturnBy";
 import { getDb } from "../db";
 import { bldgUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -288,7 +289,7 @@ export const stripeRouter = router({
                 "Content-Type": "application/json",
                 "x-app-shared-secret": sharedSecret || "",
               },
-              body: JSON.stringify(intakePayload),
+              body: JSON.stringify(withDefaultReturnBy(intakePayload)),
             });
 
             const responseText = await fwdRes.text().catch(() => "(no body)");
