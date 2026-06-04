@@ -110,6 +110,36 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
   });
 
+  it("treats HELD launch laundry as a fresh order even when an existing laundry booking exists", async () => {
+    bookingMocks.findDuplicateBooking.mockResolvedValue({ id: 44 });
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn().mockResolvedValue(response({ orderId: 456 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content: "pickup laundry tomorrow",
+      orderMode: "new_order",
+      source: "held",
+      user: completeUser as any,
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.content).toBe("Laundry booked for Saturday, May 16, 7–10 AM.");
+    expect(bookingMocks.findDuplicateBooking).not.toHaveBeenCalled();
+    expect(dbMocks.createServiceRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bldgUserId: 1,
+        serviceType: "laundry",
+        status: "pending",
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.toolName).toBe("createLaundryOrderTool");
+    expect(body.input.externalId).toBe("bldg-sr-99");
+  });
+
   it("creates all four canonical child actions and separates confirmed from queued", async () => {
     const { runResidentAgent } = await import("./residentAgent");
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {

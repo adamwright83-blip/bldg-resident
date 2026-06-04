@@ -93,6 +93,8 @@ type HeldAgentResponse = {
   collectStep?: "name" | "payment";
 };
 
+type HeldOrderMode = "new_order" | "modify_existing_order";
+
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
 const stripePublishableKey =
@@ -191,6 +193,7 @@ export default function PenPullPrototype({
   const enterSpeechMode = () => {
     inputRef.current?.blur();
     editRequestInputRef.current?.blur();
+    console.debug("[HELD] entering speech mode");
     setMode("speech");
 
     if (controlledComposerOpen === undefined) {
@@ -202,6 +205,7 @@ export default function PenPullPrototype({
       setDraft(speechTranscript);
     }
 
+    console.debug("[HELD] entering typing mode");
     setMode("typing");
 
     if (controlledComposerOpen === undefined) {
@@ -254,12 +258,16 @@ export default function PenPullPrototype({
       return;
     }
 
+    console.debug("[HELD] raw typed text received", { length: text.length });
     setTypedCommandStatus("summarizing");
     setConfirmedRequest(text);
     setMode("requestReady");
 
     try {
       const result = await parseTextCommand(text);
+      console.debug("[HELD] cleaned typed request produced", {
+        hasDisplayRequest: Boolean(result.displayRequest?.trim()),
+      });
       applyTextCommandResult(text, result);
     } catch (error) {
       console.error("[PenPullPrototype] typed command failed", error);
@@ -268,6 +276,7 @@ export default function PenPullPrototype({
   };
   const enterRequestEditMode = (requestOverride?: string) => {
     const nextText = requestOverride?.trim() || confirmedRequest || draft || speechTranscript;
+    console.debug("[HELD] edit request clicked", { hasRequest: Boolean(nextText) });
     setEditDraft(nextText);
     setTypedCommandStatus("idle");
     setHeldAgentStatus("idle");
@@ -347,6 +356,8 @@ export default function PenPullPrototype({
     if (!nextRequest || heldAgentStatus === "booking" || sendMessageMutation.isPending) return;
 
     console.debug("[HELD] Set it in motion confirmed");
+    const orderMode: HeldOrderMode = "new_order";
+    console.debug("[HELD] intent flow chosen", { orderMode });
     setConfirmedRequest(nextRequest);
     const nextServices = services.length ? services : inferServicesFromRequest(nextRequest);
     setConfirmedServices(nextServices);
@@ -363,6 +374,8 @@ export default function PenPullPrototype({
     try {
       const response = (await sendMessageMutation.mutateAsync({
         content: nextRequest,
+        orderMode,
+        source: "held",
       })) as HeldAgentResponse;
       handleHeldAgentResponse(response, nextRequest, nextServices);
     } catch (error) {
@@ -375,6 +388,7 @@ export default function PenPullPrototype({
     }
   };
   const retryPendingOrder = () => {
+    console.debug("[HELD] try again clicked");
     const request = pendingOrderRequest || confirmedRequest || draft || speechTranscript;
     const services = pendingOrderServices.length
       ? pendingOrderServices
@@ -652,11 +666,17 @@ export default function PenPullPrototype({
             </p>
           )}
 
-          {mode === "typing" && (
+          {(mode === "choice" || mode === "typing") && (
             <input
               ref={inputRef}
               aria-label="Type your request"
-              className="absolute bottom-[214px] left-[11%] right-[31%] z-50 h-12 rounded-[6px] border border-[#d5c2a4]/70 bg-[#fff8ec]/78 px-4 font-serif text-[16px] italic text-[#2c2824] shadow-[0_8px_18px_rgba(50,35,20,0.10)] outline-none placeholder:text-transparent"
+              autoCapitalize="sentences"
+              autoComplete="off"
+              className={`absolute bottom-[214px] left-[11%] right-[31%] z-50 h-12 rounded-[6px] px-4 font-serif text-[16px] italic outline-none transition-[background,border,box-shadow,opacity] ${
+                mode === "typing"
+                  ? "border border-[#d5c2a4]/70 bg-[#fff8ec]/78 text-[#2c2824] opacity-100 shadow-[0_8px_18px_rgba(50,35,20,0.10)] placeholder:text-transparent"
+                  : "border border-transparent bg-transparent text-transparent opacity-0 shadow-none placeholder:text-transparent"
+              }`}
               data-testid="held-composer-input"
               onChange={event => {
                 setDraft(event.currentTarget.value);
@@ -673,7 +693,13 @@ export default function PenPullPrototype({
                   void submitTypedCommand();
                 }
               }}
+              onPointerDown={() => {
+                if (mode === "choice") {
+                  enterTypingMode();
+                }
+              }}
               placeholder=""
+              enterKeyHint="send"
               type="text"
               value={draft}
             />
@@ -684,15 +710,6 @@ export default function PenPullPrototype({
               aria-label="Set it in motion"
               className="absolute bottom-[214px] right-[8%] z-[60] h-10 w-10 rounded-full opacity-0"
               onClick={() => void submitTypedCommand()}
-              type="button"
-            />
-          )}
-
-          {mode === "choice" && (
-            <button
-              aria-label="Start typing"
-              className="absolute bottom-[108px] left-[10%] right-[38%] z-[45] h-[190px] rounded-[18px] opacity-0"
-              onClick={enterTypingMode}
               type="button"
             />
           )}
@@ -931,6 +948,7 @@ function HeldRequestReadyCard({
           <textarea
             ref={editInputRef}
             aria-label="Edit your request"
+            autoFocus
             className="mt-3 min-h-[86px] w-full resize-none rounded-[3px] border border-[#d8c8ad]/65 bg-[#fffaf2]/70 px-3 py-2 font-serif text-[17px] italic leading-6 text-[#2f2923] outline-none focus:border-[#b78a38]/70"
             onChange={event => onEditChange?.(event.currentTarget.value)}
             onKeyDown={event => {

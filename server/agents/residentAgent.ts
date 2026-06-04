@@ -38,6 +38,38 @@ import {
 const INTAKE_FAILURE_MESSAGE =
   "Your request did not go through. Please try again in a moment.";
 
+type HeldLaunchSource = "held";
+type HeldOrderMode = "new_order" | "modify_existing_order";
+
+function isExplicitModifyExistingRequest(content: string): boolean {
+  const text = content.toLowerCase();
+  const hasModifyVerb =
+    /\b(move|reschedule|change|modify|edit|update|shift|cancel|push|delay)\b/.test(text);
+  const hasExistingReference =
+    /\b(existing|current|already|scheduled|booking|order|pickup|laundry|it|that|this)\b/.test(text);
+  return hasModifyVerb && hasExistingReference;
+}
+
+function resolveHeldOrderMode(
+  content: string,
+  requestedMode?: HeldOrderMode
+): HeldOrderMode {
+  if (requestedMode === "modify_existing_order") return "modify_existing_order";
+  if (requestedMode === "new_order") return "new_order";
+  return isExplicitModifyExistingRequest(content) ? "modify_existing_order" : "new_order";
+}
+
+function shouldForceNewHeldOrder(input: {
+  content: string;
+  orderMode?: HeldOrderMode;
+  source?: HeldLaunchSource;
+}): boolean {
+  return (
+    input.source === "held" &&
+    resolveHeldOrderMode(input.content, input.orderMode) === "new_order"
+  );
+}
+
 function parseDisplayDateToISO(displayDate: string): string {
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -99,6 +131,8 @@ export interface ResidentAgentResponse {
 export async function runResidentAgent(input: {
   bldgUserId: number;
   content: string;
+  orderMode?: HeldOrderMode;
+  source?: HeldLaunchSource;
   user: BldgUser;
 }): Promise<ResidentAgentResponse> {
   const session = await getOrCreateResidentAgentSession(input.bldgUserId);
@@ -139,6 +173,8 @@ export async function runResidentAgent(input: {
     return executeLaundryIntent({
       bldgUserId: input.bldgUserId,
       content: input.content,
+      orderMode: input.orderMode,
+      source: input.source,
       user: freshUser,
       session,
     });
@@ -177,11 +213,19 @@ export async function runResidentAgent(input: {
 async function executeLaundryIntent(input: {
   bldgUserId: number;
   content: string;
+  orderMode?: HeldOrderMode;
+  source?: HeldLaunchSource;
   user: BldgUser;
   session: ResidentAgentSession;
   suppressAssistantMessage?: boolean;
 }): Promise<ResidentAgentResponse> {
   console.log("[ResidentAgent] laundry intent matched");
+  const forceNewHeldOrder = shouldForceNewHeldOrder(input);
+  console.log("[ResidentAgent] intent classification", {
+    flow: forceNewHeldOrder ? "new_order" : "standard_or_modify",
+    forceNewHeldOrder,
+    source: input.source ?? "chat",
+  });
   const dateTimeIntent = parseExplicitDateTime(input.content, getCurrentDateISOInLA());
   const windowOverride =
     dateTimeIntent.dateOverride && !dateTimeIntent.windowOverride
@@ -213,7 +257,7 @@ async function executeLaundryIntent(input: {
     const existingPending = (freshUser as any)?.pendingBookingIntentJson as
       | { serviceType?: string; date?: string; window?: string; recurrence?: string }
       | null;
-    if (existingPending?.serviceType === "laundry") {
+    if (!forceNewHeldOrder && existingPending?.serviceType === "laundry") {
       return {
         handled: true,
         role: "assistant",
@@ -277,7 +321,9 @@ async function executeLaundryIntent(input: {
     };
   }
 
-  const duplicate = await findDuplicateBooking(input.bldgUserId, "laundry");
+  const duplicate = forceNewHeldOrder
+    ? null
+    : await findDuplicateBooking(input.bldgUserId, "laundry");
   let serviceRequestId: number | null = null;
   const userForIntake = freshUser ?? input.user;
 

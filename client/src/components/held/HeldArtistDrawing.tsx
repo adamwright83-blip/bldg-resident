@@ -65,6 +65,8 @@ export function HeldArtistDrawing({
 }: HeldArtistDrawingProps) {
   const pathRef = useRef<SVGPathElement | null>(null);
   const rafRef = useRef<number | null>(null);
+  const completedRef = useRef(false);
+  const onDrawingCompleteRef = useRef(onDrawingComplete);
   const [penStyle, setPenStyle] = useState({
     left: "20%",
     top: "42%",
@@ -76,12 +78,63 @@ export function HeldArtistDrawing({
     [displayRequest, services]
   );
   const duration = useMemo(() => getDuration(services), [services]);
+  onDrawingCompleteRef.current = onDrawingComplete;
 
   useLayoutEffect(() => {
     const svgPath = pathRef.current;
     if (!svgPath) return undefined;
 
-    const totalLength = svgPath.getTotalLength();
+    completedRef.current = false;
+    setIsComplete(false);
+
+    let holdTimer: number | null = null;
+    let fallbackTimer: number | null = null;
+
+    const completeDrawing = (reason: "complete" | "fallback" | "invalid_path") => {
+      if (completedRef.current) return;
+      completedRef.current = true;
+
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+
+      svgPath.style.strokeDashoffset = "0";
+      setIsComplete(true);
+      if (reason !== "complete") {
+        console.warn("[HELD][Drawing] fallback used", { reason });
+      } else {
+        console.debug("[HELD][Drawing] completed");
+      }
+      holdTimer = window.setTimeout(() => onDrawingCompleteRef.current(), 600);
+    };
+
+    let totalLength = 0;
+    try {
+      totalLength = svgPath.getTotalLength();
+    } catch (error) {
+      console.warn("[HELD][Drawing] path length unavailable", error);
+      completeDrawing("invalid_path");
+      return () => {
+        if (holdTimer !== null) {
+          window.clearTimeout(holdTimer);
+        }
+      };
+    }
+
+    if (!Number.isFinite(totalLength) || totalLength <= 0) {
+      completeDrawing("invalid_path");
+      return () => {
+        if (holdTimer !== null) {
+          window.clearTimeout(holdTimer);
+        }
+      };
+    }
+
     svgPath.style.strokeDasharray = `${totalLength}`;
     svgPath.style.strokeDashoffset = `${totalLength}`;
     const start = svgPath.getPointAtLength(0);
@@ -96,9 +149,12 @@ export function HeldArtistDrawing({
     });
 
     let startedAt = 0;
-    let holdTimer: number | null = null;
+    fallbackTimer = window.setTimeout(() => {
+      completeDrawing("fallback");
+    }, duration + 1600);
 
     const tick = (time: number) => {
+      if (completedRef.current) return;
       if (!startedAt) startedAt = time;
       const progress = Math.min(1, (time - startedAt) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
@@ -120,8 +176,7 @@ export function HeldArtistDrawing({
         return;
       }
 
-      setIsComplete(true);
-      holdTimer = window.setTimeout(onDrawingComplete, 600);
+      completeDrawing("complete");
     };
 
     rafRef.current = window.requestAnimationFrame(tick);
@@ -133,8 +188,11 @@ export function HeldArtistDrawing({
       if (holdTimer !== null) {
         window.clearTimeout(holdTimer);
       }
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+      }
     };
-  }, [duration, onDrawingComplete, path]);
+  }, [duration, path]);
 
   return (
     <div className="absolute inset-0 z-[80] overflow-hidden bg-[#f4ecdf]">

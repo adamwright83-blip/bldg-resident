@@ -73,6 +73,27 @@ async function insertRecoveryNameBeforePayment(bldgUserId: number): Promise<stri
 }
 const CONTEXT_WINDOW = 20;
 
+type HeldLaunchSource = "held";
+type HeldOrderMode = "new_order" | "modify_existing_order";
+
+function isExplicitModifyExistingRequest(content: string): boolean {
+  const text = content.toLowerCase();
+  const hasModifyVerb =
+    /\b(move|reschedule|change|modify|edit|update|shift|cancel|push|delay)\b/.test(text);
+  const hasExistingReference =
+    /\b(existing|current|already|scheduled|booking|order|pickup|laundry|it|that|this)\b/.test(text);
+  return hasModifyVerb && hasExistingReference;
+}
+
+function resolveHeldOrderMode(
+  content: string,
+  requestedMode?: HeldOrderMode
+): HeldOrderMode {
+  if (requestedMode === "modify_existing_order") return "modify_existing_order";
+  if (requestedMode === "new_order") return "new_order";
+  return isExplicitModifyExistingRequest(content) ? "modify_existing_order" : "new_order";
+}
+
 // ─── Onboarding step constants (v2) ───
 // Keep numeric values stable for DB compatibility.
 const ONBOARDING_STEP = {
@@ -1102,6 +1123,8 @@ export const chatRouter = router({
       z.object({
         content: z.string().min(1).max(4000),
         isOtherRequest: z.boolean().optional(),
+        orderMode: z.enum(["new_order", "modify_existing_order"]).optional(),
+        source: z.enum(["held"]).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -1122,6 +1145,18 @@ export const chatRouter = router({
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Session user not found",
+        });
+      }
+      const heldSource: HeldLaunchSource | undefined =
+        input.source === "held" ? "held" : undefined;
+      const heldOrderMode = heldSource
+        ? resolveHeldOrderMode(input.content, input.orderMode)
+        : undefined;
+      const heldNewOrder = heldSource === "held" && heldOrderMode === "new_order";
+      if (heldSource) {
+        console.log("[HELD][Server] session started", {
+          contentLength: input.content.length,
+          orderMode: heldOrderMode,
         });
       }
 
@@ -1286,6 +1321,8 @@ export const chatRouter = router({
         const agentResult = await runResidentAgent({
           bldgUserId,
           content: input.content,
+          orderMode: heldOrderMode,
+          source: heldSource,
           user,
         });
         if (agentResult.handled) {
@@ -1341,7 +1378,7 @@ export const chatRouter = router({
                 : "I have the pickup ready. Add a card once, then I can set it in motion.";
             // Duplicate guard: if pending intent already exists for same service, don't overwrite
             const existingPending = (freshUser as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
-            if (existingPending?.serviceType === simpleService) {
+            if (!heldNewOrder && existingPending?.serviceType === simpleService) {
               const serviceLabel = simpleService === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
               return {
                 role: "assistant" as const,
@@ -1418,7 +1455,14 @@ export const chatRouter = router({
               : `${serviceLabel} booked for ${defaults.date}, ${defaults.window}.`;
 
           // Duplicate booking guard
-          const duplicate = await findDuplicateBooking(bldgUserId, simpleService);
+          const duplicate = heldNewOrder
+            ? null
+            : await findDuplicateBooking(bldgUserId, simpleService);
+          console.log("[HELD][Server] FastPath intent classification", {
+            flow: heldNewOrder ? "new_order" : duplicate ? "modify_existing_order" : "new_order",
+            heldNewOrder,
+            service: simpleService,
+          });
           let serviceRequestId: number | null = null;
           let intakeSuccess = false;
           let intakeFailureReason: string | null = null;
@@ -1943,7 +1987,7 @@ export const chatRouter = router({
                 ? "I have the pickup ready. Add your name once, then I can set it in motion."
                 : "I have the pickup ready. Add a card once, then I can set it in motion.";
             const existingPending = (freshUserForTutorial as any)?.pendingBookingIntentJson as { serviceType?: string; date?: string; window?: string; recurrence?: string } | null;
-            if (existingPending?.serviceType === serviceCategory) {
+            if (!heldNewOrder && existingPending?.serviceType === serviceCategory) {
               const serviceLabel = serviceCategory === "dry-cleaning" ? "Dry Cleaning" : "Laundry";
               return {
                 role: "assistant" as const,
@@ -2008,10 +2052,17 @@ export const chatRouter = router({
           }
 
           // Duplicate booking guardrail
-          const duplicate = await findDuplicateBooking(
-            bldgUserId,
-            serviceCategory
-          );
+          const duplicate = heldNewOrder
+            ? null
+            : await findDuplicateBooking(
+                bldgUserId,
+                serviceCategory
+              );
+          console.log("[HELD][Server] LLM intent classification", {
+            flow: heldNewOrder ? "new_order" : duplicate ? "modify_existing_order" : "new_order",
+            heldNewOrder,
+            service: serviceCategory,
+          });
 
           let sr: { id: number };
           if (duplicate) {
