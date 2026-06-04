@@ -270,6 +270,7 @@ export default function PenPullPrototype({
     const nextText = requestOverride?.trim() || confirmedRequest || draft || speechTranscript;
     setEditDraft(nextText);
     setTypedCommandStatus("idle");
+    setHeldAgentStatus("idle");
     setMode("editingRequest");
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(false);
@@ -755,6 +756,7 @@ export default function PenPullPrototype({
             <HeldLaunchRecoveryCard
               actionLabel="Retry"
               message={heldAgentMessage}
+              onEdit={enterRequestEditMode}
               onRetry={retryPendingOrder}
               title="Payment"
             >
@@ -774,6 +776,7 @@ export default function PenPullPrototype({
             <HeldLaunchRecoveryCard
               actionLabel={sendMessageMutation.isPending ? "Trying..." : "Try again →"}
               message={heldAgentMessage}
+              onEdit={enterRequestEditMode}
               onRetry={retryPendingOrder}
               title="Almost"
             />
@@ -848,6 +851,7 @@ export default function PenPullPrototype({
 function HeldLaunchRecoveryCard({
   actionLabel,
   children,
+  onEdit,
   message,
   onRetry,
   title,
@@ -855,6 +859,7 @@ function HeldLaunchRecoveryCard({
   actionLabel: string;
   children?: ReactNode;
   message: string;
+  onEdit?: () => void;
   onRetry: () => void;
   title: string;
 }) {
@@ -868,15 +873,26 @@ function HeldLaunchRecoveryCard({
           {message || "I have the pickup ready."}
         </p>
         {children}
-        {!children && (
+        <div className="mt-4 flex min-h-12 items-center justify-between gap-4">
+          {onEdit ? (
+            <button
+              className="text-left font-serif text-[13px] italic text-[#7a6d5f] underline decoration-[#b78a38]/30 underline-offset-4"
+              onClick={() => onEdit()}
+              type="button"
+            >
+              Edit request
+            </button>
+          ) : (
+            <span />
+          )}
           <button
-            className="mt-4 min-h-12 w-full text-right font-serif text-[16px] text-[#9a681f] transition-transform active:scale-[0.98]"
+            className="min-h-12 flex-1 text-right font-serif text-[16px] text-[#9a681f] transition-transform active:scale-[0.98]"
             onClick={onRetry}
             type="button"
           >
             {actionLabel}
           </button>
-        )}
+        </div>
       </div>
     </section>
   );
@@ -930,7 +946,7 @@ function HeldRequestReadyCard({
             aria-label="Edit request text"
             className="mt-3 block min-h-[54px] w-full text-left font-serif text-[17px] italic leading-6 text-[#2f2923]"
             disabled={isStamped || isWorking}
-            onClick={onRequestTap}
+            onClick={() => onRequestTap?.()}
             type="button"
           >
             {isWorking ? "Making sense of it." : displayRequest || "Making sense of it."}
@@ -945,7 +961,7 @@ function HeldRequestReadyCard({
           <button
             className="text-left font-serif text-[13px] italic text-[#7a6d5f] underline decoration-[#b78a38]/30 underline-offset-4"
             disabled={isStamped}
-            onClick={onEdit}
+            onClick={() => onEdit()}
             type="button"
           >
             {isEditing ? "Editing" : "Edit request"}

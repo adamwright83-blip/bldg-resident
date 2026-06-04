@@ -132,11 +132,11 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
     ? {
         base: {
           fontSize: "16px",
-          color: "#FAF8F5",
+          color: "#2f2923",
           fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-          "::placeholder": { color: "rgba(250,248,245,0.35)" },
+          "::placeholder": { color: "rgba(88,73,58,0.56)" },
         },
-        invalid: { color: "#f87171" },
+        invalid: { color: "#9f3f32" },
       }
     : {
         base: {
@@ -175,8 +175,8 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
           transition={{ duration: 0.5, ease: "easeOut" }}
           className={confirmCls}
         >
-          <CheckCircle2 className={`w-5 h-5 shrink-0 ${dark ? "text-[#4ADE80]" : "text-green-600"}`} />
-          <span className={dark ? "text-sm text-white/80" : "text-sm text-[#4A4540]"}>
+          <CheckCircle2 className={`w-5 h-5 shrink-0 ${dark ? "text-[#9a681f]" : "text-green-600"}`} />
+          <span className={dark ? "text-sm text-[#4b4035]" : "text-sm text-[#4A4540]"}>
             {last4 ? `Card ending in ${last4} saved.` : "Payment method saved."}
           </span>
         </motion.div>
@@ -191,13 +191,13 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
           <form onSubmit={handleSubmit} className="w-full">
             {isResidentAppTestMode ? (
               <div className={`mb-4 w-full ${fieldCls}`} style={{ minHeight: "48px" }}>
-                <span className={dark ? "text-sm text-white/50" : "text-sm text-[#4A4540]"}>
+                <span className={dark ? "text-sm text-[#68594a]" : "text-sm text-[#4A4540]"}>
                   Test mode is on. No Stripe card will be created.
                 </span>
               </div>
             ) : !stripe || !elements ? (
               <div className={`mb-4 w-full ${fieldCls}`} style={{ minHeight: "48px" }}>
-                <span className={dark ? "text-sm text-white/50" : "text-sm text-[#4A4540]"}>
+                <span className={dark ? "text-sm text-[#68594a]" : "text-sm text-[#4A4540]"}>
                   {initError || "Initializing secure card fields..."}
                 </span>
               </div>
@@ -238,13 +238,13 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
               className={btnCls}
               style={dark ? undefined : { height: '48px' }}
             >
-              {loading ? "Saving..." : "Save"}
+              {loading ? "Saving..." : "Save card"}
             </button>
             {dark && (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 gap: '5px', marginTop: '14px',
-                color: 'rgba(250,248,245,0.25)',
+                color: 'rgba(75,64,53,0.52)',
                 fontSize: '11px',
                 letterSpacing: '0.04em',
                 fontFamily: 'DM Sans, sans-serif',

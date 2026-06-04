@@ -749,7 +749,7 @@ export function usePenPhysics({
       physics.lastPointerY = point.y;
       physics.lastPointerAt = now;
 
-      if (composerOpenRef.current && penStateRef.current === "composerOpen") {
+      if (composerOpenRef.current) {
         physics.targetX = rawTargetX;
         physics.targetY = clamp(
           rawTargetY,
@@ -818,7 +818,7 @@ export function usePenPhysics({
         // Some browsers release automatically when the pointer ends.
       }
 
-      if (composerOpenRef.current && penStateRef.current === "composerOpen") {
+      if (composerOpenRef.current) {
         physics.pointerId = null;
         physics.pointerVX = 0;
         physics.pointerVY = 0;

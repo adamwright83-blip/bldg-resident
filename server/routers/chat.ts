@@ -47,6 +47,11 @@ import {
   needsCriticalProfileRecovery,
 } from "../../shared/profileCritical";
 import { runResidentAgent } from "../agents/residentAgent";
+import { tryAttachAdminSavedPaymentMethod } from "../agents/adminSavedPaymentLookup";
+import {
+  buildHeldSpecialInstructions,
+  getHeldRequestPayloadFields,
+} from "../agents/heldRequestInstructions";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 
@@ -475,8 +480,13 @@ async function handlePostBookingCollection(
   // If the user sends a text message while on this step, keep them gated until
   // payment is saved and onboarding is complete.
   if (currentStep === ONBOARDING_STEP.COLLECTING_PAYMENT) {
-    const user = await getBldgUserById(bldgUserId);
-    if (user?.paymentMethodSaved) {
+    let user = await getBldgUserById(bldgUserId);
+    if (getCriticalProfileGaps(user).missingPayment) {
+      const lookup = await tryAttachAdminSavedPaymentMethod(user, "OnboardingPayment");
+      user = lookup.user ?? user;
+    }
+
+    if (isStrictPaymentComplete(user)) {
       await updateBldgUser(bldgUserId, {
         onboardingStep: ONBOARDING_STEP.COMPLETE,
       } as any);
@@ -1171,7 +1181,14 @@ export const chatRouter = router({
         if (lastAssist?.metadata && (lastAssist.metadata as any).type === "payment_update_offer") {
           const affirmative = /^(yes|yeah|yep|sure|ok|okay|update|y)\b/i.test(input.content.trim());
           if (affirmative) {
-            const freshOfferUser = await getBldgUserById(bldgUserId);
+            let freshOfferUser = await getBldgUserById(bldgUserId);
+            if (getCriticalProfileGaps(freshOfferUser).missingPayment) {
+              const lookup = await tryAttachAdminSavedPaymentMethod(
+                freshOfferUser,
+                "PaymentUpdateOffer"
+              );
+              freshOfferUser = lookup.user ?? freshOfferUser;
+            }
             const offerGaps = getCriticalProfileGaps(freshOfferUser);
             if (offerGaps.missingFirstName || offerGaps.missingLastName) {
               const nameMsg = await insertRecoveryNameBeforePayment(bldgUserId);
@@ -1204,7 +1221,14 @@ export const chatRouter = router({
       // Match "add card", "update payment", "payment method", "pay", etc. Skip LLM and return
       // the correct message + collectStep so the frontend renders the Stripe card.
       if (detectPaymentIntentFromUserInput(input.content)) {
-        const freshPaymentUser = await getBldgUserById(bldgUserId);
+        let freshPaymentUser = await getBldgUserById(bldgUserId);
+        if (getCriticalProfileGaps(freshPaymentUser).missingPayment) {
+          const lookup = await tryAttachAdminSavedPaymentMethod(
+            freshPaymentUser,
+            "PaymentIntent"
+          );
+          freshPaymentUser = lookup.user ?? freshPaymentUser;
+        }
         const payGaps = getCriticalProfileGaps(freshPaymentUser);
         const cardLast4 = freshPaymentUser?.cardLast4;
 
@@ -1300,7 +1324,11 @@ export const chatRouter = router({
           );
           console.log(`[ResidentBooking][FastPath] booking defaults resolved: ${defaults.date} ${defaults.window}`);
 
-          const freshUser = await getBldgUserById(bldgUserId);
+          let freshUser = await getBldgUserById(bldgUserId);
+          if (getCriticalProfileGaps(freshUser).missingPayment) {
+            const lookup = await tryAttachAdminSavedPaymentMethod(freshUser, "FastPathPayment");
+            freshUser = lookup.user ?? freshUser;
+          }
           const recoveryMode = needsCriticalProfileRecovery(freshUser);
 
           if (recoveryMode) {
@@ -1444,7 +1472,10 @@ export const chatRouter = router({
           }
 
           const pickupDateISO = parseDisplayDateToISO(defaults.date);
-          const fpSpecialInstructions = fpSameDay ? "Same-day requested." : undefined;
+          const fpSpecialInstructions = buildHeldSpecialInstructions(
+            input.content,
+            fpSameDay ? "Same-day requested." : undefined
+          );
 
           const intakePayload = {
             externalId: `bldg-sr-${sr.id}`,
@@ -1464,6 +1495,7 @@ export const chatRouter = router({
             bldgUserId: bldgUserId ?? null,
             stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
             stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+            ...getHeldRequestPayloadFields(input.content),
             ...(fpSpecialInstructions ? { specialInstructions: fpSpecialInstructions } : {}),
           };
 
@@ -1763,7 +1795,14 @@ export const chatRouter = router({
 
         // ─── PAYMENT INTENT DETECTION ───
         if (hasPaymentIntent(rawContent)) {
-          const freshPaymentUser = await getBldgUserById(bldgUserId);
+          let freshPaymentUser = await getBldgUserById(bldgUserId);
+          if (getCriticalProfileGaps(freshPaymentUser).missingPayment) {
+            const lookup = await tryAttachAdminSavedPaymentMethod(
+              freshPaymentUser,
+              "LLMPaymentIntent"
+            );
+            freshPaymentUser = lookup.user ?? freshPaymentUser;
+          }
           const llmPayGaps = getCriticalProfileGaps(freshPaymentUser);
           const cardLast4 = freshPaymentUser?.cardLast4;
 
@@ -1877,6 +1916,7 @@ export const chatRouter = router({
         // If booking detected, create service request
         let serviceRequestId: number | null = null;
         let serviceCategory: string | null = null;
+        let llmAdminOrderId: number | null = null;
         const isLaundryOrDryCleaning = (cat: string) =>
           cat === "laundry" || cat === "dry-cleaning";
 
@@ -1884,7 +1924,14 @@ export const chatRouter = router({
           const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
-          const freshUserForTutorial = await getBldgUserById(bldgUserId);
+          let freshUserForTutorial = await getBldgUserById(bldgUserId);
+          if (getCriticalProfileGaps(freshUserForTutorial).missingPayment) {
+            const lookup = await tryAttachAdminSavedPaymentMethod(
+              freshUserForTutorial,
+              "LLMPaymentGate"
+            );
+            freshUserForTutorial = lookup.user ?? freshUserForTutorial;
+          }
           const recoveryModeLlm = needsCriticalProfileRecovery(freshUserForTutorial);
 
           if (isLaundryOrDryCleaning(serviceCategory) && recoveryModeLlm) {
@@ -2004,7 +2051,6 @@ export const chatRouter = router({
           // For laundry and dry-cleaning: MUST await admin intake and verify success before confirming
           let intakeSuccess = true;
           let llmIntakeFailureReason: string | null = null;
-          let llmAdminOrderId: number | null = null;
           if (isLaundryOrDryCleaning(serviceCategory)) {
             const adminApiUrl = (
               process.env.ADMIN_API_URL ||
@@ -2029,7 +2075,10 @@ export const chatRouter = router({
 
             const pickupDateISO = parseDisplayDateToISO(bookingMeta.date);
             const llmSameDay = detectSameDay(input.content);
-            const llmSpecialInstructions = llmSameDay ? "Same-day requested." : undefined;
+            const llmSpecialInstructions = buildHeldSpecialInstructions(
+              input.content,
+              llmSameDay ? "Same-day requested." : undefined
+            );
 
             const intakePayload = {
               externalId: `bldg-sr-${sr.id}`,
@@ -2049,6 +2098,7 @@ export const chatRouter = router({
               bldgUserId: bldgUserId ?? null,
               stripeCustomerId: freshUser?.stripeCustomerId || user?.stripeCustomerId || null,
               stripePaymentMethodId: freshUser?.stripePaymentMethodId || user?.stripePaymentMethodId || null,
+              ...getHeldRequestPayloadFields(input.content),
               ...(llmSpecialInstructions ? { specialInstructions: llmSpecialInstructions } : {}),
             };
 

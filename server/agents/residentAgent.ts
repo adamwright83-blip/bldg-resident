@@ -23,12 +23,17 @@ import {
   shouldTryNextIntakeBaseUrl,
   type LaundryOrderToolInput,
 } from "./residentAgentClient";
+import { tryAttachAdminSavedPaymentMethod } from "./adminSavedPaymentLookup";
 import { getAdminIntakeApiBaseUrlCandidates, hasAdminIntakeSharedSecret } from "./adminIntakeConfig";
 import {
   getOrCreateResidentAgentSession,
   withResidentAgentMetadata,
   type ResidentAgentSession,
 } from "./session";
+import {
+  buildHeldSpecialInstructions,
+  getHeldRequestPayloadFields,
+} from "./heldRequestInstructions";
 
 const INTAKE_FAILURE_MESSAGE =
   "Your request did not go through. Please try again in a moment.";
@@ -188,7 +193,14 @@ async function executeLaundryIntent(input: {
     dateTimeIntent.dateOverride,
     windowOverride
   );
-  const freshUser = await getBldgUserById(input.bldgUserId);
+  let freshUser = await getBldgUserById(input.bldgUserId);
+  if (getCriticalProfileGaps(freshUser).missingPayment) {
+    const lookup = await tryAttachAdminSavedPaymentMethod(freshUser, "ResidentAgent");
+    freshUser = lookup.user ?? freshUser;
+    if (lookup.found && lookup.reason !== "already_saved") {
+      console.log("[ResidentAgent] admin saved card satisfied resident payment gate");
+    }
+  }
 
   if (needsCriticalProfileRecovery(freshUser)) {
     const profileGaps = getCriticalProfileGaps(freshUser);
@@ -297,6 +309,10 @@ async function executeLaundryIntent(input: {
   const intakeBuildingKey = resolveIntakeBuildingKey(sessionSlug);
   const address = getAddressForIntakeKey(intakeBuildingKey);
   const { pickupWindowStart, pickupWindowEnd } = splitPickupWindow(defaults.window);
+  const heldSpecialInstructions = buildHeldSpecialInstructions(
+    input.content,
+    detectSameDay(input.content) ? "Same-day requested." : undefined
+  );
 
   const intakePayload: LaundryOrderToolInput = {
     externalId: `bldg-sr-${sr.id}`,
@@ -316,7 +332,8 @@ async function executeLaundryIntent(input: {
     bldgUserId: input.bldgUserId ?? null,
     stripeCustomerId: userForIntake?.stripeCustomerId || null,
     stripePaymentMethodId: userForIntake?.stripePaymentMethodId || null,
-    ...(detectSameDay(input.content) ? { specialInstructions: "Same-day requested." } : {}),
+    ...getHeldRequestPayloadFields(input.content),
+    ...(heldSpecialInstructions ? { specialInstructions: heldSpecialInstructions } : {}),
   };
 
   const adminAgentClient = createAdminAgentClient();

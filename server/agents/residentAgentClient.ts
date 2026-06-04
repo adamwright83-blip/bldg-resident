@@ -23,6 +23,9 @@ export interface LaundryOrderToolInput {
   stripeCustomerId: string | null;
   stripePaymentMethodId: string | null;
   specialInstructions?: string;
+  rawRequest?: string;
+  cleanedRequest?: string;
+  displayRequest?: string;
   sessionId?: string;
   conversationId?: string;
 }

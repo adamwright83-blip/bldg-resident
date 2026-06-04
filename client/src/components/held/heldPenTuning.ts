@@ -18,5 +18,5 @@ export const HELD_LARGE_PEN_TUNING: PenPhysicsTuningOverrides = {
   ringTopInset: 8,
   scaleMax: 1.06,
   scaleMin: 0.66,
-  unlockBottomInset: 76,
+  unlockBottomInset: 150,
 };

@@ -73,6 +73,34 @@ function wait(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
+function playVoiceCue(
+  audioContext: AudioContext | null,
+  variant: "start" | "processing"
+) {
+  if (!audioContext || audioContext.state === "closed") return;
+
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const now = audioContext.currentTime;
+    const frequency = variant === "start" ? 740 : 520;
+    const duration = variant === "start" ? 0.075 : 0.055;
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.035, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + duration + 0.01);
+  } catch {
+    // Audio cues are supportive only; visual and haptic feedback carry the state.
+  }
+}
+
 function getAmplitude(data: Uint8Array<ArrayBuffer>) {
   let sum = 0;
 
@@ -299,6 +327,8 @@ export function HeldVoiceCaptureTray({
       }
 
       shouldProcessRecordingRef.current = true;
+      navigator.vibrate?.(6);
+      playVoiceCue(audioContextRef.current, "processing");
       recorder.stop();
     };
 
@@ -420,6 +450,7 @@ export function HeldVoiceCaptureTray({
           audio: true,
         });
         const audioContext = new AudioContext();
+        await audioContext.resume().catch(() => undefined);
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
 
@@ -463,6 +494,8 @@ export function HeldVoiceCaptureTray({
         setVoiceStatus("listening");
         recordingStartedAtRef.current = performance.now();
         recorder.start(250);
+        navigator.vibrate?.([8, 24, 6]);
+        playVoiceCue(audioContext, "start");
         tick();
         startDevSpeechFallback();
       } catch (error) {
