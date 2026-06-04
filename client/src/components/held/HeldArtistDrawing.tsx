@@ -89,6 +89,8 @@ export function HeldArtistDrawing({
 
     let holdTimer: number | null = null;
     let fallbackTimer: number | null = null;
+    let startWatchTimer: number | null = null;
+    let hasAnimatedFrame = false;
 
     const completeDrawing = (reason: "complete" | "fallback" | "invalid_path") => {
       if (completedRef.current) return;
@@ -101,6 +103,10 @@ export function HeldArtistDrawing({
       if (fallbackTimer !== null) {
         window.clearTimeout(fallbackTimer);
         fallbackTimer = null;
+      }
+      if (startWatchTimer !== null) {
+        window.clearTimeout(startWatchTimer);
+        startWatchTimer = null;
       }
 
       svgPath.style.strokeDashoffset = "0";
@@ -149,20 +155,38 @@ export function HeldArtistDrawing({
     });
 
     let startedAt = 0;
+    startWatchTimer = window.setTimeout(() => {
+      if (!hasAnimatedFrame) {
+        completeDrawing("fallback");
+      }
+    }, 500);
     fallbackTimer = window.setTimeout(() => {
       completeDrawing("fallback");
-    }, duration + 1600);
+    }, duration + 900);
 
     const tick = (time: number) => {
       if (completedRef.current) return;
+      hasAnimatedFrame = true;
+      if (startWatchTimer !== null) {
+        window.clearTimeout(startWatchTimer);
+        startWatchTimer = null;
+      }
       if (!startedAt) startedAt = time;
       const progress = Math.min(1, (time - startedAt) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
       const currentLength = totalLength * eased;
-      const point = svgPath.getPointAtLength(currentLength);
-      const next = svgPath.getPointAtLength(Math.min(totalLength, currentLength + 3));
-      const angle =
-        (Math.atan2(next.y - point.y, next.x - point.x) * 180) / Math.PI;
+      let point: DOMPoint;
+      let next: DOMPoint;
+      let angle = -18;
+      try {
+        point = svgPath.getPointAtLength(currentLength);
+        next = svgPath.getPointAtLength(Math.min(totalLength, currentLength + 3));
+        angle = (Math.atan2(next.y - point.y, next.x - point.x) * 180) / Math.PI;
+      } catch (error) {
+        console.warn("[HELD][Drawing] path point unavailable", error);
+        completeDrawing("fallback");
+        return;
+      }
 
       svgPath.style.strokeDashoffset = `${totalLength - currentLength}`;
       setPenStyle({
@@ -190,6 +214,9 @@ export function HeldArtistDrawing({
       }
       if (fallbackTimer !== null) {
         window.clearTimeout(fallbackTimer);
+      }
+      if (startWatchTimer !== null) {
+        window.clearTimeout(startWatchTimer);
       }
     };
   }, [duration, path]);

@@ -133,7 +133,7 @@ export default function PenPullPrototype({
 }: PenPullPrototypeProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [debug, setDebug] = useState(defaultDebug);
   const [draft, setDraft] = useState("");
   const [editDraft, setEditDraft] = useState("");
@@ -205,17 +205,21 @@ export default function PenPullPrototype({
       setDraft(speechTranscript);
     }
 
-    console.debug("[HELD] entering typing mode");
-    setMode("typing");
+    if (mode !== "typing") {
+      console.debug("[HELD] entering typing mode");
+      setMode("typing");
+    }
 
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(true);
     }
 
-    inputRef.current?.focus({ preventScroll: true });
-    window.requestAnimationFrame(() => {
+    if (document.activeElement !== inputRef.current) {
       inputRef.current?.focus({ preventScroll: true });
-    });
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      });
+    }
   };
   const parseTextCommand = async (text: string) => {
     const response = await fetch("/api/held/text-command", {
@@ -667,15 +671,15 @@ export default function PenPullPrototype({
           )}
 
           {(mode === "choice" || mode === "typing") && (
-            <input
+            <textarea
               ref={inputRef}
               aria-label="Type your request"
               autoCapitalize="sentences"
               autoComplete="off"
-              className={`absolute bottom-[214px] left-[11%] right-[31%] z-50 h-12 rounded-[6px] px-4 font-serif text-[16px] italic outline-none transition-[background,border,box-shadow,opacity] ${
+              className={`pointer-events-auto absolute bottom-[146px] left-[10%] right-[24%] z-[96] min-h-[116px] resize-none rounded-[8px] border px-4 py-3 font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#2c2824] shadow-[0_10px_24px_rgba(50,35,20,0.13)] outline-none transition-[background,border,box-shadow,opacity] ${
                 mode === "typing"
-                  ? "border border-[#d5c2a4]/70 bg-[#fff8ec]/78 text-[#2c2824] opacity-100 shadow-[0_8px_18px_rgba(50,35,20,0.10)] placeholder:text-transparent"
-                  : "border border-transparent bg-transparent text-transparent opacity-0 shadow-none placeholder:text-transparent"
+                  ? "border-[#d2bea0]/85 bg-[#fff9ef]/92 opacity-100 placeholder:text-[#8a7a68]/55 focus:border-[#b78a38]/70 focus:bg-[#fffaf2]"
+                  : "border-[#d8c6aa]/60 bg-[#fff9ef]/78 opacity-100 placeholder:text-[#7b6c5d]/65 focus:border-[#b78a38]/70 focus:bg-[#fffaf2]/94"
               }`}
               data-testid="held-composer-input"
               onChange={event => {
@@ -688,30 +692,41 @@ export default function PenPullPrototype({
               onFocus={() => enterTypingMode()}
               onKeyDown={event => {
                 enterTypingMode();
-                if (event.key === "Enter") {
+                if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   void submitTypedCommand();
                 }
               }}
-              onPointerDown={() => {
+              onPointerDown={event => {
                 if (mode === "choice") {
                   enterTypingMode();
                 }
+                event.currentTarget.focus({ preventScroll: true });
               }}
-              placeholder=""
+              onTouchStart={event => {
+                if (mode === "choice") {
+                  enterTypingMode();
+                }
+                event.currentTarget.focus({ preventScroll: true });
+              }}
+              placeholder="Type your request..."
               enterKeyHint="send"
-              type="text"
+              rows={4}
               value={draft}
             />
           )}
 
-          {mode === "typing" && (
+          {(mode === "choice" || mode === "typing") && (
             <button
-              aria-label="Set it in motion"
-              className="absolute bottom-[214px] right-[8%] z-[60] h-10 w-10 rounded-full opacity-0"
+              aria-label="Submit typed request"
+              className={`absolute bottom-[156px] right-[9%] z-[97] grid h-11 w-11 place-items-center rounded-full border border-[#b78a38]/55 bg-[#c5a475]/80 font-serif text-[22px] leading-none text-[#fffaf2] shadow-[0_8px_18px_rgba(70,43,18,0.18)] transition-[opacity,transform] active:scale-95 ${
+                draft.trim() ? "opacity-100" : "opacity-55"
+              }`}
               onClick={() => void submitTypedCommand()}
               type="button"
-            />
+            >
+              ↑
+            </button>
           )}
 
           {showRequestReady && (
@@ -881,7 +896,7 @@ function HeldLaunchRecoveryCard({
   title: string;
 }) {
   return (
-    <section className="absolute left-1/2 top-[48%] z-[74] w-[84%] -translate-x-1/2">
+    <section className="absolute left-1/2 top-[48%] z-[110] w-[84%] -translate-x-1/2">
       <div className="rounded-[4px] border border-[#d4c2a5]/80 bg-[#fff8ec]/88 px-5 py-5 shadow-[0_18px_30px_rgba(50,35,20,0.16)] backdrop-blur-[2px]">
         <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
           {title}
@@ -939,7 +954,7 @@ function HeldRequestReadyCard({
   onRequestTap?: () => void;
 }) {
   return (
-    <section className="absolute left-1/2 top-[56%] z-[70] w-[84%] -translate-x-1/2">
+    <section className="absolute left-1/2 top-[56%] z-[110] w-[84%] -translate-x-1/2">
       <div className="relative overflow-hidden rounded-[4px] border border-[#d4c2a5]/80 bg-[#fff8ec]/86 px-5 py-5 shadow-[0_16px_26px_rgba(50,35,20,0.14)] backdrop-blur-[2px]">
         <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
           Your request
