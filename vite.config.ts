@@ -7,12 +7,6 @@ import { defineConfig } from "vite";
 const plugins = [react(), tailwindcss(), jsxLocPlugin()];
 
 export default defineConfig({
-  // Relative base so the built index.html references ./assets/... and
-  // ./held-demo-shim.js. This lets the bundle be served from any path prefix
-  // (e.g. the preview proxy's long /sites/proxy/.../dist/public/ path) instead
-  // of only from the domain root. Runtime /held/* image paths are handled by
-  // the demo shim's path rewriter.
-  base: "./",
   plugins,
   resolve: {
     alias: {
