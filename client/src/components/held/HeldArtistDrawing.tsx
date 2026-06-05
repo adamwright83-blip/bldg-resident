@@ -17,26 +17,49 @@ const ASSETS = {
   pen: "/held/fountainpenfull.png",
 };
 
-// PLACEHOLDER_PATHS: replace with final locked Picasso SVGs.
-const COMPOSITE_PATHS = {
-  car_detail:
-    "M40 145 C70 118 113 118 139 145 C158 165 189 166 210 145 C236 118 280 119 304 146 C322 166 352 164 367 145 C381 129 392 139 386 158 C374 199 307 202 286 164 C275 145 249 145 238 164 C216 203 147 203 126 164 C115 145 87 145 76 164 C64 184 36 176 40 145",
-  dog_grooming:
-    "M58 160 C83 116 139 117 153 160 C166 199 207 197 219 159 C232 120 282 118 304 150 C326 178 352 163 346 136 C337 94 266 95 253 137 C242 175 199 176 187 138 C174 94 101 94 90 137 C84 158 68 171 58 160",
-  laundry_pickup:
-    "M64 178 C78 154 112 146 148 154 C173 160 188 180 172 194 C151 212 93 205 71 186 C59 176 62 162 80 160 C110 157 147 166 171 184 C139 188 103 185 69 176 C82 198 132 210 183 202 C219 196 245 180 260 159 C275 137 312 128 340 144 C365 158 365 187 338 202 C303 222 239 215 205 193 C189 183 197 166 222 164 C252 162 284 176 311 194 C291 199 265 197 238 188 C216 181 196 184 183 202 C204 218 248 226 293 220 C331 215 358 199 370 178 C385 147 350 117 316 128 C295 136 289 154 303 168 C318 183 342 174 342 152",
-  laundry_pickup_deadline:
-    "M64 178 C78 154 112 146 148 154 C173 160 188 180 172 194 C151 212 93 205 71 186 C59 176 62 162 80 160 C110 157 147 166 171 184 C139 188 103 185 69 176 C82 198 132 210 183 202 C219 196 245 180 260 159 C275 137 312 128 340 144 C365 158 365 187 338 202 C303 222 239 215 205 193 C189 183 197 166 222 164 C252 162 284 176 311 194 C291 199 265 197 238 188 C216 181 196 184 183 202 C204 218 248 226 293 220 C331 215 358 199 370 178 C385 147 350 117 316 128 C295 136 289 154 303 168 C318 183 342 174 342 152 C343 129 365 113 386 123 C405 132 405 158 386 166 C368 173 350 160 355 141 C358 128 373 126 382 136",
-  multi_service_default:
-    "M45 156 C75 114 129 112 158 147 C178 171 209 168 229 144 C255 113 307 115 334 148 C353 171 375 166 384 145 C384 190 326 207 289 170 C269 149 239 148 219 172 C188 207 125 205 104 161 C92 137 64 136 45 156 M98 121 C121 94 168 95 187 122 C206 149 247 150 268 123 C287 98 328 99 344 124",
-  ride_airport:
-    "M42 162 C75 128 126 128 157 160 C180 184 214 183 235 158 C258 130 304 129 334 157 C358 179 377 171 383 149 C386 192 325 204 293 169 C273 148 245 148 226 169 C195 204 131 203 105 166 C89 143 61 144 42 162",
+// Final locked Picasso single-line drawings (approved 2026-06-04).
+// `main` is the primary gesture the fountain-pen nib traces live (getTotalLength).
+// `details` are small accent strokes (ear, eye, nose, shower) revealed right after
+// the main line completes — they keep the nib animation clean on a single path.
+type HeldDrawing = { main: string; details?: string[] };
+
+const COMPOSITE_PATHS: Record<string, HeldDrawing> = {
+  // CAR — open rear gap, abstract flowing silhouette, two wheel arches.
+  car_detail: {
+    main: "M392 158 C376 148 320 146 280 144 C252 122 214 112 170 112 C126 112 96 126 82 152 C64 150 40 152 40 170 C40 184 60 188 70 184 M70 184 C68 166 96 166 104 184 C112 188 290 188 298 184 M298 184 C296 166 324 166 332 184 C338 188 360 188 372 182",
+  },
+  // DOG — canine profile looking up at an abstract shower head; ear, eye, nose accents.
+  dog_grooming: {
+    main: "M88 150 C76 138 80 120 96 118 C108 116 116 120 124 130 C148 132 196 132 224 132 C236 132 248 128 256 116 C262 106 270 96 286 96 C300 96 312 104 320 116 C326 124 336 124 344 120 C354 116 360 122 356 130 C352 138 340 138 332 136 C326 148 322 156 320 162 M320 162 C318 150 308 146 300 150 C290 154 282 152 276 160 C270 178 262 196 256 202 M256 202 C258 184 250 174 240 176 C220 180 160 180 140 176 C130 174 124 184 124 196 C124 204 116 210 108 208 M108 208 C112 196 106 188 96 188 C86 188 82 178 86 168 C88 160 86 154 88 150",
+    details: [
+      "M296 100 C284 104 278 118 282 134 C284 142 294 142 300 136",
+      "M306 116 C306 114 309 114 309 116 C309 118 306 118 306 116",
+      "M352 128 C350 126 346 126 344 129",
+      "M296 44 C296 44 332 36 366 44 M308 50 L304 66 M324 48 L320 68 M340 48 L338 68 M356 50 L354 68",
+    ],
+  },
+  // FOLDED SHIRT — collar, shoulders, sleeves, hem; open terminal at the collar.
+  laundry_pickup: {
+    main: "M150 110 C150 110 138 100 130 110 C116 126 108 150 124 156 C140 162 148 150 150 136 C150 160 150 196 150 200 C150 210 160 214 170 214 L262 214 C272 214 282 210 282 200 C282 196 282 160 282 136 C284 150 292 162 308 156 C324 150 316 126 302 110 C294 100 282 110 282 110 M282 110 C272 100 250 100 240 112 C232 122 200 122 192 112 C184 102 168 102 158 110",
+  },
+  // Deadline laundry uses the same approved shirt (the deadline is conveyed in copy).
+  laundry_pickup_deadline: {
+    main: "M150 110 C150 110 138 100 130 110 C116 126 108 150 124 156 C140 162 148 150 150 136 C150 160 150 196 150 200 C150 210 160 214 170 214 L262 214 C272 214 282 210 282 200 C282 196 282 160 282 136 C284 150 292 162 308 156 C324 150 316 126 302 110 C294 100 282 110 282 110 M282 110 C272 100 250 100 240 112 C232 122 200 122 192 112 C184 102 168 102 158 110",
+  },
+  // MULTI / BUNDLE — a loose continuous knot suggesting several things gathered.
+  multi_service_default: {
+    main: "M84 132 C130 96 200 100 232 134 C262 166 232 206 190 200 C150 194 144 156 178 146 C214 135 252 158 274 126 C294 96 344 104 354 144 C360 174 332 202 300 190",
+  },
+  // PAPER AIRPLANE — swept delta, tail notch left open.
+  ride_airport: {
+    main: "M66 152 C140 142 300 110 364 96 C374 94 378 104 368 112 C320 150 250 196 236 200 C228 204 222 196 226 188 L246 150 L66 152 M246 150 L210 138",
+  },
 };
 
 export function getHeldCompositePath(
   displayRequest: string,
   services: HeldParsedService[] = []
-) {
+): HeldDrawing {
   const serviceTypes = services.map(service => service.type).join(" ");
   const haystack = `${displayRequest} ${serviceTypes}`.toLowerCase();
 
@@ -67,16 +90,24 @@ export function HeldArtistDrawing({
   const rafRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const onDrawingCompleteRef = useRef(onDrawingComplete);
+  // Ceremonial lead-in: the pen glides into the canvas from above (where it hung
+  // in the home world) and only touches down on the first stroke point before any
+  // line appears. `APPROACH_MS` is the travel time; the trace begins after it.
+  const APPROACH_MS = 520;
   const [penStyle, setPenStyle] = useState({
-    left: "20%",
-    top: "42%",
-    transform: "translate(-45%, -88%) rotate(-18deg)",
+    left: "50%",
+    top: "-14%",
+    transform: "translate(-30%, -86%) rotate(8deg)",
+    transition: `left ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), top ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
   });
+  const [hasEntered, setHasEntered] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const path = useMemo(
+  const drawing = useMemo(
     () => getHeldCompositePath(displayRequest, services),
     [displayRequest, services]
   );
+  const path = drawing.main;
+  const details = drawing.details ?? [];
   const duration = useMemo(() => getDuration(services), [services]);
   onDrawingCompleteRef.current = onDrawingComplete;
 
@@ -90,6 +121,7 @@ export function HeldArtistDrawing({
     let holdTimer: number | null = null;
     let fallbackTimer: number | null = null;
     let startWatchTimer: number | null = null;
+    let approachTimer: number | null = null;
     let hasAnimatedFrame = false;
 
     const completeDrawing = (reason: "complete" | "fallback" | "invalid_path") => {
@@ -108,6 +140,10 @@ export function HeldArtistDrawing({
         window.clearTimeout(startWatchTimer);
         startWatchTimer = null;
       }
+      if (approachTimer !== null) {
+        window.clearTimeout(approachTimer);
+        approachTimer = null;
+      }
 
       svgPath.style.strokeDashoffset = "0";
       setIsComplete(true);
@@ -116,7 +152,9 @@ export function HeldArtistDrawing({
       } else {
         console.debug("[HELD][Drawing] completed");
       }
-      holdTimer = window.setTimeout(() => onDrawingCompleteRef.current(), 600);
+      // Hold long enough for the accent strokes (ear/eye/nose/shower) to finish
+      // fading in before the screen transforms into clay tokens.
+      holdTimer = window.setTimeout(() => onDrawingCompleteRef.current(), 1150);
     };
 
     let totalLength = 0;
@@ -148,22 +186,18 @@ export function HeldArtistDrawing({
     const startAngle =
       (Math.atan2(nextStart.y - start.y, nextStart.x - start.x) * 180) / Math.PI;
 
+    // Phase 1 (ceremonial): glide the pen from its off-canvas entry pose down to
+    // the first stroke point. The CSS transition (set in initial penStyle) does
+    // the easing. No line is drawn yet — dashoffset is still full length.
     setPenStyle({
       left: `${(start.x / 430) * 100}%`,
       top: `${(start.y / 260) * 100}%`,
       transform: `translate(-30%, -86%) rotate(${(startAngle + 82).toFixed(2)}deg)`,
+      transition: `left ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), top ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
     });
+    setHasEntered(true);
 
     let startedAt = 0;
-    startWatchTimer = window.setTimeout(() => {
-      if (!hasAnimatedFrame) {
-        completeDrawing("fallback");
-      }
-    }, 500);
-    fallbackTimer = window.setTimeout(() => {
-      completeDrawing("fallback");
-    }, duration + 900);
-
     const tick = (time: number) => {
       if (completedRef.current) return;
       hasAnimatedFrame = true;
@@ -189,10 +223,12 @@ export function HeldArtistDrawing({
       }
 
       svgPath.style.strokeDashoffset = `${totalLength - currentLength}`;
+      // No CSS transition during the trace — the nib must track the line per frame.
       setPenStyle({
         left: `${(point.x / 430) * 100}%`,
         top: `${(point.y / 260) * 100}%`,
         transform: `translate(-30%, -86%) rotate(${(angle + 82).toFixed(2)}deg)`,
+        transition: "none",
       });
 
       if (progress < 1) {
@@ -203,7 +239,20 @@ export function HeldArtistDrawing({
       completeDrawing("complete");
     };
 
-    rafRef.current = window.requestAnimationFrame(tick);
+    // Phase 2 (after the pen lands): begin tracing the line. Watchdogs are armed
+    // here so the approach time isn't counted against the "did it start" check.
+    approachTimer = window.setTimeout(() => {
+      if (completedRef.current) return;
+      startWatchTimer = window.setTimeout(() => {
+        if (!hasAnimatedFrame) {
+          completeDrawing("fallback");
+        }
+      }, 500);
+      fallbackTimer = window.setTimeout(() => {
+        completeDrawing("fallback");
+      }, duration + 900);
+      rafRef.current = window.requestAnimationFrame(tick);
+    }, APPROACH_MS);
 
     return () => {
       if (rafRef.current !== null) {
@@ -217,6 +266,9 @@ export function HeldArtistDrawing({
       }
       if (startWatchTimer !== null) {
         window.clearTimeout(startWatchTimer);
+      }
+      if (approachTimer !== null) {
+        window.clearTimeout(approachTimer);
       }
     };
   }, [duration, path]);
@@ -239,7 +291,16 @@ export function HeldArtistDrawing({
         </p>
       </header>
 
-      <section className="absolute left-1/2 top-[16%] z-10 w-[66%] -translate-x-1/2">
+      <section
+        className="absolute left-1/2 top-[16%] z-10 w-[66%] -translate-x-1/2 transition-[opacity,transform] duration-[560ms]"
+        style={{
+          opacity: hasEntered ? 1 : 0,
+          transform: hasEntered
+            ? "translate(-50%, 0)"
+            : "translate(-50%, 14px) scale(0.97)",
+          transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         <div
           className="relative aspect-[0.78/1] w-full overflow-visible bg-[#f7ecd9]/88 shadow-[0_16px_24px_rgba(50,35,20,0.16)]"
           style={{
@@ -269,6 +330,21 @@ export function HeldArtistDrawing({
               strokeLinejoin="round"
               strokeWidth="2"
             />
+            {details.map((detail, index) => (
+              <path
+                key={index}
+                d={detail}
+                fill="none"
+                stroke="#1A1A1A"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                style={{
+                  opacity: isComplete ? 0.92 : 0,
+                  transition: `opacity 320ms ease ${120 + index * 70}ms`,
+                }}
+              />
+            ))}
           </svg>
           <img
             alt=""

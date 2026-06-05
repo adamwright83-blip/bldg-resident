@@ -49,6 +49,9 @@ const HELD_ASSETS = {
   tokenLaundry: "/held/token-laundry.png",
   tokenRide: "/held/token-uber_waymo.png",
   trayEmptyHeld: "/held/nursery-heldscreen.png",
+  trayHeldBox: "/held/nursery-heldbox.png",
+  trayHeldFlat: "/held/nursery-heldtray.png",
+  trayAudio: "/held/nursery-audiotray.png",
   trayClayTokens: "/held/nursery-tray-claytokens.png",
   tray: "/held/nursery-heldscreen.png",
 };
@@ -106,21 +109,27 @@ const stripePromise =
 const TOKEN_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
   1: [{ left: 50, top: 50 }],
   2: [
-    { left: 42, top: 52 },
-    { left: 60, top: 50 },
+    { left: 34, top: 50 },
+    { left: 66, top: 50 },
   ],
   3: [
-    { left: 36, top: 54 },
-    { left: 50, top: 48 },
-    { left: 64, top: 54 },
+    { left: 18, top: 38 },
+    { left: 50, top: 34 },
+    { left: 82, top: 40 },
   ],
   4: [
-    { left: 32, top: 55 },
-    { left: 45, top: 49 },
-    { left: 58, top: 50 },
-    { left: 70, top: 56 },
+    { left: 17, top: 36 },
+    { left: 50, top: 30 },
+    { left: 83, top: 38 },
+    { left: 50, top: 72 },
   ],
 };
+
+// Duration of the request-card stamp -> compress -> lift ceremony (Part 1).
+// The card's internal timers run: stamp(~0) -> compress(200ms) -> lift(380ms)
+// -> lift transition finishes ~580ms. We hand off to the drawing scene right
+// as that completes, measured from the moment the user taps "Set it in motion".
+const TAKING_CUSTODY_CEREMONY_MS = 580;
 
 export default function PenPullPrototype({
   composerOpen: controlledComposerOpen,
@@ -138,7 +147,18 @@ export default function PenPullPrototype({
   const [draft, setDraft] = useState("");
   const [editDraft, setEditDraft] = useState("");
   const [internalComposerOpen, setInternalComposerOpen] = useState(false);
-  const [mode, setMode] = useState<PrototypeMode>("rest");
+  const [mode, setMode] = useState<PrototypeMode>(() => {
+    if (typeof window !== "undefined" && import.meta.env.DEV) {
+      const forced = new URLSearchParams(window.location.search).get("heldmode");
+      if (forced) return forced as PrototypeMode;
+    }
+    return "rest";
+  });
+  // DEV ONLY: expose a mode setter so the motion-audit harness can step screens.
+  if (typeof window !== "undefined" && import.meta.env.DEV) {
+    (window as unknown as { __setHeldMode?: (m: string) => void }).__setHeldMode = (m: string) =>
+      setMode(m as PrototypeMode);
+  }
   const [confirmedRequest, setConfirmedRequest] = useState("");
   const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>([]);
   const [heldAgentMessage, setHeldAgentMessage] = useState("");
@@ -155,6 +175,13 @@ export default function PenPullPrototype({
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
+  // Timestamp (ms) when the takingCustody ceremony began, i.e. when the user
+  // tapped "Set it in motion" and the request card mounted in its stamped
+  // state. Used to hand off to the drawing scene right as the card's
+  // stamp -> compress -> lift completes, decoupled from network latency so
+  // there is never an empty screen nor a premature cut.
+  const takingCustodyStartRef = useRef<number | null>(null);
+  const drawingHandoffTimerRef = useRef<number | null>(null);
   const saveNameMutation = trpc.chat.saveName.useMutation();
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
   const composerTrayVisible =
@@ -298,11 +325,24 @@ export default function PenPullPrototype({
     if (!text) return;
     void submitTypedCommand(text);
   };
+  const clearDrawingHandoff = () => {
+    if (drawingHandoffTimerRef.current !== null) {
+      window.clearTimeout(drawingHandoffTimerRef.current);
+      drawingHandoffTimerRef.current = null;
+    }
+    takingCustodyStartRef.current = null;
+  };
   const handleHeldAgentResponse = (
     response: HeldAgentResponse,
     request: string,
     services: HeldParsedService[]
   ) => {
+    // Any branch that leaves takingCustody for a collect/error screen must
+    // cancel the pending drawing handoff so a stale ceremony timer can't fire
+    // a screen later. The success branch re-arms its own handoff below.
+    if (response.collectStep === "name" || response.collectStep === "payment") {
+      clearDrawingHandoff();
+    }
     if (response.collectStep === "name") {
       setPendingOrderRequest(request);
       setPendingOrderServices(services);
@@ -340,12 +380,29 @@ export default function PenPullPrototype({
       setHeldAgentStatus("confirmed");
       setHeldAgentMessage(response.content || "Taking custody.");
       setMode("takingCustody");
-      window.setTimeout(() => {
+      // Hand off to the pen-on-canvas drawing scene right as the request
+      // card's stamp → compress → lift ceremony completes. Timed from the tap
+      // (takingCustodyStartRef), not from this response, so the seam is
+      // identical whether the booking resolved instantly or after a slow
+      // round-trip — no empty screen, no premature cut. If the network took
+      // longer than the ceremony, hand off on the next tick.
+      const elapsed =
+        takingCustodyStartRef.current !== null
+          ? Date.now() - takingCustodyStartRef.current
+          : TAKING_CUSTODY_CEREMONY_MS;
+      const remaining = Math.max(0, TAKING_CUSTODY_CEREMONY_MS - elapsed);
+      if (drawingHandoffTimerRef.current !== null) {
+        window.clearTimeout(drawingHandoffTimerRef.current);
+      }
+      drawingHandoffTimerRef.current = window.setTimeout(() => {
+        drawingHandoffTimerRef.current = null;
+        takingCustodyStartRef.current = null;
         setMode("drawing");
-      }, 500);
+      }, remaining);
       return;
     }
 
+    clearDrawingHandoff();
     setPendingOrderRequest(request);
     setPendingOrderServices(services);
     setHeldAgentStatus("error");
@@ -373,6 +430,13 @@ export default function PenPullPrototype({
     if (controlledComposerOpen === undefined) {
       setInternalComposerOpen(false);
     }
+    // Mark the ceremony start so the drawing handoff can be timed off the
+    // card's lift completion rather than off network latency.
+    takingCustodyStartRef.current = Date.now();
+    if (drawingHandoffTimerRef.current !== null) {
+      window.clearTimeout(drawingHandoffTimerRef.current);
+      drawingHandoffTimerRef.current = null;
+    }
     setMode("takingCustody");
 
     try {
@@ -384,6 +448,7 @@ export default function PenPullPrototype({
       handleHeldAgentResponse(response, nextRequest, nextServices);
     } catch (error) {
       console.error("[HELD] Set it in motion failed", error);
+      clearDrawingHandoff();
       setHeldAgentStatus("error");
       setHeldAgentMessage(
         "This did not set in motion yet. I kept the request here so you can try again."
@@ -477,6 +542,18 @@ export default function PenPullPrototype({
 
     return () => window.clearTimeout(timer);
   }, [mode]);
+
+  // Cancel any pending takingCustody -> drawing handoff on unmount so it can
+  // never fire a setMode after the component is gone.
+  useEffect(
+    () => () => {
+      if (drawingHandoffTimerRef.current !== null) {
+        window.clearTimeout(drawingHandoffTimerRef.current);
+        drawingHandoffTimerRef.current = null;
+      }
+    },
+    []
+  );
 
   const reset = () => {
     if (controlledComposerOpen === undefined) {
@@ -647,7 +724,7 @@ export default function PenPullPrototype({
           )}
 
           <div
-            className={`pointer-events-none absolute bottom-[-32px] left-1/2 z-30 w-[128%] transition-[opacity,transform] duration-[520ms] ${
+            className={`pointer-events-none absolute bottom-[6px] left-1/2 z-30 w-[92%] transition-[opacity,transform] duration-[520ms] ${
               composerTrayVisible
                 ? "translate-x-[-50%] translate-y-0 opacity-100"
                 : "translate-x-[-50%] translate-y-[112%] opacity-0"
@@ -953,9 +1030,66 @@ function HeldRequestReadyCard({
   onEditChange?: (value: string) => void;
   onRequestTap?: () => void;
 }) {
+  // Ceremony Part 1 — the request card stamps, compresses, then lifts away as
+  // the pen detaches. Stages sequence on mount once `isStamped` turns true.
+  //   idle    -> resting card (requestReady)
+  //   stamp   -> H crest presses down, card holds firm (~0-180ms)
+  //   compress-> card tightens vertically as it seals (~180-360ms)
+  //   lift    -> card rises + recedes + fades, handing off to the pen (~360-560ms)
+  const [stampStage, setStampStage] = useState<"idle" | "arming" | "stamp" | "compress" | "lift">(
+    isStamped ? "arming" : "idle"
+  );
+  useEffect(() => {
+    if (!isStamped) {
+      setStampStage("idle");
+      return;
+    }
+    // Paint the un-pressed crest for one frame, then drive the press so the
+    // "stamp" punch is actually visible rather than mounting already-pressed.
+    let raf = 0;
+    raf = window.requestAnimationFrame(() => {
+      raf = window.requestAnimationFrame(() => setStampStage("stamp"));
+    });
+    const toCompress = window.setTimeout(() => setStampStage("compress"), 200);
+    const toLift = window.setTimeout(() => setStampStage("lift"), 380);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(toCompress);
+      window.clearTimeout(toLift);
+    };
+  }, [isStamped]);
+
+  const sectionTransform =
+    stampStage === "lift"
+      ? "translate(-50%, -22px) scale(0.965)"
+      : "translate(-50%, 0px) scale(1)";
+  const sectionOpacity = stampStage === "lift" ? 0 : 1;
+  const cardScaleY =
+    stampStage === "compress" || stampStage === "lift" ? 0.965 : 1;
+  // "arming" = mounted but not yet pressed (large/faint crest); any later
+  // stage = pressed (settled crest).
+  const crestPressed = stampStage !== "idle" && stampStage !== "arming";
+
   return (
-    <section className="absolute left-1/2 top-[56%] z-[110] w-[84%] -translate-x-1/2">
-      <div className="relative overflow-hidden rounded-[4px] border border-[#d4c2a5]/80 bg-[#fff8ec]/86 px-5 py-5 shadow-[0_16px_26px_rgba(50,35,20,0.14)] backdrop-blur-[2px]">
+    <section
+      className="absolute left-1/2 top-[56%] z-[110] w-[84%]"
+      style={{
+        transform: sectionTransform,
+        opacity: sectionOpacity,
+        transition:
+          "transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out",
+        willChange: "transform, opacity",
+      }}
+    >
+      <div
+        className="relative overflow-hidden rounded-[4px] border border-[#d4c2a5]/80 bg-[#fff8ec]/86 px-5 py-5 shadow-[0_16px_26px_rgba(50,35,20,0.14)] backdrop-blur-[2px]"
+        style={{
+          transform: `scaleY(${cardScaleY})`,
+          transformOrigin: "50% 38%",
+          transition: "transform 180ms cubic-bezier(0.34, 1.4, 0.64, 1)",
+          willChange: "transform",
+        }}
+      >
         <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
           Your request
         </p>
@@ -986,7 +1120,19 @@ function HeldRequestReadyCard({
           </button>
         )}
         {isStamped && (
-          <span className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[19px] text-[#9a681f]">
+          <span
+            className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[19px] text-[#9a681f]"
+            style={{
+              transform: crestPressed ? "scale(1)" : "scale(1.32)",
+              opacity: crestPressed ? 1 : 0,
+              boxShadow: crestPressed
+                ? "0 2px 7px rgba(122,84,18,0.34), inset 0 1px 2px rgba(255,244,214,0.5)"
+                : "0 0 0 rgba(0,0,0,0)",
+              transition:
+                "transform 170ms cubic-bezier(0.3, 1.5, 0.5, 1), opacity 120ms ease-out, box-shadow 170ms ease-out",
+              willChange: "transform, opacity",
+            }}
+          >
             H
           </span>
         )}
@@ -1027,8 +1173,35 @@ function HeldTransformingState({
   const longPressOpenedRef = useRef(false);
   const [selectedToken, setSelectedToken] = useState<HeldTokenAsset | null>(null);
   const [showProvider, setShowProvider] = useState(false);
+  // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
+  //   ink    -> the drawn ink line rests on the paper (mode === transforming)
+  //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
+  //             materializing at the drawing's position (upper paper)
+  //   settle -> the clay tokens travel down and settle into the walnut tray
+  const [phase, setPhase] = useState<"ink" | "clay" | "settle">(isHeld ? "settle" : "ink");
+  useEffect(() => {
+    if (!isHeld) {
+      setPhase("ink");
+      return;
+    }
+    // Beat 1: ink becomes clay (next frame so the ink state paints first).
+    let raf = window.requestAnimationFrame(() => {
+      raf = window.requestAnimationFrame(() => setPhase("clay"));
+    });
+    // Beat 2: tokens settle into the tray AFTER the clay has fully formed at
+    // the drawing (clay scale/fade transition is ~560ms; hold a touch longer
+    // so the "it became a thing" beat is legible before it travels down).
+    const toSettle = window.setTimeout(() => setPhase("settle"), 780);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(toSettle);
+    };
+  }, [isHeld]);
+  const isInk = phase === "ink";
+  const isSettled = phase === "settle";
   const tokens = getTokenAssets(services, displayRequest);
-  const path = getHeldCompositePath(displayRequest, services);
+  const drawing = getHeldCompositePath(displayRequest, services);
+  const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
@@ -1069,27 +1242,38 @@ function HeldTransformingState({
 
       <section
         className={`absolute left-1/2 top-[18%] z-10 w-[66%] -translate-x-1/2 transition-all duration-700 ${
-          isHeld ? "-translate-y-6 opacity-0" : "translate-y-0 opacity-100"
+          isInk ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
         }`}
       >
-        <div className="relative aspect-[0.78/1] w-full bg-[#f7ecd9]/80 shadow-[0_16px_24px_rgba(50,35,20,0.12)]">
+        <div
+          className="relative aspect-[0.78/1] w-full shadow-[0_16px_24px_rgba(50,35,20,0.12)] transition-colors duration-500"
+          style={{ backgroundColor: isInk ? "rgba(247,236,217,0.8)" : "rgba(247,236,217,0)" }}
+        >
           <svg
             aria-hidden="true"
-            className={`absolute inset-[7%] h-[86%] w-[86%] overflow-visible transition-all duration-[1000ms] ${
-              isHeld ? "-translate-y-10 opacity-0" : "translate-y-0 opacity-100"
-            }`}
+            className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
             preserveAspectRatio="xMidYMid meet"
             viewBox="0 0 430 260"
           >
-            <path
-              d={path}
-              fill="none"
-              opacity="0.18"
-              stroke="#1A1A1A"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-            />
+            {ghostPaths.map((d, index) => (
+              <path
+                key={index}
+                d={d}
+                fill="none"
+                stroke="#1A1A1A"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  // Ink -> Clay: the line thickens & darkens (gathering into
+                  // matter) the instant it is asked to become a token, then
+                  // dissolves as the clay condenses out of it.
+                  opacity: isInk ? 0.18 : phase === "clay" ? 0.4 : 0,
+                  strokeWidth: isInk ? 2 : 4.5,
+                  transition:
+                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1)",
+                }}
+              />
+            ))}
           </svg>
         </div>
       </section>
@@ -1109,23 +1293,22 @@ function HeldTransformingState({
 
       <img
         alt=""
-        className={`pointer-events-none absolute left-1/2 z-10 w-[124%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
-          isHeld ? "bottom-[34%] opacity-100" : "bottom-[-2%] opacity-80"
+        className={`pointer-events-none absolute left-1/2 z-10 w-[112%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
+          isSettled ? "bottom-[30%] opacity-100" : "bottom-[-4%] opacity-80"
         }`}
         draggable={false}
-        src={HELD_ASSETS.trayEmptyHeld}
+        src={HELD_ASSETS.trayHeldFlat}
       />
-      <div
-        className={`absolute left-1/2 z-20 h-[30%] w-[82%] -translate-x-1/2 transition-all duration-700 ${
-          isHeld ? "bottom-[39%]" : "bottom-[15%]"
-        }`}
-      >
+      {/* Token tray is anchored at its settled (walnut-tray) position. The
+          clay condenses ~330px higher (at the drawing) during the clay beat,
+          then each token glides DOWN into the tray during the settle beat.
+          Using transform translateY (not top/bottom:auto) keeps it gliding
+          — no teleport. */}
+      <div className="absolute bottom-[35%] left-1/2 z-20 h-[32%] w-[88%] -translate-x-1/2">
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className={`absolute h-[62px] w-[62px] -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] transition-all duration-[900ms] ${
-              isHeld ? "scale-100 rotate-0 opacity-100" : "translate-y-[-150px] scale-75 rotate-[-12deg] opacity-0"
-            }`}
+            className="absolute h-[80px] w-[80px] object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)]"
             key={`${token.src}-${index}`}
             onClick={event => {
               if (longPressOpenedRef.current) {
@@ -1144,7 +1327,18 @@ function HeldTransformingState({
             style={{
               left: `${tokenPositions[index]?.left ?? 50}%`,
               top: `${tokenPositions[index]?.top ?? 50}%`,
+              // Clay beat: token condenses out of the ink right where it was
+              //   drawn (lifted ~112px to the drawing center, small -> full,
+              //   fades in, no spin — it is forming, not flying).
+              // Settle beat: token glides DOWN into the walnut tray (offset->0).
+              transform: `translate(-50%, calc(-50% + ${
+                isSettled ? 0 : -112
+              }px)) scale(${isInk ? 0.6 : 1})`,
+              opacity: isInk ? 0 : 1,
+              transition:
+                "transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease-out",
               transitionDelay: `${index * 90}ms`,
+              willChange: "transform, opacity",
             }}
             type="button"
           >
@@ -1279,9 +1473,9 @@ function HeldServiceVitrine({
 
         <img
           alt=""
-          className="pointer-events-none mt-auto w-full select-none opacity-95 mix-blend-multiply drop-shadow-[0_18px_24px_rgba(45,29,16,0.18)]"
+          className="pointer-events-none mt-auto w-full select-none opacity-95 drop-shadow-[0_18px_24px_rgba(45,29,16,0.18)]"
           draggable={false}
-          src={HELD_ASSETS.galleryBench}
+          src={HELD_ASSETS.trayHeldBox}
         />
       </div>
     </section>
