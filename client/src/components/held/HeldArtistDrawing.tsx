@@ -50,6 +50,15 @@ const COMPOSITE_PATHS: Record<string, HeldDrawing> = {
   multi_service_default: {
     main: "M84 132 C130 96 200 100 232 134 C262 166 232 206 190 200 C150 194 144 156 178 146 C214 135 252 158 274 126 C294 96 344 104 354 144 C360 174 332 202 300 190",
   },
+  // WOVEN — laundry + dog + car composed as one multi-subject sketch (shirt upper-left,
+  // dog upper-right, car along the bottom). Matches the vision board's woven portrait.
+  woven_shirt_dog_car: {
+    main: "M 105.0 65.0 C 105.0 65.0 99.0 60.0 95.0 65.0 C 88.0 73.0 84.0 85.0 92.0 88.0 C 100.0 91.0 104.0 85.0 105.0 78.0 C 105.0 90.0 105.0 108.0 105.0 110.0 C 105.0 115.0 110.0 117.0 115.0 117.0 L 161.0 117.0 C 166.0 117.0 171.0 115.0 171.0 110.0 C 171.0 108.0 171.0 90.0 171.0 78.0 C 172.0 85.0 176.0 91.0 184.0 88.0 C 192.0 85.0 188.0 73.0 181.0 65.0 C 177.0 60.0 171.0 65.0 171.0 65.0 M 171.0 65.0 C 166.0 60.0 155.0 60.0 150.0 66.0 C 146.0 71.0 130.0 71.0 126.0 66.0 C 122.0 61.0 114.0 61.0 109.0 65.0 M 224.0 75.0 C 218.0 69.0 220.0 60.0 228.0 59.0 C 234.0 58.0 238.0 60.0 242.0 65.0 C 254.0 66.0 278.0 66.0 292.0 66.0 C 298.0 66.0 304.0 64.0 308.0 58.0 C 311.0 53.0 315.0 48.0 323.0 48.0 C 330.0 48.0 336.0 52.0 340.0 58.0 C 343.0 62.0 348.0 62.0 352.0 60.0 C 357.0 58.0 360.0 61.0 358.0 65.0 C 356.0 69.0 350.0 69.0 346.0 68.0 C 343.0 74.0 341.0 78.0 340.0 81.0 M 340.0 81.0 C 339.0 75.0 334.0 73.0 330.0 75.0 C 325.0 77.0 321.0 76.0 318.0 80.0 C 315.0 89.0 311.0 98.0 308.0 101.0 M 308.0 101.0 C 309.0 92.0 305.0 87.0 300.0 88.0 C 290.0 90.0 260.0 90.0 250.0 88.0 C 245.0 87.0 242.0 92.0 242.0 98.0 C 242.0 102.0 238.0 105.0 234.0 104.0 M 234.0 104.0 C 236.0 98.0 233.0 94.0 228.0 94.0 C 223.0 94.0 221.0 89.0 223.0 84.0 C 224.0 80.0 223.0 77.0 224.0 75.0 M 286.0 199.0 C 278.0 194.0 250.0 193.0 230.0 192.0 C 216.0 181.0 197.0 176.0 175.0 176.0 C 153.0 176.0 138.0 183.0 131.0 196.0 C 122.0 195.0 110.0 196.0 110.0 205.0 C 110.0 212.0 120.0 214.0 125.0 212.0 M 125.0 212.0 C 124.0 203.0 138.0 203.0 142.0 212.0 C 146.0 214.0 235.0 214.0 239.0 212.0 M 239.0 212.0 C 238.0 203.0 252.0 203.0 256.0 212.0 C 259.0 214.0 270.0 214.0 276.0 211.0",
+  },
+  // WOVEN — dog + car composed as one two-subject sketch (dog upper, car lower).
+  woven_dog_car: {
+    main: "M 134.6 93.0 C 127.1 85.6 129.6 74.4 139.5 73.2 C 147.0 71.9 151.9 74.4 156.9 80.6 C 171.8 81.8 201.5 81.8 218.9 81.8 C 226.3 81.8 233.8 79.4 238.7 71.9 C 242.4 65.7 247.4 59.5 257.3 59.5 C 266.0 59.5 273.4 64.5 278.4 71.9 C 282.1 76.9 288.3 76.9 293.3 74.4 C 299.5 71.9 303.2 75.6 300.7 80.6 C 298.2 85.6 290.8 85.6 285.8 84.3 C 282.1 91.8 279.6 96.7 278.4 100.4 M 278.4 100.4 C 277.2 93.0 271.0 90.5 266.0 93.0 C 259.8 95.5 254.8 94.2 251.1 99.2 C 247.4 110.4 242.4 121.5 238.7 125.2 M 238.7 125.2 C 240.0 114.1 235.0 107.9 228.8 109.1 C 216.4 111.6 179.2 111.6 166.8 109.1 C 160.6 107.9 156.9 114.1 156.9 121.5 C 156.9 126.5 151.9 130.2 147.0 129.0 M 147.0 129.0 C 149.4 121.5 145.7 116.6 139.5 116.6 C 133.3 116.6 130.8 110.4 133.3 104.2 C 134.6 99.2 133.3 95.5 134.6 93.0 M 323.0 218.0 C 313.1 211.8 278.4 210.5 253.6 209.3 C 236.2 195.6 212.7 189.4 185.4 189.4 C 158.1 189.4 139.5 198.1 130.8 214.2 C 119.7 213.0 104.8 214.2 104.8 225.4 C 104.8 234.1 117.2 236.6 123.4 234.1 M 123.4 234.1 C 122.2 222.9 139.5 222.9 144.5 234.1 C 149.4 236.6 259.8 236.6 264.8 234.1 M 264.8 234.1 C 263.5 222.9 280.9 222.9 285.8 234.1 C 289.6 236.6 303.2 236.6 310.6 232.8",
+  },
   // PAPER AIRPLANE — swept delta, tail notch left open.
   ride_airport: {
     main: "M66 152 C140 142 300 110 364 96 C374 94 378 104 368 112 C320 150 250 196 236 200 C228 204 222 196 226 188 L246 150 L66 152 M246 150 L210 138",
@@ -62,6 +71,32 @@ export function getHeldCompositePath(
 ): HeldDrawing {
   const serviceTypes = services.map(service => service.type).join(" ");
   const haystack = `${displayRequest} ${serviceTypes}`.toLowerCase();
+
+  // MULTI-SUBJECT: when the request spans several services, draw a woven sketch
+  // that holds each subject on the one card — not just the first match. This
+  // matches the vision board's composed portrait. We detect distinct subjects
+  // from the haystack and pick the closest pre-composed weave.
+  const hasLaundry = /laundry|shirt|fold|dry\s*clean/.test(haystack);
+  const hasDog = /dog|groom|pet/.test(haystack);
+  const hasCar = /car|detail|wash/.test(haystack);
+  const hasRide = /airport|ride|uber|waymo|lax/.test(haystack);
+  const subjectCount = [hasLaundry, hasDog, hasCar, hasRide].filter(Boolean).length;
+
+  if (subjectCount >= 2) {
+    // Prefer the richest available weave for the detected subjects.
+    if (hasLaundry && hasDog && (hasCar || hasRide)) {
+      return COMPOSITE_PATHS.woven_shirt_dog_car;
+    }
+    if (hasDog && (hasCar || hasRide)) {
+      return COMPOSITE_PATHS.woven_dog_car;
+    }
+    if (hasLaundry && (hasCar || hasRide)) {
+      return COMPOSITE_PATHS.woven_shirt_dog_car;
+    }
+    if (hasLaundry && hasDog) {
+      return COMPOSITE_PATHS.woven_shirt_dog_car;
+    }
+  }
 
   if (/laundry/.test(haystack) && /deadline|friday|returned?|before|by\s+\w+/.test(haystack)) {
     return COMPOSITE_PATHS.laundry_pickup_deadline;
@@ -292,12 +327,12 @@ export function HeldArtistDrawing({
       </header>
 
       <section
-        className="absolute left-1/2 top-[16%] z-10 w-[66%] -translate-x-1/2 transition-[opacity,transform] duration-[560ms]"
+        className="absolute left-[14%] right-[14%] top-[15%] z-10 transition-[opacity,transform] duration-[560ms]"
         style={{
           opacity: hasEntered ? 1 : 0,
           transform: hasEntered
-            ? "translate(-50%, 0)"
-            : "translate(-50%, 14px) scale(0.97)",
+            ? "translate(0, 0)"
+            : "translate(0, 14px) scale(0.97)",
           transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
@@ -362,7 +397,7 @@ export function HeldArtistDrawing({
       </section>
 
       <p className="pointer-events-none absolute left-[12%] right-[12%] top-[61%] z-10 text-center font-serif text-[14px] italic leading-5 text-[#4a3d32]">
-        One line. One record.
+        Few things understood. Held has got them.
       </p>
 
       <img

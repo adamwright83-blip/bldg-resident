@@ -742,8 +742,8 @@ export default function PenPullPrototype({
           </div>
 
           {mode === "choice" && (
-            <p className="pointer-events-none absolute bottom-[292px] left-[13%] right-[22%] z-[42] font-serif text-[15px] italic leading-5 text-[#2f2923]/80">
-              Type below. Flick the pen right to speak.
+            <p className="pointer-events-none absolute bottom-[292px] left-[13%] right-[22%] z-[42] text-center font-serif text-[15px] italic leading-5 text-[#2f2923]/80">
+              Type or speak what's on your mind.
             </p>
           )}
 
@@ -753,10 +753,10 @@ export default function PenPullPrototype({
               aria-label="Type your request"
               autoCapitalize="sentences"
               autoComplete="off"
-              className={`pointer-events-auto absolute bottom-[146px] left-[10%] right-[24%] z-[96] min-h-[116px] resize-none rounded-[8px] border px-4 py-3 font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#2c2824] shadow-[0_10px_24px_rgba(50,35,20,0.13)] outline-none transition-[background,border,box-shadow,opacity] ${
+              className={`pointer-events-auto absolute bottom-[146px] left-[14%] right-[14%] z-[96] min-h-[104px] resize-none rounded-[6px] border px-4 py-3 text-center font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#9a681f] outline-none transition-[background,border,box-shadow,opacity] ${
                 mode === "typing"
-                  ? "border-[#d2bea0]/85 bg-[#fff9ef]/92 opacity-100 placeholder:text-[#8a7a68]/55 focus:border-[#b78a38]/70 focus:bg-[#fffaf2]"
-                  : "border-[#d8c6aa]/60 bg-[#fff9ef]/78 opacity-100 placeholder:text-[#7b6c5d]/65 focus:border-[#b78a38]/70 focus:bg-[#fffaf2]/94"
+                  ? "border-[#cdb792]/55 bg-[#fbf4e6]/55 opacity-100 shadow-[0_4px_14px_rgba(50,35,20,0.08)] placeholder:text-[#8a7a68]/50 focus:border-[#b78a38]/55 focus:bg-[#fdf8ee]/70"
+                  : "border-[#cdb792]/35 bg-[#fbf4e6]/35 opacity-100 shadow-none placeholder:text-[#7b6c5d]/55 focus:border-[#b78a38]/55 focus:bg-[#fdf8ee]/55"
               }`}
               data-testid="held-composer-input"
               onChange={event => {
@@ -1293,11 +1293,11 @@ function HeldTransformingState({
 
       <img
         alt=""
-        className={`pointer-events-none absolute left-1/2 z-10 w-[112%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)] transition-all duration-700 ${
-          isSettled ? "bottom-[30%] opacity-100" : "bottom-[-4%] opacity-80"
+        className={`pointer-events-none absolute left-1/2 z-10 w-[108%] -translate-x-1/2 select-none drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)] transition-all duration-700 ${
+          isSettled ? "bottom-[26%] opacity-100" : "bottom-[-6%] opacity-80"
         }`}
         draggable={false}
-        src={HELD_ASSETS.trayHeldFlat}
+        src={HELD_ASSETS.trayHeldBox}
       />
       {/* Token tray is anchored at its settled (walnut-tray) position. The
           clay condenses ~330px higher (at the drawing) during the clay beat,
