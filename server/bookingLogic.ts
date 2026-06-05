@@ -360,9 +360,16 @@ export async function getBookingDefaults(
 
   // Laundry and dry-cleaning use the real-time pickup logic
   if (normalized === "laundry" || normalized === "dry-cleaning") {
-    // If explicit overrides are provided (user modified time), use them
-    if (dateOverride && windowOverride) {
-      return computeOverriddenLaundryPickup(normalized, dateOverride, windowOverride);
+    // Honor an explicit date even when no time window was given (the window
+    // defaults to 7–10 AM inside). Previously this required BOTH a date AND a
+    // window, so "pick up laundry next Wednesday" (no time) was dropped and
+    // fell back to the default pickup (tomorrow morning).
+    if (dateOverride) {
+      return computeOverriddenLaundryPickup(
+        normalized,
+        dateOverride,
+        windowOverride ?? ""
+      );
     }
     return computeLaundryPickup(normalized);
   }

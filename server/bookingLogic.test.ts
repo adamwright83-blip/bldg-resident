@@ -46,6 +46,16 @@ describe("bookingLogic", () => {
       expect(defaults.date).toMatch(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), [A-Z][a-z]+ \d+$/);
     });
 
+    it("honors a date-only override for laundry (no time window) — 'next Wednesday' bug", async () => {
+      vi.mocked(db.getPreference).mockResolvedValue(undefined);
+
+      // A date with no window must NOT fall back to the default pickup.
+      const defaults = await getBookingDefaults(1, "laundry", "Wednesday, Jun 10");
+
+      expect(defaults.date).toContain("Jun 10"); // requested date is used
+      expect(defaults.window).toMatch(/7–10 AM/); // window defaults to morning
+    });
+
     it("should return same-day or next-morning defaults for dry-cleaning", async () => {
       vi.mocked(db.getPreference).mockResolvedValue(undefined);
 
