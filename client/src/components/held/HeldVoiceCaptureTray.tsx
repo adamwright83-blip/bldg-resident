@@ -134,14 +134,29 @@ function buildSmoothPath(points: InkPoint[]) {
   return path;
 }
 
+// Resting waveform: a handwritten loop-and-spring gesture (matches the vision
+// board). Big open loops at the left tighten into a fast spring, then settle to
+// the baseline at the right. Live microphone audio animates on top of this when
+// the mic is available; if it isn't, the user still sees the intended squiggle
+// instead of a flat dead line.
 function seedPoints() {
   const points: InkPoint[] = [];
+  const count = 96;
+  const span = END_X - START_X;
 
-  for (let index = 0; index < 58; index += 1) {
-    points.push({
-      x: START_X + index * 1.45,
-      y: BASELINE_Y,
-    });
+  for (let index = 0; index < count; index += 1) {
+    const t = index / (count - 1); // 0..1 across the tray
+    const x = START_X + t * span;
+
+    // Envelope: loops are tall on the left, taper to a quiet line on the right.
+    const envelope = Math.pow(1 - t, 1.35);
+    // Frequency ramps up left->right so big loops give way to a tight spring.
+    const phase = t * Math.PI * 14;
+    const loop = Math.sin(phase) * 26 * envelope;
+    const flutter = Math.sin(t * Math.PI * 30) * 5 * envelope;
+    const y = BASELINE_Y + loop + flutter;
+
+    points.push({ x, y });
   }
 
   return points;
@@ -204,8 +219,10 @@ export function HeldVoiceCaptureTray({
   const liveInkDotRef = useRef<HTMLSpanElement | null>(null);
   const nibHitboxRef = useRef<HTMLButtonElement | null>(null);
   const nibRef = useRef<HTMLImageElement | null>(null);
-  const nibXRef = useRef(76);
-  const nibYRef = useRef(53);
+  // Resting pen sits in the top-right corner of the tray (matches the vision).
+  // Live tracing overwrites these while the mic is active.
+  const nibXRef = useRef(86);
+  const nibYRef = useRef(20);
   const onTranscriptChangeRef = useRef(onTranscriptChange);
   const pathRef = useRef<SVGPathElement | null>(null);
   const pointsRef = useRef<InkPoint[]>(seedPoints());
@@ -590,7 +607,9 @@ export function HeldVoiceCaptureTray({
         <span
           ref={liveInkDotRef}
           aria-hidden="true"
-          className="pointer-events-none absolute z-[19] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1f1a16]/70 blur-[0.5px]"
+          className={`pointer-events-none absolute z-[19] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1f1a16]/70 blur-[0.5px] transition-opacity duration-300 ${
+            voiceStatus === "listening" ? "opacity-100" : "opacity-0"
+          }`}
           style={{
             left: `${nibXRef.current}%`,
             top: `${nibYRef.current}%`,
@@ -625,9 +644,9 @@ export function HeldVoiceCaptureTray({
           draggable={false}
           src={ASSETS.nib}
           style={{
-            left: "76%",
-            top: "53%",
-            transform: "translate(-22%, -82%) rotate(7deg)",
+            left: "86%",
+            top: "20%",
+            transform: "translate(-22%, -82%) rotate(18deg)",
             transformOrigin: "50% 92%",
           }}
         />
