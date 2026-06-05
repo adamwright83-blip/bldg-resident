@@ -5,7 +5,8 @@
 
 interface DateParseResult {
   hasExplicitDate: boolean;
-  dateOverride?: string; // "Wednesday, Feb 19" format
+  dateOverride?: string; // "Wednesday, Feb 19" format (display, no year)
+  dateOverrideISO?: string; // "2026-06-10" — carries the correct YEAR
   windowOverride?: string; // "7-10am" format
 }
 
@@ -48,14 +49,22 @@ export function parseExplicitDateTime(message: string, currentDate?: string): Da
   const currentDateISO = currentDate ?? getCurrentDateISOInLA();
   
   let dateOverride: string | undefined;
+  let dateOverrideISO: string | undefined;
   let windowOverride: string | undefined;
 
   const relativeISO = parseRelativeDateToISO(lower, currentDateISO);
-  if (relativeISO) dateOverride = formatDisplayDateFromISO(relativeISO);
+  if (relativeISO) {
+    dateOverrideISO = relativeISO;
+    dateOverride = formatDisplayDateFromISO(relativeISO);
+  }
 
   // 3. Check for absolute dates (Feb 20, 2/20, February 20)
   if (!dateOverride) {
-    dateOverride = parseAbsoluteDate(lower);
+    const absolute = parseAbsoluteDate(lower);
+    if (absolute) {
+      dateOverride = absolute.display;
+      dateOverrideISO = absolute.iso;
+    }
   }
 
   // 4. Check for time window keywords
@@ -74,6 +83,7 @@ export function parseExplicitDateTime(message: string, currentDate?: string): Da
   return {
     hasExplicitDate: !!dateOverride,
     dateOverride,
+    dateOverrideISO,
     windowOverride,
   };
 }
@@ -215,7 +225,9 @@ function getRelativeDate(keyword: string): string {
 /**
  * Parse absolute dates like "Feb 20", "2/20", "February 20"
  */
-function parseAbsoluteDate(text: string): string | undefined {
+function parseAbsoluteDate(
+  text: string
+): { display: string; iso: string } | undefined {
   // Match patterns like "Feb 20", "February 20", "2/20", "02/20"
   const patterns = [
     /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i,
@@ -228,7 +240,7 @@ function parseAbsoluteDate(text: string): string | undefined {
       try {
         const date = parseMatchedDate(match);
         if (date) {
-          return formatDate(date);
+          return { display: formatDate(date), iso: formatISODate(date) };
         }
       } catch (e) {
         // Invalid date, continue

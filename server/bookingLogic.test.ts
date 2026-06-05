@@ -56,6 +56,23 @@ describe("bookingLogic", () => {
       expect(defaults.window).toMatch(/7–10 AM/); // window defaults to morning
     });
 
+    it("uses the ISO date's YEAR for laundry (year-boundary safe)", async () => {
+      vi.mocked(db.getPreference).mockResolvedValue(undefined);
+
+      // 2027-01-06 is a Wednesday. If the year-less display string were used
+      // with the current year, the weekday (and year) would be wrong.
+      const defaults = await getBookingDefaults(
+        1,
+        "laundry",
+        "Wednesday, Jan 6",
+        undefined,
+        "2027-01-06"
+      );
+
+      expect(defaults.date).toBe("Wednesday, Jan 6");
+      expect(defaults.scheduled_start_local.slice(0, 7)).toBe("2027-01");
+    });
+
     it("should return same-day or next-morning defaults for dry-cleaning", async () => {
       vi.mocked(db.getPreference).mockResolvedValue(undefined);
 

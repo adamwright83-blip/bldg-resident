@@ -235,7 +235,8 @@ async function executeLaundryIntent(input: {
     input.bldgUserId,
     "laundry",
     dateTimeIntent.dateOverride,
-    windowOverride
+    windowOverride,
+    dateTimeIntent.dateOverrideISO
   );
   let freshUser = await getBldgUserById(input.bldgUserId);
   if (getCriticalProfileGaps(freshUser).missingPayment) {

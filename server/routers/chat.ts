@@ -1358,7 +1358,8 @@ export const chatRouter = router({
             bldgUserId,
             simpleService,
             dateTimeIntent.dateOverride,
-            dateTimeIntent.windowOverride
+            dateTimeIntent.windowOverride,
+            dateTimeIntent.dateOverrideISO
           );
           console.log(`[ResidentBooking][FastPath] booking defaults resolved: ${defaults.date} ${defaults.window}`);
 
@@ -1915,7 +1916,8 @@ export const chatRouter = router({
               bldgUserId,
               serviceCategory,
               dateTimeIntent.dateOverride,
-              dateTimeIntent.windowOverride
+              dateTimeIntent.windowOverride,
+              dateTimeIntent.dateOverrideISO
             );
             
             // Always use defaults (which include overrides if present)

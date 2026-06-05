@@ -354,7 +354,8 @@ export async function getBookingDefaults(
   bldgUserId: number | null,
   serviceCategory: string,
   dateOverride?: string,
-  windowOverride?: string
+  windowOverride?: string,
+  dateOverrideISO?: string
 ): Promise<BookingDefaults> {
   const normalized = normalizeServiceCategory(serviceCategory);
 
@@ -368,7 +369,8 @@ export async function getBookingDefaults(
       return computeOverriddenLaundryPickup(
         normalized,
         dateOverride,
-        windowOverride ?? ""
+        windowOverride ?? "",
+        dateOverrideISO
       );
     }
     return computeLaundryPickup(normalized);
@@ -419,7 +421,8 @@ export async function getBookingDefaults(
 function computeOverriddenLaundryPickup(
   serviceCategory: string,
   dateOverride: string,
-  windowOverride: string
+  windowOverride: string,
+  dateOverrideISO?: string
 ): BookingDefaults {
   const isDryClean = serviceCategory === "dry-cleaning";
   const now = getNowInLA();
@@ -448,12 +451,24 @@ function computeOverriddenLaundryPickup(
   };
 
   let pickupDate = new Date(now);
-  const dateMatch = dateOverride.match(/(\w+),\s*(\w+)\s+(\d+)/);
-  if (dateMatch) {
-    const month = monthMap[dateMatch[2]];
-    const day = parseInt(dateMatch[3]);
-    if (month !== undefined) {
-      pickupDate = new Date(now.getFullYear(), month, day);
+  // Prefer the ISO date (it carries the correct YEAR — critical across a
+  // year boundary, e.g. "next Wednesday" in late December). Fall back to the
+  // year-less display string only when ISO is unavailable.
+  const isoMatch = dateOverrideISO?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    pickupDate = new Date(
+      Number(isoMatch[1]),
+      Number(isoMatch[2]) - 1,
+      Number(isoMatch[3])
+    );
+  } else {
+    const dateMatch = dateOverride.match(/(\w+),\s*(\w+)\s+(\d+)/);
+    if (dateMatch) {
+      const month = monthMap[dateMatch[2]];
+      const day = parseInt(dateMatch[3]);
+      if (month !== undefined) {
+        pickupDate = new Date(now.getFullYear(), month, day);
+      }
     }
   }
 
