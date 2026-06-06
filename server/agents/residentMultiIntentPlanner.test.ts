@@ -80,10 +80,40 @@ describe("planResidentMultiIntents", () => {
 
     // Laundry carries the shared before-arrival deadline so "back before she
     // arrives" is backed by structured data, not just text.
-    expect(plan.intents.find((intent) => intent.type === "laundry")).toMatchObject({
+    const laundry = plan.intents.find((intent) => intent.type === "laundry");
+    expect(laundry).toMatchObject({
       deadlineDate: "2026-06-07",
       deadlineReason: "wife's mother visit",
     });
+
+    // The guest-arrival date ("Sunday", 2026-06-07) lives in the first
+    // sentence; the laundry request lives in the second. Sentence-boundary
+    // clause splitting must keep "Sunday" out of the laundry span (which is
+    // what executeLaundryIntent receives as its content) so laundry defaults to
+    // the next pickup and treats Sunday only as the return-by deadline.
+    expect(laundry?.originalTextSpan).toBe("I need my laundry done before she gets here");
+    expect(laundry?.originalTextSpan.toLowerCase()).not.toContain("sunday");
+    expect(laundry?.requestedDate ?? null).not.toBe("2026-06-07");
+  });
+
+  it("splits sentence boundaries so the laundry span excludes the guest-arrival date", () => {
+    const plan = planResidentMultiIntents({
+      currentDate: "2026-06-06",
+      content:
+        "My wife's mother is coming over Sunday. I need my laundry done before she gets here and Theo groomed.",
+    });
+
+    const laundry = plan.intents.find((intent) => intent.type === "laundry");
+    // The span passed to executeLaundryIntent must not carry the arrival
+    // sentence or the word "Sunday"...
+    expect(laundry?.originalTextSpan).not.toMatch(/sunday/i);
+    expect(laundry?.originalTextSpan).not.toMatch(/coming over/i);
+    // ...while the structured before-arrival deadline still rides along.
+    expect(laundry).toMatchObject({
+      deadlineDate: "2026-06-07",
+      deadlineReason: "wife's mother visit",
+    });
+    expect(laundry?.requestedDate ?? null).not.toBe("2026-06-07");
   });
 
   it("schedules laundry tomorrow using the shared date parser helper", () => {

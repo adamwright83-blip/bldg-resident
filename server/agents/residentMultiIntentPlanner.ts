@@ -255,9 +255,17 @@ export function planResidentMultiIntents(
   return { intents: intents.sort((a, b) => normalized.indexOf(a.originalTextSpan) - normalized.indexOf(b.originalTextSpan)) };
 }
 
+// Split a request into clauses on both sentence boundaries (. ! ?) and the
+// usual conjunctions/punctuation. Sentence splitting matters because the
+// guest-arrival date often lives in its own sentence ("…coming over Sunday.")
+// separate from the service request ("…my laundry done before she gets here").
+// Without it, the laundry clause would absorb "Sunday" and book for that day
+// instead of carrying it only as the return-by deadline. The shared guest
+// deadline is still extracted from the full normalized text upstream, so
+// splitting here never loses it.
 function splitIntoClauses(text: string): string[] {
   return text
-    .split(/\s*(?:,|;|\band\b|\boh and\b|\bthen\b)\s*/i)
+    .split(/\s*(?:[.!?]+|,|;|\band\b|\boh and\b|\bthen\b)\s*/i)
     .map((clause) => clause.trim())
     .filter(Boolean);
 }
