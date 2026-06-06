@@ -204,22 +204,19 @@ export function usePenPhysics({
       return;
     }
 
-    if (physics.pointerId !== null && hitboxRef.current) {
-      try {
-        hitboxRef.current.releasePointerCapture(physics.pointerId);
-      } catch {
-        // Pointer capture may already be gone after a browser gesture cancel.
-      }
-    }
+    // If the user is still actively holding the pen (a live pointer), DO NOT
+    // release pointer capture or null the pointerId. The same continuous
+    // gesture must keep control so the user can pull-down (open composer) and
+    // then drag-right (enter audio mode) without lifting and re-pressing.
+    const hasActivePointer = physics.pointerId !== null;
 
-    physics.pointerId = null;
     physics.unlockedAt = performance.now();
+    physics.swipeDismissed = false;
     physics.targetX = nextMetrics.width - tuningRef.current.restRightInset;
     physics.targetY = Math.max(
       nextMetrics.height - 150,
       nextMetrics.unlockY - nextMetrics.penHeight / 2
     );
-    setMachineState("unlocked");
     navigator.vibrate?.(8);
     onUnlockRef.current?.({
       penTipY,
@@ -227,6 +224,19 @@ export function usePenPhysics({
       penY: physics.y,
       unlockY: nextMetrics.unlockY,
     });
+
+    if (hasActivePointer && composerOpenRef.current) {
+      // Hand the live gesture straight into composerOpen so the right-drag
+      // audio handoff in handlePointerMove can fire on the same touch.
+      // Re-baseline the swipe origin to the current pointer position so the
+      // pull-down distance doesn't count against the rightward swipe gate.
+      physics.pointerStartX = physics.lastPointerX;
+      physics.pointerStartY = physics.lastPointerY;
+      setMachineState("composerOpen");
+      return;
+    }
+
+    setMachineState("unlocked");
 
     window.setTimeout(() => {
       if (penStateRef.current === "unlocked" && composerOpenRef.current) {
@@ -480,8 +490,8 @@ export function usePenPhysics({
         targetY = nextMetrics.height - 148;
         springX = { stiffness: 155, damping: 24, mass: 0.78 };
         springY = { stiffness: 160, damping: 24, mass: 0.78 };
-        scale = lerp(1, 0.92, elapsed);
-        visualOpacity = lerp(1, 0.65, elapsed);
+        scale = 1;
+        visualOpacity = 1;
         chainOpacity = lerp(0.82, 0.25, elapsed);
         rotationTarget = clamp(physics.rotation * 0.72, -12, 12);
       } else if (currentState === "composerOpen") {
@@ -496,8 +506,8 @@ export function usePenPhysics({
           : nextMetrics.height - 148;
         springX = { stiffness: 160, damping: 30, mass: 0.8 };
         springY = { stiffness: 160, damping: 30, mass: 0.8 };
-        scale = 0.92;
-        visualOpacity = 0.65;
+        scale = 1;
+        visualOpacity = 1;
         chainOpacity = 0.25;
         rotationTarget = -4;
       } else {

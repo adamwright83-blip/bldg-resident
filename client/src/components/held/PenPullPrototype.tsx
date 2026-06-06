@@ -796,7 +796,7 @@ export default function PenPullPrototype({
           {(mode === "choice" || mode === "typing") && (
             <textarea
               ref={inputRef}
-              aria-label="Type your request"
+              aria-label="Tap & type your request"
               autoCapitalize="sentences"
               autoComplete="off"
               className={`pointer-events-auto absolute bottom-[146px] left-[14%] right-[14%] z-[96] min-h-[104px] resize-none rounded-[6px] border px-4 py-3 text-center font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#9a681f] outline-none transition-[background,border,box-shadow,opacity] ${
@@ -832,7 +832,7 @@ export default function PenPullPrototype({
                 }
                 event.currentTarget.focus({ preventScroll: true });
               }}
-              placeholder="Type your request..."
+              placeholder="Tap & type your request"
               enterKeyHint="send"
               rows={4}
               value={draft}
