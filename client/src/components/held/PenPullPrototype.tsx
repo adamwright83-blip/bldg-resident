@@ -1367,7 +1367,11 @@ function HeldTransformingState({
           then each token glides DOWN into the tray during the settle beat.
           Using transform translateY (not top/bottom:auto) keeps it gliding
           — no teleport. */}
-      <div className="absolute bottom-[35%] left-1/2 z-20 h-[32%] w-[88%] -translate-x-1/2">
+      <div
+        className={`absolute bottom-[35%] left-1/2 h-[32%] w-[88%] -translate-x-1/2 ${
+          isSettled ? "z-[115]" : "z-20"
+        }`}
+      >
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
