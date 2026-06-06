@@ -48,6 +48,7 @@ const HELD_ASSETS = {
   requestCard: "/held/your-request-card.png",
   tokenCarDetail: "/held/token-cardetail.png",
   tokenDogGroom: "/held/token-doggroom.png",
+  tokenHaircut: "/held/token-haircut.png",
   tokenLaundry: "/held/token-laundry.png",
   tokenRide: "/held/token-uber_waymo.png",
   trayEmptyHeld: "/held/nursery-heldscreen.png",
@@ -1595,27 +1596,27 @@ function HeldTransformingState({
           <PlanLine
             className="font-serif text-[26px] italic leading-[1.15] text-[#2d251d]"
             delay={900}
-            text="I've taken the whole Sunday picture — one small thing I may come back to you on, but I'm already moving on all fronts."
+            text="I've taken in the whole Sunday picture — I'm already moving on everything. One small detail I may circle back on, but nothing for you to worry about."
           />
           <PlanLine
             className="mt-2 font-serif text-[13px] italic leading-[1.6] text-[#55493d]"
-            delay={2920}
+            delay={3420}
             text="Here's where each piece sits — I'll only come back to you when something needs a yes."
           />
           <PlanServiceRow
-            delay={7200}
+            delay={7900}
             label="Laundry"
-            text=" — picking up Saturday morning so it's back the day before she arrives. Same time window as your usual."
+            text=" — I'm picking it up tomorrow morning and making sure it's back before she arrives."
           />
           <PlanServiceRow
-            delay={12200}
+            delay={13200}
             label="Theo's grooming"
-            text=" — Maria has Saturday at 11 open. Booking her now unless you want Jordan, who's tied up until Sunday afternoon."
+            text=" — I'm reaching out to Theo's groomer now. I'll have a Saturday window locked in time for her visit, without needing you again."
           />
           <PlanLine
             className="mt-4 font-serif text-[12px] italic leading-[1.6] text-[#a06a2b]"
-            delay={17450}
-            text="I'll only reach back if Jordan is non-negotiable. Otherwise, consider it handled."
+            delay={18700}
+            text="Leave the rest to me. Everything is held."
           />
         </section>
       )}
@@ -2210,6 +2211,7 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
   if (/dog|groom/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenDogGroom, type: "dog_grooming" });
   if (/car|detail|wash/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenCarDetail, type: "car_detail" });
   if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenRide, type: "ride_airport" });
+  if (/haircut|hair cut|barber|blowout/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenHaircut, type: "haircut" });
 
   return assets.length ? assets : [{ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" }];
 }
@@ -2231,6 +2233,7 @@ function inferServicesFromRequest(request: string): HeldParsedService[] {
   if (/dog|groom/.test(lower)) services.push({ type: "dog_grooming" });
   if (/car|detail|wash/.test(lower)) services.push({ type: "car_detail" });
   if (/airport|ride|uber|waymo|lax/.test(lower)) services.push({ type: "ride_airport" });
+  if (/haircut|hair cut|barber|blowout/.test(lower)) services.push({ type: "haircut" });
 
   return services.length ? services : [{ type: "other" }];
 }
