@@ -228,9 +228,9 @@ export default function PenPullPrototype({
       mode === "orderError");
   const microphoneClassName =
     mode === "speech"
-      ? // Voice-capture: the tray sits high (top-[27%]), so the mic hangs in open
-        // air ABOVE it (matches the vision board) instead of dropping into it.
-        "translate-y-[150px] opacity-100 scale-100"
+      ? // Voice-capture: the tray owns the middle of the screen, so the mic
+        // drops closer to the writing surface instead of floating above it.
+        "translate-y-[270px] opacity-100 scale-100"
       : mode === "choice"
         ? "translate-y-[300px] opacity-100 scale-100"
         : mode === "typing"

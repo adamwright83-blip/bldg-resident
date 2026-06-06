@@ -48,7 +48,10 @@ type VoiceCommandResponse = {
 
 type HeldVoiceCaptureTrayProps = {
   active: boolean;
-  onConfirmRequest?: (request: string, services: ParsedIntent["services"]) => void;
+  onConfirmRequest?: (
+    request: string,
+    services: ParsedIntent["services"]
+  ) => void;
   onEditRequest: (request?: string) => void;
   onTranscriptChange?: (transcript: string) => void;
   transcript?: string;
@@ -202,10 +205,12 @@ export function HeldVoiceCaptureTray({
   const [displayRequest, setDisplayRequest] = useState(transcript ?? "");
   const [inkMarks, setInkMarks] = useState<InkMark[]>([]);
   const [parsedIntent, setParsedIntent] = useState<ParsedIntent | null>(null);
-  const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(
-    null
+  const [clarificationQuestion, setClarificationQuestion] = useState<
+    string | null
+  >(null);
+  const [clarificationOptions, setClarificationOptions] = useState<string[]>(
+    []
   );
-  const [clarificationOptions, setClarificationOptions] = useState<string[]>([]);
   const [confirmationProgress, setConfirmationProgress] = useState(0);
 
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -240,10 +245,10 @@ export function HeldVoiceCaptureTray({
   });
   const requestCopySize =
     requestCopy.length > 92
-      ? "text-[13px] leading-4"
+      ? "text-[15px] leading-5"
       : requestCopy.length > 58
-        ? "text-[14px] leading-[18px]"
-        : "text-[15px] leading-5";
+        ? "text-[16px] leading-6"
+        : "text-[18px] leading-7";
 
   useEffect(() => {
     onTranscriptChangeRef.current = onTranscriptChange;
@@ -360,7 +365,8 @@ export function HeldVoiceCaptureTray({
         Math.sin(time * 12.5) * speechAmp * 2.5;
       const silenceDrift = Math.sin(time * 1.2) * 1.2;
       const targetOffset = organicWave + silenceDrift;
-      lastWaveOffsetRef.current += (targetOffset - lastWaveOffsetRef.current) * 0.22;
+      lastWaveOffsetRef.current +=
+        (targetOffset - lastWaveOffsetRef.current) * 0.22;
       const y = BASELINE_Y + lastWaveOffsetRef.current;
 
       points.push({ x: END_X, y });
@@ -537,7 +543,9 @@ export function HeldVoiceCaptureTray({
   }, [voiceStatus]);
 
   const resolveClarification = (option: string) => {
-    setDisplayRequest(current => `${current.replace(/[.?!]$/, "")}. ${option}.`);
+    setDisplayRequest(
+      current => `${current.replace(/[.?!]$/, "")}. ${option}.`
+    );
     setClarificationQuestion(null);
     setClarificationOptions([]);
     setVoiceStatus("awaiting_confirmation");
@@ -554,7 +562,14 @@ export function HeldVoiceCaptureTray({
 
   const requestCardStamped =
     voiceStatus === "confirmed" || voiceStatus === "complete";
-  const editableRequestText = displayRequest || liveTranscript || rawTranscript || transcript || "";
+  const editableRequestText =
+    displayRequest || liveTranscript || rawTranscript || transcript || "";
+  const showRequestCard =
+    voiceStatus === "awaiting_confirmation" ||
+    voiceStatus === "clarifying" ||
+    voiceStatus === "confirmed" ||
+    voiceStatus === "complete" ||
+    voiceStatus === "error";
   const canEditRequest =
     voiceStatus === "awaiting_confirmation" ||
     voiceStatus === "clarifying" ||
@@ -579,7 +594,13 @@ export function HeldVoiceCaptureTray({
       data-held-voice-status={voiceStatus}
       data-held-voice-state={voiceVisualState}
     >
-      <div className="absolute left-1/2 top-[27%] w-[88%] -translate-x-1/2">
+      <div
+        className={`absolute left-1/2 -translate-x-1/2 transition-[top,width,opacity,filter,transform] duration-[720ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          showRequestCard
+            ? "top-[26%] w-[82%] scale-[0.96] opacity-55 blur-[0.35px]"
+            : "top-[37%] w-[96%] scale-100 opacity-100 blur-0"
+        }`}
+      >
         <img
           alt=""
           className="pointer-events-none relative z-0 w-full select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.22)]"
@@ -652,87 +673,112 @@ export function HeldVoiceCaptureTray({
         />
       </div>
 
-      <div className="pointer-events-auto absolute left-1/2 top-[67%] z-40 w-[82%] -translate-x-1/2">
-        <img
-          alt=""
-          className="w-full select-none drop-shadow-[0_10px_18px_rgba(54,38,23,0.12)]"
-          draggable={false}
-          src={ASSETS.requestCard}
-        />
-        <p
-          className={`pointer-events-none absolute left-[6%] top-[46%] line-clamp-3 max-w-[68%] -translate-y-1/2 font-serif italic text-[#2f2923] ${requestCopySize}`}
+      <div
+        aria-hidden={!showRequestCard}
+        className={`absolute left-1/2 top-[63%] z-40 w-[86%] -translate-x-1/2 transition-[opacity,transform] duration-[520ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          showRequestCard
+            ? "pointer-events-auto translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-8 opacity-0"
+        }`}
+      >
+        <div
+          className="relative overflow-hidden rounded-[6px] border border-[#d4c2a5]/80 bg-[#fff8ec]/92 px-5 pb-4 pt-4 shadow-[0_18px_32px_rgba(50,35,20,0.16)] backdrop-blur-[3px]"
+          style={{
+            backgroundImage: `linear-gradient(180deg, rgba(255,250,240,0.93), rgba(246,235,218,0.88)), url(${ASSETS.requestCard})`,
+            backgroundPosition: "center",
+            backgroundSize: "cover",
+          }}
         >
-          {requestCopy}
-        </p>
-        {canEditRequest && (
+          <div className="pointer-events-none absolute inset-x-5 top-[52px] h-px bg-[#b78a38]/24" />
+          <p className="relative text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
+            Your request
+          </p>
+          <p
+            className={`relative mt-4 line-clamp-4 max-w-[96%] font-serif italic text-[#2f2923] ${requestCopySize}`}
+          >
+            {requestCopy}
+          </p>
+          {requestCardStamped && (
+            <div className="pointer-events-none absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[19px] text-[#9a681f] shadow-[0_2px_7px_rgba(122,84,18,0.24)]">
+              H
+            </div>
+          )}
+          {canEditRequest && (
+            <button
+              aria-label="Edit heard request"
+              className="absolute left-0 top-0 h-[62%] w-full rounded opacity-0"
+              onClick={() => onEditRequest(editableRequestText)}
+              type="button"
+            />
+          )}
+
+          {voiceStatus === "clarifying" && clarificationQuestion && (
+            <div className="relative mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#b78a38]/20 pt-3 text-[12px] text-[#956923]">
+              <span className="basis-full text-[#5a4d40]">
+                {clarificationQuestion}
+              </span>
+              {clarificationOptions.map(option => (
+                <button
+                  className="font-serif text-[13px] underline decoration-[#b78a38]/35 underline-offset-4"
+                  key={option}
+                  onClick={() => resolveClarification(option)}
+                  type="button"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {voiceStatus === "awaiting_confirmation" && (
+            <div className="relative mt-5 flex items-center gap-3 border-t border-[#b78a38]/20 pt-3">
+              <button
+                className="min-h-12 min-w-[92px] text-left font-serif text-[14px] italic text-[#7a6d5f] underline decoration-[#b78a38]/30 underline-offset-4"
+                onClick={() => onEditRequest(editableRequestText)}
+                type="button"
+              >
+                Edit request
+              </button>
+              <button
+                aria-label="Set it in motion"
+                className="relative min-h-12 flex-1 touch-manipulation overflow-hidden rounded-[4px] border border-[#b78a38]/55 bg-[#f7ead4]/78 px-4 text-right font-serif text-[18px] italic text-[#8f5f17] shadow-[0_8px_18px_rgba(70,43,18,0.10)] transition-transform duration-150 active:scale-[0.98]"
+                onClick={() => void confirmRequest()}
+                type="button"
+              >
+                <span
+                  className="absolute inset-y-0 left-0 bg-[#d7b36e]/26 transition-[width] duration-300"
+                  style={{ width: `${confirmationProgress * 100}%` }}
+                />
+                <span className="relative">Set it in motion</span>
+              </button>
+            </div>
+          )}
+
+          {voiceStatus === "confirmed" && (
+            <p className="relative mt-4 border-t border-[#b78a38]/20 pt-3 font-serif text-[16px] italic text-[#9a681f]">
+              Taking custody.
+            </p>
+          )}
+
+          {voiceStatus === "error" && (
+            <div className="relative mt-5 flex items-center gap-3 border-t border-[#b78a38]/20 pt-3">
+              <button
+                className="min-h-12 flex-1 rounded-[4px] border border-[#b78a38]/40 bg-[#fff8ec]/72 px-4 text-left font-serif text-[16px] italic text-[#7a6d5f] shadow-[0_8px_18px_rgba(70,43,18,0.08)]"
+                onClick={() => onEditRequest(editableRequestText)}
+                type="button"
+              >
+                Write it instead
+              </button>
+            </div>
+          )}
+
           <button
-            aria-label="Edit heard request"
-            className="absolute left-[5%] top-[24%] h-[48%] w-[70%] rounded opacity-0"
+            aria-label="Open composer"
+            className="absolute right-0 top-0 h-[62%] w-[20%] rounded opacity-0"
             onClick={() => onEditRequest(editableRequestText)}
             type="button"
           />
-        )}
-
-        {requestCardStamped && (
-          <div className="pointer-events-none absolute right-[15%] top-[43%] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#a77724] bg-[#b78632]/10 font-serif text-[18px] text-[#9a681f]">
-            H
-          </div>
-        )}
-
-        {voiceStatus === "clarifying" && clarificationQuestion && (
-          <div className="absolute left-[6%] top-[72%] flex max-w-[78%] flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#956923]">
-            <span className="basis-full text-[#5a4d40]">{clarificationQuestion}</span>
-            {clarificationOptions.map(option => (
-              <button
-                className="font-serif text-[12px] underline decoration-[#b78a38]/35 underline-offset-4"
-                key={option}
-                onClick={() => resolveClarification(option)}
-                type="button"
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {voiceStatus === "awaiting_confirmation" && (
-          <button
-            aria-label="Set it in motion"
-            className="absolute bottom-[5%] left-[6%] min-h-11 w-[72%] touch-manipulation text-left transition-transform duration-150 active:scale-[0.98]"
-            onClick={() => void confirmRequest()}
-            type="button"
-          >
-            <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-[#b78a38]/28" />
-            <div
-              className="absolute left-0 top-1/2 h-px -translate-y-1/2 bg-[#a77724]"
-              style={{ width: `${confirmationProgress * 100}%` }}
-            />
-            <div
-              className="absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-[#a77724] bg-[#c69b55] font-serif text-[15px] text-[#3b2614] shadow-[0_4px_10px_rgba(68,43,20,0.22)]"
-              style={{
-                left: `calc(${confirmationProgress * 100}% - 14px)`,
-              }}
-            >
-              H
-            </div>
-            <p className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 font-serif text-[13px] text-[#9a681f]">
-              Set it in motion →
-            </p>
-          </button>
-        )}
-
-        {voiceStatus === "confirmed" && (
-          <p className="pointer-events-none absolute bottom-[13%] left-[6%] font-serif text-[13px] italic text-[#9a681f]">
-            Taking custody.
-          </p>
-        )}
-
-        <button
-          aria-label="Open composer"
-          className="absolute right-[5%] top-[26%] h-[48%] w-[15%] rounded opacity-0"
-          onClick={() => onEditRequest(editableRequestText)}
-          type="button"
-        />
+        </div>
       </div>
     </div>
   );
