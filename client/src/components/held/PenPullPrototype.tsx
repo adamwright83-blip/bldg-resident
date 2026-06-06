@@ -1373,6 +1373,77 @@ function HeldTokenHitTargetLayer({
   );
 }
 
+const PLAN_MS_PER_CHAR = 45;
+
+function PlanLine({
+  className,
+  delay,
+  text,
+}: {
+  className?: string;
+  delay: number;
+  text: string;
+}) {
+  const [displayed, setDisplayed] = useState("");
+  useEffect(() => {
+    let raf: number;
+    const timer = setTimeout(() => {
+      let startTime = 0;
+      const tick = (ts: number) => {
+        if (!startTime) startTime = ts;
+        const chars = Math.min(Math.floor((ts - startTime) / PLAN_MS_PER_CHAR), text.length);
+        setDisplayed(text.slice(0, chars));
+        if (chars < text.length) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
+  }, [text, delay]);
+  if (!displayed) return null;
+  return <p className={className}>{displayed}</p>;
+}
+
+function PlanServiceRow({
+  delay,
+  label,
+  text,
+}: {
+  delay: number;
+  label: string;
+  text: string;
+}) {
+  const [streamed, setStreamed] = useState("");
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    let raf: number;
+    const timer = setTimeout(() => {
+      setVisible(true);
+      let startTime = 0;
+      const tick = (ts: number) => {
+        if (!startTime) startTime = ts;
+        const chars = Math.min(Math.floor((ts - startTime) / PLAN_MS_PER_CHAR), text.length);
+        setStreamed(text.slice(0, chars));
+        if (chars < text.length) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
+  }, [text, delay]);
+  if (!visible) return null;
+  return (
+    <p className="mt-[18px] font-serif text-[13px] italic leading-[1.6] text-[#2d251d]">
+      <span className="not-italic text-[10px] uppercase tracking-[0.16em]">{label}</span>
+      {streamed}
+    </p>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -1519,18 +1590,35 @@ function HeldTransformingState({
         </div>
       </section>
 
-      <section
-        className={`pointer-events-none absolute left-[9%] top-[13%] z-20 transition-all duration-700 ${
-          isHeld ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-        }`}
-      >
-        <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
-          Held.
-        </h1>
-        <p className="mt-2 max-w-[170px] text-[13px] italic leading-5 text-[#55493d]">
-          {tokens.length === 1 ? "One thing is in motion." : `${tokens.length} things are in motion.`}
-        </p>
-      </section>
+      {isSettled && (
+        <section className="pointer-events-none absolute left-[9%] top-[10%] z-20 w-[82%]">
+          <PlanLine
+            className="font-serif text-[26px] italic leading-[1.15] text-[#2d251d]"
+            delay={900}
+            text="I've taken the whole Sunday picture — one small thing I may come back to you on, but I'm already moving on all fronts."
+          />
+          <PlanLine
+            className="mt-2 font-serif text-[13px] italic leading-[1.6] text-[#55493d]"
+            delay={2920}
+            text="Here's where each piece sits — I'll only come back to you when something needs a yes."
+          />
+          <PlanServiceRow
+            delay={7200}
+            label="Laundry"
+            text=" — picking up Saturday morning so it's back the day before she arrives. Same time window as your usual."
+          />
+          <PlanServiceRow
+            delay={12200}
+            label="Theo's grooming"
+            text=" — Maria has Saturday at 11 open. Booking her now unless you want Jordan, who's tied up until Sunday afternoon."
+          />
+          <PlanLine
+            className="mt-4 font-serif text-[12px] italic leading-[1.6] text-[#a06a2b]"
+            delay={17450}
+            text="I'll only reach back if Jordan is non-negotiable. Otherwise, consider it handled."
+          />
+        </section>
+      )}
 
       <img
         alt=""
