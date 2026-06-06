@@ -164,6 +164,7 @@ export default function PenPullPrototype({
   const [confirmedRequest, setConfirmedRequest] = useState("");
   const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>([]);
   const [debugOpenLaundryVitrine, setDebugOpenLaundryVitrine] = useState(false);
+  const [rootVitrineToken, setRootVitrineToken] = useState<HeldTokenAsset | null>(null);
   const [heldAgentMessage, setHeldAgentMessage] = useState("");
   const [heldAgentStatus, setHeldAgentStatus] = useState<
     "idle" | "booking" | "needs_name" | "needs_payment" | "confirmed" | "error"
@@ -571,6 +572,7 @@ export default function PenPullPrototype({
     setConfirmedRequest("");
     setConfirmedServices([]);
     setDebugOpenLaundryVitrine(false);
+    setRootVitrineToken(null);
     setHeldAgentMessage("");
     setHeldAgentStatus("idle");
     setLastOrderId(null);
@@ -742,6 +744,30 @@ export default function PenPullPrototype({
               />
             </>
           )}
+
+          {mode === "held" && !rootVitrineToken && (
+            <HeldTokenHitTargetLayer
+              displayRequest={confirmedRequest}
+              onOpenToken={setRootVitrineToken}
+              services={confirmedServices}
+            />
+          )}
+
+          <AnimatePresence>
+            {rootVitrineToken?.type === "laundry_pickup" ? (
+              <LaundryServiceDetail
+                key="root-laundry-vitrine"
+                onClose={() => setRootVitrineToken(null)}
+              />
+            ) : rootVitrineToken ? (
+              <HeldServiceVitrine
+                key="root-service-vitrine"
+                displayRequest={confirmedRequest}
+                onClose={() => setRootVitrineToken(null)}
+                token={rootVitrineToken}
+              />
+            ) : null}
+          </AnimatePresence>
 
           <div
             className={`pointer-events-none absolute bottom-[6px] left-1/2 z-30 w-[92%] transition-[opacity,transform] duration-[520ms] ${
@@ -1195,6 +1221,95 @@ function HeldRequestReadyCard({
   );
 }
 
+function HeldTokenHitTargetLayer({
+  displayRequest,
+  onOpenToken,
+  services,
+}: {
+  displayRequest: string;
+  onOpenToken: (token: HeldTokenAsset) => void;
+  services: HeldParsedService[];
+}) {
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressOpenedRef = useRef(false);
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
+  const tokens = getTokenAssets(services, displayRequest);
+  const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const openToken = (token: HeldTokenAsset) => {
+    if (token.type === "laundry_pickup") {
+      window.navigator.vibrate?.(8);
+    }
+    onOpenToken(token);
+  };
+
+  const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
+    clearLongPress();
+    longPressOpenedRef.current = false;
+    pressStartRef.current = { x: event.clientX, y: event.clientY };
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressOpenedRef.current = true;
+      openToken(token);
+      longPressTimerRef.current = null;
+    }, 520);
+  };
+
+  const moveTokenPress = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!pressStartRef.current) return;
+    const dx = Math.abs(event.clientX - pressStartRef.current.x);
+    const dy = Math.abs(event.clientY - pressStartRef.current.y);
+    if (dx > 12 || dy > 12) {
+      clearLongPress();
+    }
+  };
+
+  useEffect(() => clearLongPress, []);
+
+  return (
+    <div className="absolute bottom-[35%] left-1/2 z-[130] h-[32%] w-[88%] -translate-x-1/2">
+      {tokens.map((token, index) => (
+        <button
+          aria-label={
+            token.type === "laundry_pickup"
+              ? "Open Laundry Butler service details"
+              : "Open service details"
+          }
+          className="absolute h-[112px] w-[112px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent"
+          key={`${token.src}-${index}-hit-target`}
+          onClick={event => {
+            if (longPressOpenedRef.current) {
+              event.preventDefault();
+              longPressOpenedRef.current = false;
+              return;
+            }
+
+            openToken(token);
+          }}
+          onContextMenu={event => event.preventDefault()}
+          onPointerCancel={clearLongPress}
+          onPointerDown={event => startTokenPress(token, event)}
+          onPointerLeave={clearLongPress}
+          onPointerMove={moveTokenPress}
+          onPointerUp={clearLongPress}
+          style={{
+            left: `${tokenPositions[index]?.left ?? 50}%`,
+            top: `${tokenPositions[index]?.top ?? 50}%`,
+            touchAction: "none",
+          }}
+          type="button"
+        />
+      ))}
+    </div>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -1473,7 +1588,7 @@ function HeldServiceVitrine({
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
-      className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ecdf] text-[#2d251d]"
+      className="absolute inset-0 z-[140] overflow-hidden bg-[#f4ecdf] text-[#2d251d]"
       exit={{ opacity: 0, y: 18 }}
       initial={{ opacity: 0, y: 18 }}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
@@ -1559,7 +1674,7 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
-      className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ede0] text-[#2a2520]"
+      className="absolute inset-0 z-[140] overflow-hidden bg-[#f4ede0] text-[#2a2520]"
       drag="y"
       dragConstraints={{ bottom: 0, top: 0 }}
       dragElastic={{ bottom: 0.22, top: 0 }}
