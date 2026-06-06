@@ -46,6 +46,7 @@ const HELD_ASSETS = {
   paper: "/held/held-paper-bg.png",
   postTokenField: "/held/textfield-posttoken.png",
   requestCard: "/held/your-request-card.png",
+  requestTexture: "/held/yourrequest-texture.png",
   tokenCarDetail: "/held/token-cardetail.png",
   tokenDogGroom: "/held/token-doggroom.png",
   tokenLaundry: "/held/token-laundry.png",
@@ -785,6 +786,20 @@ export default function PenPullPrototype({
               draggable={false}
               src={HELD_ASSETS.composer}
             />
+            <div
+              aria-hidden="true"
+              className="absolute left-[19%] top-[22%] z-[2] h-[21%] w-[62%] rounded-[18px] opacity-95"
+              style={{
+                backgroundImage: `linear-gradient(180deg, rgba(246,237,222,0.92), rgba(237,225,205,0.94)), url(${HELD_ASSETS.requestTexture})`,
+                backgroundPosition: "center",
+                backgroundSize: "cover, 220px 220px",
+                boxShadow:
+                  "inset 0 10px 18px rgba(255,250,240,0.42), inset 0 -12px 24px rgba(112,78,42,0.06)",
+                maskImage: "radial-gradient(ellipse at center, black 68%, transparent 100%)",
+                WebkitMaskImage:
+                  "radial-gradient(ellipse at center, black 68%, transparent 100%)",
+              }}
+            />
           </div>
 
           {mode === "choice" && (
@@ -799,10 +814,12 @@ export default function PenPullPrototype({
               aria-label="Tap & type your request"
               autoCapitalize="sentences"
               autoComplete="off"
-              className={`pointer-events-auto absolute bottom-[146px] left-[14%] right-[14%] z-[96] min-h-[104px] resize-none rounded-[6px] border px-4 py-3 text-center font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#9a681f] outline-none transition-[background,border,box-shadow,opacity] ${
+              className={`pointer-events-auto absolute left-[14%] right-[14%] z-[96] resize-none rounded-[6px] border px-4 py-3 text-center font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#9a681f] outline-none transition-[background,border,bottom,box-shadow,opacity] ${
+                mode === "typing" ? "bottom-[146px] min-h-[104px]" : "bottom-[104px] min-h-[84px]"
+              } ${
                 mode === "typing"
-                  ? "border-[#cdb792]/55 bg-[#fbf4e6]/55 opacity-100 shadow-[0_4px_14px_rgba(50,35,20,0.08)] placeholder:text-[#8a7a68]/50 focus:border-[#b78a38]/55 focus:bg-[#fdf8ee]/70"
-                  : "border-[#cdb792]/35 bg-[#fbf4e6]/35 opacity-100 shadow-none placeholder:text-[#7b6c5d]/55 focus:border-[#b78a38]/55 focus:bg-[#fdf8ee]/55"
+                  ? "border-[#cdb792]/45 bg-[#fff8ec]/86 opacity-100 shadow-[0_4px_14px_rgba(50,35,20,0.06)] placeholder:text-[#8a6f55]/58 focus:border-[#b78a38]/50 focus:bg-[#fff9ef]/92"
+                  : "border-transparent bg-transparent opacity-100 shadow-none placeholder:text-[#7b5b3e]/90 focus:border-transparent focus:bg-transparent"
               }`}
               data-testid="held-composer-input"
               onChange={event => {
@@ -839,7 +856,7 @@ export default function PenPullPrototype({
             />
           )}
 
-          {(mode === "choice" || mode === "typing") && (
+          {mode === "typing" && (
             <button
               aria-label="Submit typed request"
               className={`absolute bottom-[156px] right-[9%] z-[97] grid h-11 w-11 place-items-center rounded-full border border-[#b78a38]/55 bg-[#c5a475]/80 font-serif text-[22px] leading-none text-[#fffaf2] shadow-[0_8px_18px_rgba(70,43,18,0.18)] transition-[opacity,transform] active:scale-95 ${
