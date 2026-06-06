@@ -592,7 +592,7 @@ export default function PenPullPrototype({
     setConfirmedServices([{ type: "laundry_pickup" }]);
     setLastOrderId(orderId => orderId ?? 1);
     setMode("held");
-    setDebugOpenLaundryVitrine(true);
+    setRootVitrineToken({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
   }, [showDebugControls]);
 
   return (
@@ -966,7 +966,7 @@ export default function PenPullPrototype({
                   setConfirmedServices([{ type: "laundry_pickup" }]);
                   setLastOrderId(orderId => orderId ?? 1);
                   setMode("held");
-                  setDebugOpenLaundryVitrine(true);
+                  setRootVitrineToken({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
                 }}
                 type="button"
               >
@@ -1474,6 +1474,7 @@ function HeldTransformingState({
         className={`pointer-events-none absolute left-1/2 z-10 w-[108%] -translate-x-1/2 select-none drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)] transition-all duration-700 ${
           isSettled ? "bottom-[26%] opacity-100" : "bottom-[-6%] opacity-80"
         }`}
+        data-held-home-cradle="true"
         draggable={false}
         src={HELD_ASSETS.trayHeldBox}
       />
@@ -1660,6 +1661,8 @@ function HeldServiceVitrine({
 }
 
 function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
+  const swipeStartYRef = useRef<number | null>(null);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -1671,21 +1674,28 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
+    swipeStartYRef.current = event.clientY;
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLElement>) => {
+    if (swipeStartYRef.current === null) return;
+    const dy = event.clientY - swipeStartYRef.current;
+    swipeStartYRef.current = null;
+    if (dy > 100) {
+      onClose();
+    }
+  };
+
   return (
     <motion.section
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: 1 }}
       className="absolute inset-0 z-[140] overflow-hidden bg-[#f4ede0] text-[#2a2520]"
-      drag="y"
-      dragConstraints={{ bottom: 0, top: 0 }}
-      dragElastic={{ bottom: 0.22, top: 0 }}
-      exit={{ opacity: 0, y: 28 }}
-      initial={{ opacity: 0, y: 24 }}
-      onDragEnd={(_, info) => {
-        if (info.offset.y > 90 || info.velocity.y > 520) {
-          onClose();
-        }
-      }}
-      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
     >
       <div
         className="absolute inset-0"
@@ -1704,7 +1714,13 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
       >
         H
       </button>
-      <div className="relative z-10 flex h-full flex-col px-[7.5%] pb-2 pt-[7%]">
+      <motion.div
+        animate={{ opacity: 1, y: 0 }}
+        className="absolute inset-x-[7.5%] bottom-0 top-[3.5%] z-20 overflow-y-auto pb-[178px] pr-1"
+        exit={{ opacity: 0, y: 28 }}
+        initial={{ opacity: 0, y: 18 }}
+        transition={{ delay: 0.05, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      >
         <header>
           <p className="text-[14px] tracking-[0.08em]">HELD.chat</p>
           <p className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#6f6254]">
@@ -1712,18 +1728,25 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
           </p>
         </header>
 
-        <section className="mt-3 grid grid-cols-[44%_1fr] items-end gap-4">
-          <img
-            alt="Laundry Butler provider holding review certificates"
-            className="h-[112px] w-full object-contain object-bottom mix-blend-multiply saturate-[0.86] sepia-[0.12] drop-shadow-[0_14px_20px_rgba(45,29,16,0.16)]"
-            draggable={false}
-            src={HELD_ASSETS.laundryProvider}
-          />
+        <section className="mt-3 grid grid-cols-[34%_1fr] items-center gap-5">
+          <div className="relative mx-auto h-[126px] w-[104px] overflow-hidden rounded-[52%] border border-[#b8893c]/85 bg-[#eadcc4] p-[3px] shadow-[0_12px_24px_rgba(77,48,19,0.15)]">
+            <img
+              alt="Laundry Butler provider"
+              className="h-full w-full rounded-[52%] object-cover object-center saturate-[0.9] sepia-[0.08]"
+              draggable={false}
+              src={HELD_ASSETS.laundryProvider}
+              style={{
+                objectPosition: "34% 34%",
+                transform: "scale(1.34)",
+              }}
+            />
+            <span className="pointer-events-none absolute inset-[7px] rounded-[52%] border border-[#fff7e9]/65" />
+          </div>
           <div className="pb-2">
-            <h1 className="font-serif text-[29px] italic leading-[0.95] text-[#2a2520]">
+            <h1 className="font-serif text-[33px] italic leading-[0.95] text-[#2a2520]">
               Laundry Butler
             </h1>
-            <p className="mt-1 font-serif text-[17px] italic leading-5 text-[#3b3128]">
+            <p className="mt-2 font-serif text-[18px] italic leading-5 text-[#3b3128]">
               Pickup &amp; delivery
             </p>
             <p className="mt-1 font-serif text-[18px] italic leading-5 text-[#a06a2b]">
@@ -1739,83 +1762,173 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
           Trusted vendor · 4 services completed at your residence
         </p>
 
-        <section className="relative mt-2">
-          <img
-            alt=""
-            className="pointer-events-none mx-auto w-[78%] select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.24)]"
-            draggable={false}
-            src={HELD_ASSETS.trayEmptyHeld}
-          />
-          <img
-            alt=""
-            className="pointer-events-none absolute left-1/2 top-[17%] w-[34%] -translate-x-1/2 select-none drop-shadow-[0_12px_18px_rgba(42,28,16,0.18)]"
-            draggable={false}
-            src={HELD_ASSETS.tokenLaundry}
-          />
+        <section className="mt-4 border-b border-[#b8893c]/28 pb-3">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f5145]">
+            Current status
+          </p>
+          <h2 className="mt-1 font-serif text-[33px] italic leading-[1.04] text-[#201b17]">
+            Driver is en route to pickup
+          </h2>
         </section>
 
-        <section className="-mt-1">
-          <p className="font-serif text-[15px] italic leading-5">
-            Laundry pickup is in motion.
-          </p>
-          <p className="font-serif text-[15px] italic leading-5">
-            Driver is preparing for pickup.
-          </p>
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] gap-4 border-b border-[#b8893c]/28 pb-2">
-            <div>
-              <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
-                Pickup window
-              </p>
-              <p className="mt-1 font-serif text-[14px] italic leading-5">
-                Today · 4:00–5:00 PM
-              </p>
-            </div>
-            <div className="h-10 w-px bg-[#b8893c]/32" />
-            <div>
-              <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
-                Residence
-              </p>
-              <p className="mt-1 font-serif text-[14px] italic leading-5">
-                1807 · 12A
-              </p>
-            </div>
-          </div>
+        <section className="mt-2 border-b border-[#b8893c]/28">
+          <StatusDetailRow label="Pickup window" value="Today · 4:00–5:00 PM" />
+          <StatusDetailRow label="Driver ETA" value="18 minutes" />
+          <StatusDetailRow label="Residence" value="1807 · 12A" />
+          <StatusDetailRow label="Estimated return" value="Tomorrow · 6:00 PM" />
+          <StatusDetailRow label="Estimated total" value="$44.00" />
+          <StatusDetailRow label="Order number" value="L-30218" />
         </section>
 
         <section className="mt-2">
-          <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f5145]">
             Service includes
           </p>
-          <div className="mt-1 grid grid-cols-4 divide-x divide-[#b8893c]/24">
-            <ServiceGlyph kind="pickup" label="Pickup" />
-            <ServiceGlyph kind="fold" label="Wash & fold" />
-            <ServiceGlyph kind="hanger" label="Dry-clean coordination" />
-            <ServiceGlyph kind="truck" label="Return delivery" />
-          </div>
-          <div className="flex justify-center gap-4 font-serif text-[15px] italic text-[#a06a2b]">
+          <p className="mt-1 font-serif text-[17px] italic leading-6">
+            Pickup · Wash &amp; fold · Dry clean on request · Return delivery
+          </p>
+          <div className="mt-1 flex justify-center gap-4 font-serif text-[17px] italic text-[#a06a2b]">
             <button type="button">Call driver</button>
             <span>·</span>
             <button type="button">Text driver</button>
           </div>
         </section>
 
-        <section className="mt-1 border-t border-[#b8893c]/28 pt-1">
-          <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
+        <section className="mt-3 border-t border-[#b8893c]/28 pt-2">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f5145]">
             Journey
           </p>
-          <PicassoJourneyLine />
+          <VitrineJourneyList />
         </section>
 
-        <footer className="mt-auto text-center">
-          <div className="mx-auto grid h-8 w-8 place-items-center rounded-full border border-[#8d6322] bg-[#b8893c]/22 font-serif text-[19px] text-[#8d6322] shadow-[inset_0_2px_3px_rgba(255,255,255,0.45),0_8px_14px_rgba(76,45,16,0.18)]">
+        <footer className="mt-4 text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[#8d6322] bg-[#b8893c]/25 font-serif text-[28px] text-[#8d6322] shadow-[inset_0_2px_3px_rgba(255,255,255,0.45),0_8px_14px_rgba(76,45,16,0.18)]">
             H
           </div>
-          <p className="font-serif text-[13px] italic">
+          <p className="mt-2 font-serif text-[18px] italic">
             Everything kept on file.
           </p>
         </footer>
-      </div>
+      </motion.div>
+      <VitrineRecededCradle />
+      <div className="pointer-events-none absolute inset-x-0 bottom-[22%] z-[12] h-[36%] bg-gradient-to-b from-[#f4ede0]/16 via-[#f4ede0]/68 to-[#f4ede0]/88" />
     </motion.section>
+  );
+}
+
+function VitrineRecededCradle() {
+  return (
+    <div
+      className="pointer-events-none absolute bottom-[26%] left-1/2 z-10 w-[108%] -translate-x-1/2"
+      data-held-vitrine-cradle="true"
+    >
+      <motion.div
+        animate={{
+          filter: "saturate(0.62) blur(4px)",
+          opacity: 0.2,
+          scale: 0.78,
+        }}
+        className="relative w-full"
+        exit={{
+          filter: "saturate(1) blur(0px)",
+          opacity: 1,
+          scale: 1,
+          transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+        }}
+        initial={{
+          filter: "saturate(1) blur(0px)",
+          opacity: 1,
+          scale: 1,
+        }}
+        style={{
+          filter: "saturate(0.62) blur(4px)",
+          transformOrigin: "50% 94%",
+        }}
+        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <img
+          alt=""
+          className="w-full select-none"
+          draggable={false}
+          src={HELD_ASSETS.trayHeldBox}
+        />
+        <img
+          alt=""
+          className="absolute left-1/2 top-[30%] w-[17%] -translate-x-1/2 -translate-y-1/2 select-none drop-shadow-[0_12px_16px_rgba(42,28,16,0.18)]"
+          draggable={false}
+          src={HELD_ASSETS.tokenLaundry}
+        />
+      </motion.div>
+    </div>
+  );
+}
+
+function StatusDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[42%_1fr] items-baseline border-t border-[#b8893c]/22 py-1.5">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-[#5f5145]">
+        {label}:
+      </p>
+      <p className="font-serif text-[18px] italic leading-5 text-[#2a2520]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function VitrineJourneyList() {
+  const steps = [
+    { label: "Requested", meta: "Mon 9:14 AM ✓", state: "done" },
+    { label: "Scheduled", meta: "Mon 9:18 AM ✓", state: "done" },
+    { label: "Confirmed", meta: "Mon 9:22 AM ✓", state: "done" },
+    { label: "En route", meta: "now", state: "current" },
+    { label: "In progress", meta: "pending", state: "future" },
+    { label: "Complete", meta: "pending", state: "future" },
+  ] as const;
+
+  return (
+    <ol className="mt-2 space-y-1.5">
+      {steps.map((step, index) => (
+        <li
+          className={`grid grid-cols-[28px_1fr] items-baseline gap-3 ${
+            step.state === "future" ? "opacity-45" : ""
+          }`}
+          key={step.label}
+        >
+          <span className="relative flex justify-center">
+            {index < steps.length - 1 && (
+              <span className="absolute left-1/2 top-[15px] h-[20px] w-px -translate-x-1/2 bg-[#b8893c]/45" />
+            )}
+            <span
+              className={`relative z-10 mt-1 h-3.5 w-3.5 rounded-full border ${
+                step.state === "current"
+                  ? "border-[#b8893c] bg-[#f4ede0]"
+                  : step.state === "done"
+                    ? "border-[#b8893c] bg-[#b8893c]"
+                    : "border-[#8f8377] bg-[#f4ede0]"
+              }`}
+            />
+          </span>
+          <p className="font-serif text-[15px] leading-5">
+            <span
+              className={`uppercase tracking-[0.14em] ${
+                step.state === "current" ? "text-[#2a2520]" : "text-[#3b3128]"
+              }`}
+            >
+              {step.label}
+            </span>
+            <span className="mx-2 text-[#8c7a69]">—</span>
+            <span
+              className={`italic ${
+                step.state === "current" ? "text-[#a06a2b]" : "text-[#3b3128]"
+              }`}
+            >
+              {step.meta}
+            </span>
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 
