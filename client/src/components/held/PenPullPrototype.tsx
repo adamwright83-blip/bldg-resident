@@ -808,8 +808,8 @@ export default function PenPullPrototype({
             </p>
           )}
 
-          {mode === "choice" && (
-            <p className="pointer-events-none absolute bottom-[188px] left-[17%] right-[35%] z-[98] whitespace-nowrap text-center font-serif text-[16px] italic leading-6 text-[#745b45]/88">
+          {mode === "choice" && !physics.isPointerActive && (
+            <p className="pointer-events-none absolute bottom-[188px] left-[13%] z-[44] w-[204px] whitespace-nowrap text-center font-serif text-[15px] italic leading-6 text-[#745b45]/88">
               Tap & type your request
             </p>
           )}

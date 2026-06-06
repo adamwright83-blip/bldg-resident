@@ -119,6 +119,7 @@ export function usePenPhysics({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [metrics, setMetrics] = useState(INITIAL_METRICS);
   const [penState, setPenState] = useState<PenState>("idle");
+  const [isPointerActive, setIsPointerActive] = useState(false);
   const [debugSnapshot, setDebugSnapshot] = useState<PenPhysicsDebugSnapshot>({
     gamma: 0,
     penTipY: INITIAL_METRICS.restY + INITIAL_METRICS.penHeight / 2,
@@ -189,6 +190,7 @@ export function usePenPhysics({
     physics.pointerVY = 0;
     physics.swipeDismissed = false;
     physics.unlockedAt = 0;
+    setIsPointerActive(false);
     setMachineState(getIdleState(tiltStatusRef.current));
   }, [setMachineState]);
 
@@ -269,6 +271,7 @@ export function usePenPhysics({
     physics.pointerVY = 0;
     physics.targetX = nextMetrics.restX;
     physics.targetY = nextMetrics.restY;
+    setIsPointerActive(false);
     setMachineState("returning");
   }, [beginUnlock, setMachineState]);
 
@@ -414,6 +417,7 @@ export function usePenPhysics({
         penStateRef.current === "pulling"
       ) {
         physics.pointerId = null;
+        setIsPointerActive(false);
         setMachineState(getIdleState(tiltStatusRef.current));
       }
 
@@ -706,6 +710,7 @@ export function usePenPhysics({
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       physics.pointerId = event.pointerId;
+      setIsPointerActive(true);
       physics.pointerStartX = point.x;
       physics.pointerStartY = point.y;
       physics.lastPointerX = point.x;
@@ -779,6 +784,7 @@ export function usePenPhysics({
         if (!physics.swipeDismissed && (horizontalSwipe || rightFlick || offstage)) {
           physics.swipeDismissed = true;
           physics.pointerId = null;
+          setIsPointerActive(false);
           physics.targetX =
             deltaX >= 0
               ? nextMetrics.width + nextMetrics.penWidth * 0.75
@@ -830,6 +836,7 @@ export function usePenPhysics({
 
       if (composerOpenRef.current) {
         physics.pointerId = null;
+        setIsPointerActive(false);
         physics.pointerVX = 0;
         physics.pointerVY = 0;
         physics.swipeDismissed = false;
@@ -866,6 +873,7 @@ export function usePenPhysics({
     },
     debugSnapshot,
     metrics,
+    isPointerActive,
     penRefs: {
       hitboxRef,
       shadowRef,
