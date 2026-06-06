@@ -75,6 +75,7 @@ function App() {
   /** Public product tour — sales/demo; no session or OTP required */
   const isPublicTour =
     location === "/tour" || location.startsWith("/tour/");
+  const isHeldPrototype = location === "/held-pen-prototype";
   const isHeldExperience =
     location === "/" ||
     location === "/chat" ||
@@ -110,7 +111,7 @@ function App() {
           />
           {shouldShowNeutralFallback ? (
             <NeutralBuildingFallback />
-          ) : isPublicTour ? (
+          ) : isPublicTour || isHeldPrototype ? (
             <PageSwitch />
           ) : (
             <OnboardingFlow>

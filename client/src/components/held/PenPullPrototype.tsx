@@ -4,11 +4,13 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type PointerEvent,
   type ReactNode,
   type RefObject,
 } from "react";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import { AnimatePresence, motion } from "framer-motion";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
@@ -161,6 +163,7 @@ export default function PenPullPrototype({
   }
   const [confirmedRequest, setConfirmedRequest] = useState("");
   const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>([]);
+  const [debugOpenLaundryVitrine, setDebugOpenLaundryVitrine] = useState(false);
   const [heldAgentMessage, setHeldAgentMessage] = useState("");
   const [heldAgentStatus, setHeldAgentStatus] = useState<
     "idle" | "booking" | "needs_name" | "needs_payment" | "confirmed" | "error"
@@ -567,6 +570,7 @@ export default function PenPullPrototype({
     setSpeechTranscript("");
     setConfirmedRequest("");
     setConfirmedServices([]);
+    setDebugOpenLaundryVitrine(false);
     setHeldAgentMessage("");
     setHeldAgentStatus("idle");
     setLastOrderId(null);
@@ -576,6 +580,18 @@ export default function PenPullPrototype({
     setMode("rest");
     physics.reset();
   };
+
+  useEffect(() => {
+    if (!showDebugControls) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("vitrine") !== "1") return;
+
+    setConfirmedRequest("Laundry pickup is in motion.");
+    setConfirmedServices([{ type: "laundry_pickup" }]);
+    setLastOrderId(orderId => orderId ?? 1);
+    setMode("held");
+    setDebugOpenLaundryVitrine(true);
+  }, [showDebugControls]);
 
   return (
     <main className="min-h-dvh overflow-hidden bg-[#151311] text-[#2C2824] sm:flex sm:items-center sm:justify-center sm:p-4">
@@ -917,6 +933,19 @@ export default function PenPullPrototype({
               >
                 debug {debug ? "on" : "off"}
               </button>
+              <button
+                className="rounded-full border border-[#a98545]/45 bg-[#fbf6eb]/80 px-3 py-2 shadow-sm backdrop-blur"
+                onClick={() => {
+                  setConfirmedRequest("Laundry pickup is in motion.");
+                  setConfirmedServices([{ type: "laundry_pickup" }]);
+                  setLastOrderId(orderId => orderId ?? 1);
+                  setMode("held");
+                  setDebugOpenLaundryVitrine(true);
+                }}
+                type="button"
+              >
+                vitrine
+              </button>
               {physics.tilt.permissionStatus === "prompt" && (
                 <button
                   className="rounded-full border border-[#a98545]/45 bg-[#fbf6eb]/80 px-3 py-2 shadow-sm backdrop-blur"
@@ -950,8 +979,10 @@ export default function PenPullPrototype({
 
           {(mode === "transforming" || mode === "held") && (
             <HeldTransformingState
+              debugOpenLaundryVitrine={debugOpenLaundryVitrine}
               displayRequest={confirmedRequest}
               isHeld={mode === "held"}
+              onDebugLaundryVitrineOpened={() => setDebugOpenLaundryVitrine(false)}
               services={confirmedServices}
             />
           )}
@@ -1165,18 +1196,22 @@ function HeldRequestReadyCard({
 }
 
 function HeldTransformingState({
+  debugOpenLaundryVitrine = false,
   displayRequest,
   isHeld,
+  onDebugLaundryVitrineOpened,
   services,
 }: {
+  debugOpenLaundryVitrine?: boolean;
   displayRequest: string;
   isHeld: boolean;
+  onDebugLaundryVitrineOpened?: () => void;
   services: HeldParsedService[];
 }) {
   const longPressTimerRef = useRef<number | null>(null);
   const longPressOpenedRef = useRef(false);
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
   const [selectedToken, setSelectedToken] = useState<HeldTokenAsset | null>(null);
-  const [showProvider, setShowProvider] = useState(false);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
@@ -1213,21 +1248,45 @@ function HeldTransformingState({
       longPressTimerRef.current = null;
     }
   };
-  const startTokenPress = (token: HeldTokenAsset) => {
+  const openToken = (token: HeldTokenAsset) => {
+    setSelectedToken(token);
+  };
+  const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
     clearLongPress();
     longPressOpenedRef.current = false;
+    pressStartRef.current = { x: event.clientX, y: event.clientY };
     longPressTimerRef.current = window.setTimeout(() => {
       longPressOpenedRef.current = true;
-      setSelectedToken(token);
-      setShowProvider(token.type === "laundry_pickup");
+      if (token.type === "laundry_pickup") {
+        window.navigator.vibrate?.(8);
+      }
+      openToken(token);
       longPressTimerRef.current = null;
-    }, 420);
+    }, 520);
+  };
+  const moveTokenPress = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!pressStartRef.current) return;
+    const dx = Math.abs(event.clientX - pressStartRef.current.x);
+    const dy = Math.abs(event.clientY - pressStartRef.current.y);
+    if (dx > 10 || dy > 10) {
+      clearLongPress();
+    }
   };
 
   useEffect(() => clearLongPress, []);
 
+  useEffect(() => {
+    if (!debugOpenLaundryVitrine) return;
+    setSelectedToken({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
+    onDebugLaundryVitrineOpened?.();
+  }, [debugOpenLaundryVitrine, onDebugLaundryVitrineOpened]);
+
   return (
-    <div className="absolute inset-0 z-[85] overflow-hidden bg-[#f4ecdf]">
+    <div
+      className={`absolute inset-0 overflow-hidden bg-[#f4ecdf] ${
+        selectedToken ? "z-[120]" : "z-[85]"
+      }`}
+    >
       <div
         className="absolute inset-0"
         style={{
@@ -1321,12 +1380,13 @@ function HeldTransformingState({
                 return;
               }
 
-              setSelectedToken(token);
-              setShowProvider(false);
+              openToken(token);
             }}
+            onContextMenu={event => event.preventDefault()}
             onPointerCancel={clearLongPress}
-            onPointerDown={() => startTokenPress(token)}
+            onPointerDown={event => startTokenPress(token, event)}
             onPointerLeave={clearLongPress}
+            onPointerMove={moveTokenPress}
             onPointerUp={clearLongPress}
             style={{
               left: `${tokenPositions[index]?.left ?? 50}%`,
@@ -1381,17 +1441,18 @@ function HeldTransformingState({
           className="pointer-events-none absolute right-[8.5%] top-[23%] h-[52%] w-[15%] rounded-r-[18px] bg-[#f8eddd]"
         />
       </div>
-      {selectedToken && !showProvider && (
-        <HeldServiceVitrine
-          displayRequest={displayRequest}
-          onClose={() => setSelectedToken(null)}
-          onViewProvider={() => setShowProvider(true)}
-          token={selectedToken}
-        />
-      )}
-      {selectedToken?.type === "laundry_pickup" && showProvider && (
-        <LaundryServiceDetail onClose={() => setShowProvider(false)} />
-      )}
+      <AnimatePresence>
+        {selectedToken?.type === "laundry_pickup" ? (
+          <LaundryServiceDetail key="laundry-vitrine" onClose={() => setSelectedToken(null)} />
+        ) : selectedToken ? (
+          <HeldServiceVitrine
+            key="service-vitrine"
+            displayRequest={displayRequest}
+            onClose={() => setSelectedToken(null)}
+            token={selectedToken}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1399,18 +1460,20 @@ function HeldTransformingState({
 function HeldServiceVitrine({
   displayRequest,
   onClose,
-  onViewProvider,
   token,
 }: {
   displayRequest: string;
   onClose: () => void;
-  onViewProvider: () => void;
   token: HeldTokenAsset;
 }) {
-  const isLaundry = token.type === "laundry_pickup";
-
   return (
-    <section className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ecdf] text-[#2d251d]">
+    <motion.section
+      animate={{ opacity: 1, y: 0 }}
+      className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ecdf] text-[#2d251d]"
+      exit={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 18 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div
         className="absolute inset-0"
         style={{
@@ -1458,15 +1521,6 @@ function HeldServiceVitrine({
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-6 font-serif text-[15px] text-[#9a681f]">
-          {isLaundry && (
-            <button
-              className="underline decoration-[#b78a38]/35 underline-offset-4"
-              onClick={onViewProvider}
-              type="button"
-            >
-              View provider
-            </button>
-          )}
           <button
             className="underline decoration-[#b78a38]/35 underline-offset-4"
             type="button"
@@ -1482,79 +1536,285 @@ function HeldServiceVitrine({
           src={HELD_ASSETS.trayHeldBox}
         />
       </div>
-    </section>
+    </motion.section>
   );
 }
 
 function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
-    <section className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ecdf] text-[#2d251d]">
+    <motion.section
+      animate={{ opacity: 1, y: 0 }}
+      className="absolute inset-0 z-[90] overflow-hidden bg-[#f4ede0] text-[#2a2520]"
+      drag="y"
+      dragConstraints={{ bottom: 0, top: 0 }}
+      dragElastic={{ bottom: 0.22, top: 0 }}
+      exit={{ opacity: 0, y: 28 }}
+      initial={{ opacity: 0, y: 24 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.y > 90 || info.velocity.y > 520) {
+          onClose();
+        }
+      }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div
         className="absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(180deg, rgba(255,252,246,0.82), rgba(244,235,222,0.92)), url(/held/held-paper-bg.png)",
+            "linear-gradient(180deg, rgba(255,252,246,0.72), rgba(244,237,224,0.94)), url(/held/held-paper-bg.png)",
           backgroundPosition: "center",
           backgroundSize: "cover, 420px 420px",
         }}
       />
       <button
-        aria-label="Close service details"
-        className="absolute right-[7%] top-[7%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b78a35]/70 bg-[#fff8ec]/70 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        aria-label="Return to held home"
+        className="absolute right-[7%] top-[6.4%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b8893c]/80 bg-[#fff8ec]/62 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
         onClick={onClose}
         type="button"
       >
         H
       </button>
-      <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[8%]">
-        <p className="text-center font-serif text-[28px] tracking-[0.04em]">
-          HELD.chat
-        </p>
-        <h1 className="mt-5 text-center font-serif text-[48px] italic leading-none">
-          Laundry Butler
-        </h1>
-        <div className="mt-7 flex items-center gap-5">
+      <div className="relative z-10 flex h-full flex-col px-[7.5%] pb-2 pt-[7%]">
+        <header>
+          <p className="text-[14px] tracking-[0.08em]">HELD.chat</p>
+          <p className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#6f6254]">
+            Residence 1807 · 12A
+          </p>
+        </header>
+
+        <section className="mt-3 grid grid-cols-[44%_1fr] items-end gap-4">
           <img
             alt="Laundry Butler provider holding review certificates"
-            className="h-[132px] w-[132px] rounded-full border border-[#b78a35] object-cover shadow-[0_16px_28px_rgba(45,29,16,0.18)]"
+            className="h-[112px] w-full object-contain object-bottom mix-blend-multiply saturate-[0.86] sepia-[0.12] drop-shadow-[0_14px_20px_rgba(45,29,16,0.16)]"
             draggable={false}
             src={HELD_ASSETS.laundryProvider}
           />
-          <div className="min-w-0 flex-1">
-            <p className="font-serif text-[23px] leading-7">
-              Alex from Laundry Butler
+          <div className="pb-2">
+            <h1 className="font-serif text-[29px] italic leading-[0.95] text-[#2a2520]">
+              Laundry Butler
+            </h1>
+            <p className="mt-1 font-serif text-[17px] italic leading-5 text-[#3b3128]">
+              Pickup &amp; delivery
             </p>
-            <p className="mt-2 text-[28px] tracking-[0.08em] text-[#b1802b]">
-              ★★★★★ <span className="font-serif text-[22px] tracking-normal text-[#2d251d]">5.0</span>
+            <p className="mt-1 font-serif text-[18px] italic leading-5 text-[#a06a2b]">
+              In motion
             </p>
-            <p className="mt-1 font-serif text-[16px] text-[#6a5b4c]">
-              214 resident reviews
+            <p className="mt-1 font-serif text-[15px] leading-5">
+              Adam · Your driver
             </p>
           </div>
-        </div>
-        <div className="mt-7 rounded-[4px] border border-[#d3c3a9] bg-[#fff8ec]/62 px-5 py-4 shadow-[0_14px_26px_rgba(50,35,20,0.10)]">
-          <p className="text-center font-serif text-[18px] italic leading-6">
-            Pickup, wash, fold, and return handled by a resident-vouched provider.
-          </p>
-        </div>
-        <div className="mt-6">
-          <p className="text-center text-[11px] uppercase tracking-[0.32em] text-[#8b7a67]">
-            Service includes
-          </p>
-          <p className="mt-3 text-center font-serif text-[19px] leading-7">
-            Laundry pickup · Wash & fold · Return scheduling
-          </p>
-        </div>
-        <div className="mt-auto">
+        </section>
+
+        <p className="border-b border-[#b8893c]/32 pb-2 text-center font-serif text-[12px] leading-5">
+          Trusted vendor · 4 services completed at your residence
+        </p>
+
+        <section className="relative mt-2">
           <img
             alt=""
-            className="mx-auto w-[92%] drop-shadow-[0_18px_28px_rgba(45,29,16,0.20)]"
+            className="pointer-events-none mx-auto w-[78%] select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.24)]"
             draggable={false}
-            src={HELD_ASSETS.trayClayTokens}
+            src={HELD_ASSETS.trayEmptyHeld}
           />
-        </div>
+          <img
+            alt=""
+            className="pointer-events-none absolute left-1/2 top-[17%] w-[34%] -translate-x-1/2 select-none drop-shadow-[0_12px_18px_rgba(42,28,16,0.18)]"
+            draggable={false}
+            src={HELD_ASSETS.tokenLaundry}
+          />
+        </section>
+
+        <section className="-mt-1">
+          <p className="font-serif text-[15px] italic leading-5">
+            Laundry pickup is in motion.
+          </p>
+          <p className="font-serif text-[15px] italic leading-5">
+            Driver is preparing for pickup.
+          </p>
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] gap-4 border-b border-[#b8893c]/28 pb-2">
+            <div>
+              <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
+                Pickup window
+              </p>
+              <p className="mt-1 font-serif text-[14px] italic leading-5">
+                Today · 4:00–5:00 PM
+              </p>
+            </div>
+            <div className="h-10 w-px bg-[#b8893c]/32" />
+            <div>
+              <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
+                Residence
+              </p>
+              <p className="mt-1 font-serif text-[14px] italic leading-5">
+                1807 · 12A
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-2">
+          <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
+            Service includes
+          </p>
+          <div className="mt-1 grid grid-cols-4 divide-x divide-[#b8893c]/24">
+            <ServiceGlyph kind="pickup" label="Pickup" />
+            <ServiceGlyph kind="fold" label="Wash & fold" />
+            <ServiceGlyph kind="hanger" label="Dry-clean coordination" />
+            <ServiceGlyph kind="truck" label="Return delivery" />
+          </div>
+          <div className="flex justify-center gap-4 font-serif text-[15px] italic text-[#a06a2b]">
+            <button type="button">Call driver</button>
+            <span>·</span>
+            <button type="button">Text driver</button>
+          </div>
+        </section>
+
+        <section className="mt-1 border-t border-[#b8893c]/28 pt-1">
+          <p className="text-[9px] uppercase tracking-[0.24em] text-[#6f6254]">
+            Journey
+          </p>
+          <PicassoJourneyLine />
+        </section>
+
+        <footer className="mt-auto text-center">
+          <div className="mx-auto grid h-8 w-8 place-items-center rounded-full border border-[#8d6322] bg-[#b8893c]/22 font-serif text-[19px] text-[#8d6322] shadow-[inset_0_2px_3px_rgba(255,255,255,0.45),0_8px_14px_rgba(76,45,16,0.18)]">
+            H
+          </div>
+          <p className="font-serif text-[13px] italic">
+            Everything kept on file.
+          </p>
+        </footer>
       </div>
-    </section>
+    </motion.section>
+  );
+}
+
+function ServiceGlyph({
+  kind,
+  label,
+}: {
+  kind: "pickup" | "fold" | "hanger" | "truck";
+  label: string;
+}) {
+  return (
+    <div className="flex min-h-[56px] flex-col items-center justify-start px-1 text-center">
+      <svg
+        aria-hidden="true"
+        className="h-7 w-10 overflow-visible"
+        fill="none"
+        stroke="#1A1A1A"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+        viewBox="0 0 64 48"
+      >
+        {kind === "pickup" && (
+          <path d="M24 14c3-5 13-5 16 0m-19 2c-3 8-6 18-5 25 8 3 24 3 32 0 1-7-2-17-5-25-6 4-16 4-22 0Z" />
+        )}
+        {kind === "fold" && (
+          <path d="M14 18c7-5 30-5 37 0 3 2 3 5-1 7-8 4-27 4-35 0-4-2-4-5-1-7Zm2 11c8 4 27 4 35 0M17 36c8 4 25 4 33 0" />
+        )}
+        {kind === "hanger" && (
+          <path d="M32 14c0-6 8-5 7 1-.8 4-7 4-7 8m0 0L14 36c11 3 25 3 36 0L32 23Z" />
+        )}
+        {kind === "truck" && (
+          <path d="M10 31h8m0 0V18h25v13m-25 0h25m0 0h5V23h-9m-18 12a4 4 0 1 1-8 0m31 0a4 4 0 1 1-8 0" />
+        )}
+      </svg>
+      <p className="font-serif text-[10px] italic leading-3">{label}</p>
+    </div>
+  );
+}
+
+function PicassoJourneyLine() {
+  const stages = [
+    { label: "Requested", x: 7, icon: "quill" },
+    { label: "Scheduled", x: 25, icon: "calendar" },
+    { label: "Confirmed", x: 43, icon: "seal" },
+    { label: "En route", x: 61, icon: "truck" },
+    { label: "In progress", x: 79, icon: "bag" },
+    { label: "Complete", x: 94, icon: "house" },
+  ] as const;
+
+  return (
+    <div className="relative h-[58px]">
+      <svg
+        aria-hidden="true"
+        className="absolute inset-x-0 top-[-4px] h-[46px] w-full overflow-visible"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        viewBox="0 0 360 72"
+      >
+        <path
+          d="M5 42 C42 25 57 50 87 42 S132 34 158 42 S211 51 224 38 S270 30 293 42 S332 54 356 38"
+          stroke="#1A1A1A"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M224 38 C251 31 274 32 293 42 S332 54 356 38"
+          opacity="0.7"
+          stroke="#F4EDE0"
+          strokeWidth="5"
+        />
+        <path
+          d="M224 38 C251 31 274 32 293 42 S332 54 356 38"
+          opacity="0.3"
+          stroke="#1A1A1A"
+          strokeWidth="1.8"
+        />
+        <circle cx="220" cy="38" fill="#b8893c" opacity="0.18" r="22" />
+        <circle cx="220" cy="38" fill="#b8893c" opacity="0.08" r="30" />
+        <text fill="#a06a2b" fontFamily="serif" fontSize="11" fontStyle="italic" x="210" y="12">
+          now
+        </text>
+        {stages.map(stage => (
+          <JourneyGlyph icon={stage.icon} key={stage.label} x={(stage.x / 100) * 360} />
+        ))}
+      </svg>
+      <div className="absolute inset-x-0 bottom-0 grid grid-cols-6 gap-0 text-center">
+        {stages.map(stage => (
+          <p
+            className={`text-[8px] uppercase leading-3 tracking-[0.08em] ${
+              stage.label === "En route" ? "text-[#8d6322]" : "text-[#3c342d]"
+            }`}
+            key={stage.label}
+          >
+            {stage.label}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function JourneyGlyph({
+  icon,
+  x,
+}: {
+  icon: "quill" | "calendar" | "seal" | "truck" | "bag" | "house";
+  x: number;
+}) {
+  return (
+    <g stroke="#1A1A1A" strokeWidth="1.5" transform={`translate(${x - 13} 24)`}>
+      {icon === "quill" && <path d="M8 19C12 6 23 2 25 2c0 9-7 17-17 17Zm0 0 15-13" />}
+      {icon === "calendar" && <path d="M5 8h22v19H5Zm0 6h22M10 4v7m12-7v7" />}
+      {icon === "seal" && <path d="M16 4c8 0 13 5 13 12s-5 12-13 12S3 23 3 16 8 4 16 4Zm-7 12h14" />}
+      {icon === "truck" && <path d="M3 20h6V9h16v11h4v-6l-5-5h-5m-7 14a3 3 0 1 1-6 0m22 0a3 3 0 1 1-6 0" />}
+      {icon === "bag" && <path d="M10 8c2-4 10-4 12 0m-14 2c-3 6-4 13-3 18 6 2 17 2 23 0 1-5-1-12-4-18-4 3-12 3-16 0Z" />}
+      {icon === "house" && <path d="M4 17 16 6l12 11m-20-1v13h16V16" />}
+    </g>
   );
 }
 
