@@ -808,6 +808,12 @@ export default function PenPullPrototype({
             </p>
           )}
 
+          {mode === "choice" && (
+            <p className="pointer-events-none absolute bottom-[188px] left-[17%] right-[35%] z-[98] whitespace-nowrap text-center font-serif text-[16px] italic leading-6 text-[#745b45]/88">
+              Tap & type your request
+            </p>
+          )}
+
           {(mode === "choice" || mode === "typing") && (
             <textarea
               ref={inputRef}
@@ -849,7 +855,7 @@ export default function PenPullPrototype({
                 }
                 event.currentTarget.focus({ preventScroll: true });
               }}
-              placeholder="Tap & type your request"
+              placeholder={mode === "typing" ? "Tap & type your request" : ""}
               enterKeyHint="send"
               rows={4}
               value={draft}
