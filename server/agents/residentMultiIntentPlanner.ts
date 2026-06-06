@@ -1,4 +1,14 @@
-import { parseRelativeDateToISO, parseRequestedWindow } from "../lib/dateParser";
+import { addDaysISO, parseRelativeDateToISO, parseRequestedWindow } from "../lib/dateParser";
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
 
 export type ResidentMultiIntentType =
   | "laundry"
@@ -186,17 +196,28 @@ export function planResidentMultiIntents(
       service.type === "airport_transport" ||
       service.type === "apartment_cleaning" ||
       service.type === "haircut";
-    const deadlineDate = isGuestPrepService && globalDeadlineDate ? globalDeadlineDate : null;
+    // The shared guest-arrival deadline applies to guest-prep services AND to
+    // laundry, so "back before she arrives" is backed by structured data. The
+    // deadline never changes laundry's own booking/return logic — it travels
+    // alongside as the return-by context.
+    const carriesGuestDeadline = isGuestPrepService || service.type === "laundry";
+    const deadlineDate = carriesGuestDeadline && globalDeadlineDate ? globalDeadlineDate : null;
 
     const defaults = COORDINATED_DEFAULTS[service.type];
     const defaultDay = COORDINATED_DEFAULT_DAY[service.type];
     const requestedWindow = spanWindow ?? defaults?.requestedWindow ?? null;
-    // When no explicit date is given, offer the service's default day so the
-    // resident sees a concrete proposed window instead of an open item. The
-    // shared guest-arrival deadline still rides on deadlineDate.
-    const requestedDate = deadlineDate
-      ? null
-      : spanDate ?? (defaultDay ? parseRelativeDateToISO(defaultDay, input.currentDate) : null);
+    // Always offer a concrete requested date. An explicit span date wins; then
+    // the service's default day; and when a guest deadline exists, that default
+    // day is pinned to the occurrence that lands BEFORE the guest arrives (e.g.
+    // grooming on the Saturday before a Sunday visit). The deadline still rides
+    // separately on deadlineDate so the truth model is unaffected.
+    const requestedDate =
+      spanDate ??
+      (defaultDay
+        ? deadlineDate
+          ? weekdayOnOrBefore(deadlineDate, defaultDay)
+          : parseRelativeDateToISO(defaultDay, input.currentDate)
+        : null);
 
     const airportRoute =
       service.type === "airport_transport" ? extractAirportRoute(normalized, input) : {};
@@ -239,6 +260,25 @@ function splitIntoClauses(text: string): string[] {
     .split(/\s*(?:,|;|\band\b|\boh and\b|\bthen\b)\s*/i)
     .map((clause) => clause.trim())
     .filter(Boolean);
+}
+
+// The latest occurrence of `dayName` that falls strictly before `deadlineISO`,
+// so a service scheduled "ahead of" a guest visit lands before they arrive
+// (e.g. grooming on the Saturday before a Sunday visit). Falls back to the day
+// before the deadline if that weekday is the deadline day itself.
+function weekdayOnOrBefore(deadlineISO: string, dayName: string): string {
+  const target = WEEKDAY_INDEX[dayName.toLowerCase()];
+  if (target === undefined) return addDaysISO(deadlineISO, -1);
+  for (let back = 1; back <= 7; back++) {
+    const candidate = addDaysISO(deadlineISO, -back);
+    if (parseISODateUTC(candidate).getDay() === target) return candidate;
+  }
+  return addDaysISO(deadlineISO, -1);
+}
+
+function parseISODateUTC(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
 }
 
 function findServiceMatch(

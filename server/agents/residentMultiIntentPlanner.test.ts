@@ -39,6 +39,53 @@ describe("planResidentMultiIntents", () => {
     });
   });
 
+  it("gives grooming a concrete requested date and window even with a deadline", () => {
+    const plan = planResidentMultiIntents({
+      currentDate,
+      content: "I need a dog groomer before my mother-in-law visits in three days",
+    });
+
+    const grooming = plan.intents.find((intent) => intent.type === "dog_grooming");
+    // requestedDate is concrete (never null) and the default window is offered;
+    // the deadline rides separately.
+    expect(grooming?.requestedDate).toBeTruthy();
+    expect(grooming).toMatchObject({
+      requestedWindow: "10am–1pm",
+      deadlineDate: "2026-05-18",
+      deadlineReason: "mother-in-law visit",
+    });
+  });
+
+  it("backs the demo sentence with structured before-arrival data for laundry and grooming", () => {
+    // 2026-06-06 is a Saturday; "Sunday" -> 2026-06-07.
+    const plan = planResidentMultiIntents({
+      currentDate: "2026-06-06",
+      buildingSlug: "opus",
+      buildingName: "Opus LA",
+      unit: "12A",
+      content:
+        "My wife's mother is coming over Sunday. I need my laundry done before she gets here and Theo groomed.",
+    });
+
+    expect(plan.intents.map((intent) => intent.type).sort()).toEqual(["dog_grooming", "laundry"]);
+
+    expect(plan.intents.find((intent) => intent.type === "dog_grooming")).toMatchObject({
+      requestedDate: "2026-06-06",
+      requestedWindow: "10am–1pm",
+      deadlineDate: "2026-06-07",
+      deadlineReason: "wife's mother visit",
+      dogName: "Theo",
+      guestRelation: "wife's mother",
+    });
+
+    // Laundry carries the shared before-arrival deadline so "back before she
+    // arrives" is backed by structured data, not just text.
+    expect(plan.intents.find((intent) => intent.type === "laundry")).toMatchObject({
+      deadlineDate: "2026-06-07",
+      deadlineReason: "wife's mother visit",
+    });
+  });
+
   it("schedules laundry tomorrow using the shared date parser helper", () => {
     const plan = planResidentMultiIntents({
       currentDate,

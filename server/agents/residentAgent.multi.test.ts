@@ -265,7 +265,17 @@ describe("runResidentAgent multi-intent orchestration", () => {
       "dog_grooming",
     ]);
     const grooming = toolCalls.find((c) => c.input?.serviceCategory === "dog_grooming");
-    expect(grooming.input).toMatchObject({ dogName: "Theo", guestRelation: "wife's mother" });
+    // Grooming gets a concrete date BEFORE the guest arrives: the Saturday
+    // (2026-06-06) before the Sunday (2026-06-07) visit, with its default
+    // window — while the Sunday deadline rides separately.
+    expect(grooming.input).toMatchObject({
+      dogName: "Theo",
+      guestRelation: "wife's mother",
+      requestedDate: "2026-06-06",
+      requestedWindow: "10am–1pm",
+      deadlineDate: "2026-06-07",
+      deadlineReason: "wife's mother visit",
+    });
 
     expect(result.content).toContain("Laundry is booked");
     expect(result.content).toMatch(/lining up grooming/i);
@@ -273,10 +283,20 @@ describe("runResidentAgent multi-intent orchestration", () => {
     expect(result.content).not.toMatch(/grooming[^.]*\b(booked|confirmed)\b/i);
 
     const items = (result.metadata as any).items;
-    expect(items.find((i: any) => i.serviceCategory === "laundry")).toMatchObject({ status: "confirmed", orderId: 777 });
+    // Laundry is booked AND carries the before-arrival deadline as structured
+    // data backing the "back before she arrives" copy.
+    expect(items.find((i: any) => i.serviceCategory === "laundry")).toMatchObject({
+      status: "confirmed",
+      orderId: 777,
+      deadlineDate: "2026-06-07",
+      deadlineReason: "wife's mother visit",
+    });
     expect(items.find((i: any) => i.serviceCategory === "dog_grooming")).toMatchObject({
       status: "pending_provider_confirmation",
       requestId: "req_dog_grooming",
+      date: "2026-06-06",
+      window: "10am–1pm",
+      deadlineDate: "2026-06-07",
       deadlineReason: "wife's mother visit",
     });
   });
