@@ -38,7 +38,7 @@ type PenPullPrototypeProps = {
 };
 
 const HELD_ASSETS = {
-  composer: "/held/nursery-composer.png",
+  composerTray: "/held/audiomode-nursery-tray.png",
   crest: "/held/crest-h-flat.png",
   galleryBench: "/held/nursery-cradle.png",
   laundryProvider: "/held/laundry-butler-provider.png",
@@ -46,7 +46,6 @@ const HELD_ASSETS = {
   paper: "/held/held-paper-bg.png",
   postTokenField: "/held/textfield-posttoken.png",
   requestCard: "/held/your-request-card.png",
-  requestTexture: "/held/yourrequest-texture.png",
   tokenCarDetail: "/held/token-cardetail.png",
   tokenDogGroom: "/held/token-doggroom.png",
   tokenLaundry: "/held/token-laundry.png",
@@ -58,6 +57,12 @@ const HELD_ASSETS = {
   trayClayTokens: "/held/nursery-tray-claytokens.png",
   tray: "/held/nursery-heldscreen.png",
 };
+
+const COMPOSER_KEY_ROWS = [
+  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "⌫"],
+  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+  ["⇧", "Z", "X", "C", "V", "B", "N", "M", "↵"],
+];
 
 type PrototypeMode =
   | "rest"
@@ -149,7 +154,12 @@ export default function PenPullPrototype({
   const [debug, setDebug] = useState(defaultDebug);
   const [draft, setDraft] = useState("");
   const [editDraft, setEditDraft] = useState("");
-  const [internalComposerOpen, setInternalComposerOpen] = useState(false);
+  const [internalComposerOpen, setInternalComposerOpen] = useState(() => {
+    if (typeof window !== "undefined" && import.meta.env.DEV) {
+      return new URLSearchParams(window.location.search).get("heldcomposer") === "open";
+    }
+    return false;
+  });
   const [mode, setMode] = useState<PrototypeMode>(() => {
     if (typeof window !== "undefined" && import.meta.env.DEV) {
       const forced = new URLSearchParams(window.location.search).get("heldmode");
@@ -784,22 +794,9 @@ export default function PenPullPrototype({
               alt=""
               className="w-full select-none drop-shadow-[0_-16px_34px_rgba(44,32,22,0.22)]"
               draggable={false}
-              src={HELD_ASSETS.composer}
+              src={HELD_ASSETS.composerTray}
             />
-            <div
-              aria-hidden="true"
-              className="absolute left-[19%] top-[22%] z-[2] h-[21%] w-[62%] rounded-[18px] opacity-95"
-              style={{
-                backgroundImage: `linear-gradient(180deg, rgba(246,237,222,0.92), rgba(237,225,205,0.94)), url(${HELD_ASSETS.requestTexture})`,
-                backgroundPosition: "center",
-                backgroundSize: "cover, 220px 220px",
-                boxShadow:
-                  "inset 0 10px 18px rgba(255,250,240,0.42), inset 0 -12px 24px rgba(112,78,42,0.06)",
-                maskImage: "radial-gradient(ellipse at center, black 68%, transparent 100%)",
-                WebkitMaskImage:
-                  "radial-gradient(ellipse at center, black 68%, transparent 100%)",
-              }}
-            />
+            <HeldComposerKeyboard />
           </div>
 
           {mode === "choice" && (
@@ -809,7 +806,7 @@ export default function PenPullPrototype({
           )}
 
           {mode === "choice" && !physics.isPointerActive && (
-            <p className="pointer-events-none absolute bottom-[188px] left-[13%] z-[44] w-[204px] whitespace-nowrap text-center font-serif text-[15px] italic leading-6 text-[#745b45]/88">
+            <p className="pointer-events-none absolute bottom-[188px] left-[22%] z-[44] w-[170px] whitespace-nowrap text-center font-serif text-[14px] italic leading-6 text-[#745b45]/88">
               Tap & type your request
             </p>
           )}
@@ -1038,6 +1035,49 @@ export default function PenPullPrototype({
         </div>
       </section>
     </main>
+  );
+}
+
+function HeldComposerKeyboard() {
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute bottom-[13.5%] left-[14.5%] right-[14.5%] z-[3] space-y-[4px]"
+    >
+      {COMPOSER_KEY_ROWS.map((row, rowIndex) => (
+        <div
+          className={`flex justify-center gap-[3px] ${
+            rowIndex === 1 ? "px-[5.5%]" : ""
+          }`}
+          key={row.join("")}
+        >
+          {row.map(key => {
+            const isWide = key === "⇧" || key === "↵" || key === "⌫";
+            return (
+              <span
+                className={`grid h-[24px] place-items-center rounded-[5px] border border-[#d5c8b6]/70 bg-[#f4eee5]/95 text-[13px] font-medium leading-none text-[#2d2925] shadow-[0_2px_3px_rgba(69,48,31,0.16),inset_0_1px_0_rgba(255,255,255,0.78)] ${
+                  isWide ? "w-[34px]" : "w-[24px]"
+                }`}
+                key={key}
+              >
+                {key}
+              </span>
+            );
+          })}
+        </div>
+      ))}
+      <div className="flex gap-[4px] pt-[1px]">
+        <span className="grid h-[25px] w-[55px] place-items-center rounded-[6px] border border-[#cfc3b5]/70 bg-[#cfc5b7]/94 text-[13px] font-medium leading-none text-[#2d2925] shadow-[0_2px_3px_rgba(69,48,31,0.14),inset_0_1px_0_rgba(255,255,255,0.58)]">
+          123
+        </span>
+        <span className="grid h-[25px] flex-1 place-items-center rounded-[6px] border border-[#d5c8b6]/70 bg-[#f7f2ea]/96 text-[13px] font-medium leading-none text-[#2d2925] shadow-[0_2px_3px_rgba(69,48,31,0.14),inset_0_1px_0_rgba(255,255,255,0.78)]">
+          space
+        </span>
+        <span className="grid h-[25px] w-[55px] place-items-center rounded-[6px] border border-[#b8915f]/50 bg-[#c69a61]/88 text-[13px] font-medium leading-none text-[#2d2925] shadow-[0_2px_3px_rgba(69,48,31,0.16),inset_0_1px_0_rgba(255,255,255,0.36)]">
+          return
+        </span>
+      </div>
+    </div>
   );
 }
 
