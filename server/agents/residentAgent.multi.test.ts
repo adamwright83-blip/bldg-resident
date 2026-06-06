@@ -83,7 +83,8 @@ describe("runResidentAgent multi-intent orchestration", () => {
       1,
       "laundry",
       "Sunday, May 17",
-      "7–10 AM"
+      "7–10 AM",
+      "2026-05-17"
     );
   });
 
@@ -196,12 +197,13 @@ describe("runResidentAgent multi-intent orchestration", () => {
     expect(toolCalls.some((call) => call.toolName === "createLaundryOrderTool" && call.input.serviceCategory)).toBe(false);
     expect(toolCalls[5].input.planStatus).toBe("partially_confirmed");
 
-    expect(result.content).toContain("Handled.");
     expect(result.content).toContain("Laundry is booked");
-    expect(result.content).toContain("I also queued grooming, car detail, and LAX pickup for confirmation");
+    expect(result.content).toContain("I'm lining up grooming, car detail, and LAX pickup");
+    expect(result.content).toContain("without needing you again");
     expect(result.content).toContain("Confirmed:");
     expect(result.content).toContain("Queued:");
     expect(result.content).not.toContain("Request received");
+    expect(result.content).not.toMatch(/grooming.*\bbooked\b|grooming.*\bconfirmed\b/i);
     expect(result.metadata).toMatchObject({
       type: "multi_service_plan",
       planId: "plan_1",
@@ -227,6 +229,55 @@ describe("runResidentAgent multi-intent orchestration", () => {
       requestId: "req_airport_transport",
       origin: "LAX",
       destination: "Opus LA",
+    });
+  });
+
+  it("handles the TechCrunch demo sentence: laundry booked + Theo grooming coordinated, never booked", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-06T19:00:00.000Z"));
+    const { runResidentAgent } = await import("./residentAgent");
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_demo" });
+      if (body.toolName === "createLaundryOrderTool") return response({ orderId: 777 });
+      if (body.toolName === "createResidentCoordinatedRequestTool") {
+        return response({
+          requestId: `req_${body.input.serviceCategory}`,
+          status: "pending_provider_confirmation",
+          residentVisibleStatus: "pending_provider_confirmation",
+          nextAction: "provider_confirmation",
+        });
+      }
+      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: body.input.planId });
+      throw new Error(`unexpected tool ${body.toolName}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runResidentAgent({
+      bldgUserId: 1,
+      content:
+        "My wife's mother is coming over Sunday. I need my laundry done before she gets here and Theo groomed.",
+      user: completeUser as any,
+    });
+
+    const toolCalls = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(toolCalls.filter((c) => c.toolName === "createResidentCoordinatedRequestTool").map((c) => c.input.serviceCategory)).toEqual([
+      "dog_grooming",
+    ]);
+    const grooming = toolCalls.find((c) => c.input?.serviceCategory === "dog_grooming");
+    expect(grooming.input).toMatchObject({ dogName: "Theo", guestRelation: "wife's mother" });
+
+    expect(result.content).toContain("Laundry is booked");
+    expect(result.content).toMatch(/lining up grooming/i);
+    // Truth rule: grooming is never "booked" or "confirmed" in resident copy.
+    expect(result.content).not.toMatch(/grooming[^.]*\b(booked|confirmed)\b/i);
+
+    const items = (result.metadata as any).items;
+    expect(items.find((i: any) => i.serviceCategory === "laundry")).toMatchObject({ status: "confirmed", orderId: 777 });
+    expect(items.find((i: any) => i.serviceCategory === "dog_grooming")).toMatchObject({
+      status: "pending_provider_confirmation",
+      requestId: "req_dog_grooming",
+      deadlineReason: "wife's mother visit",
     });
   });
 
@@ -365,7 +416,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
 
     expect(result.content).not.toContain("Laundry is booked");
-    expect(result.content).toContain("I queued car detail for confirmation");
+    expect(result.content).toContain("I'm lining up car detail");
     expect(result.content).toContain("Laundry needs operator review");
     expect((result.metadata as any).items).toEqual(
       expect.arrayContaining([
@@ -447,7 +498,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
       "updateResidentAgentPlanTool",
     ]);
     expect(result.collectStep).toBe("payment");
-    expect(result.content).toContain("I queued grooming, car detail, and LAX pickup for confirmation");
+    expect(result.content).toContain("I'm lining up grooming, car detail, and LAX pickup");
     expect(result.content).toContain("Laundry needs payment details");
     expect(dbMocks.updateBldgUser).toHaveBeenCalledWith(
       1,
@@ -551,7 +602,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
       "updateResidentAgentPlanTool",
     ]);
     expect(result.content).toContain("Laundry is booked");
-    expect(result.content).toContain("I also queued grooming, car detail, and LAX pickup");
+    expect(result.content).toContain("I'm lining up grooming, car detail, and LAX pickup");
   });
 });
 

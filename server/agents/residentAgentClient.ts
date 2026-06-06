@@ -88,18 +88,21 @@ export function createAdminAgentClient(): AdminAgentClient {
 
   return {
     canRunLaundryOrderTool() {
-      if (isResidentAppTestMode()) return false;
+      // In test mode the admin agent tools are synthesized locally (see
+      // makeTestModeToolResult), so the full multi-intent orchestration —
+      // parent plan + coordinated requests — runs end to end without a live
+      // admin endpoint. Outside test mode a real S2S endpoint is required.
+      if (isResidentAppTestMode()) return true;
       return Boolean(process.env.ADMIN_AGENT_S2S_URL && sharedSecret);
     },
 
     async runAdminTool(toolName, input, session) {
       if (isResidentAppTestMode()) {
-        console.log(`[ResidentTestMode] Skipping admin agent tool=${toolName}`);
-        return {
-          success: false,
-          reason: "resident_test_mode",
-          path: "agent-tool",
-        };
+        const synthetic = makeTestModeToolResult(toolName, input);
+        console.log(
+          `[ResidentTestMode] Synthesizing admin agent tool=${toolName} result=${JSON.stringify(synthetic)}`
+        );
+        return synthetic;
       }
 
       const targets = getAdminAgentS2SRunToolUrlCandidates();
@@ -221,6 +224,43 @@ export function createAdminAgentClient(): AdminAgentClient {
       return this.runAdminTool("createResidentCoordinatedRequestTool", input, session);
     },
   };
+}
+
+// Synthesize the admin agent tool responses in test mode so the resident
+// multi-intent flow can be exercised end to end without a live admin endpoint.
+// Mirrors the real tool contracts: laundry yields a finite orderId, plans yield
+// a planId, and coordinated services yield a requestId held at
+// provider-confirmation — never "confirmed", preserving the truth rule.
+function makeTestModeToolResult(
+  toolName: string,
+  input: Record<string, unknown>
+): AdminExecutionResult {
+  if (toolName === "createLaundryOrderTool") {
+    const sourceId =
+      typeof input.bldgUserId === "number"
+        ? input.bldgUserId
+        : Number(String(input.externalId ?? "").match(/\d+/)?.[0] ?? 0);
+    return { success: true, orderId: makeTestOrderId(sourceId), path: "agent-tool" };
+  }
+  if (toolName === "createResidentAgentPlanTool" || toolName === "updateResidentAgentPlanTool") {
+    const planId =
+      typeof input.planId === "string" && input.planId
+        ? input.planId
+        : `plan_test_${Date.now()}`;
+    return { success: true, planId, path: "agent-tool" };
+  }
+  if (toolName === "createResidentCoordinatedRequestTool") {
+    const category = String(input.serviceCategory ?? "service");
+    return {
+      success: true,
+      requestId: `req_test_${category}_${Date.now()}`,
+      status: "pending_provider_confirmation",
+      residentVisibleStatus: "pending_provider_confirmation",
+      nextAction: "provider_confirmation",
+      path: "agent-tool",
+    };
+  }
+  return { success: true, path: "agent-tool" };
 }
 
 function normalizeRunToolOutput(body: any): Record<string, unknown> {

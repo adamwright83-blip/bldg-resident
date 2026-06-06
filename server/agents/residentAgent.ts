@@ -706,6 +706,39 @@ async function executeMultiIntentPlan(input: {
       continue;
     }
 
+    // Local record first (same pattern as laundry): a coordinated service is
+    // tracked at provider-confirmation, never "confirmed" until a provider
+    // accepts. Failures here must not block the admin coordination call.
+    let coordinatedServiceRequestId: number | null = null;
+    try {
+      const localRecord = await createServiceRequest({
+        bldgUserId: input.bldgUserId,
+        serviceType: intent.type,
+        status: "pending_provider_confirmation",
+        requestSummary: buildCoordinatedSummary(intent),
+        scheduledDate: intent.requestedDate ?? null,
+        scheduledWindow: intent.requestedWindow ?? null,
+        requestJson: {
+          serviceCategory: intent.type,
+          deadlineDate: intent.deadlineDate ?? null,
+          deadlineReason: intent.deadlineReason ?? null,
+          dogName: intent.dogName ?? null,
+          guestRelation: intent.guestRelation ?? null,
+          preferredVendor: intent.preferredVendor ?? null,
+          notes: intent.notes ?? null,
+        },
+      } as any);
+      coordinatedServiceRequestId = localRecord.id;
+      console.log(
+        `[ResidentAgent] local coordinated service_request created #${localRecord.id}: ${intent.type}`
+      );
+    } catch (error) {
+      console.warn("[ResidentAgent] could not create local coordinated record", {
+        serviceCategory: intent.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const coordinatedResult = await adminAgentClient.runCreateResidentCoordinatedRequestTool(
       {
         bldgUserId: input.bldgUserId,
@@ -723,6 +756,10 @@ async function executeMultiIntentPlan(input: {
         deadlineReason: intent.deadlineReason ?? null,
         origin: intent.origin ?? null,
         destination: intent.destination ?? null,
+        dogName: intent.dogName ?? null,
+        guestRelation: intent.guestRelation ?? null,
+        preferredVendor: intent.preferredVendor ?? null,
+        localServiceRequestId: coordinatedServiceRequestId,
         notes: intent.notes ?? null,
         sourceConversationId: input.session.conversationId,
         sourceSessionId: input.session.sessionId,
@@ -730,6 +767,26 @@ async function executeMultiIntentPlan(input: {
       },
       input.session
     );
+
+    if (coordinatedServiceRequestId != null && coordinatedResult.success) {
+      const requestId = coordinatedResult.requestId;
+      await updateServiceRequest(coordinatedServiceRequestId, {
+        requestJson: {
+          serviceCategory: intent.type,
+          coordinatedRequestId: requestId ?? null,
+          parentPlanId: String(planId),
+          deadlineDate: intent.deadlineDate ?? null,
+          deadlineReason: intent.deadlineReason ?? null,
+          dogName: intent.dogName ?? null,
+          guestRelation: intent.guestRelation ?? null,
+        },
+      } as any).catch((error) => {
+        console.warn("[ResidentAgent] could not store coordinated requestId locally", {
+          serviceCategory: intent.type,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
 
     logChildAction({
       serviceCategory: intent.type,
@@ -950,9 +1007,9 @@ function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
   if (confirmed.length > 0) {
     const laundry = confirmed.find((item) => item.serviceCategory === "laundry");
     if (laundry) {
-      parts.push(`Handled. Laundry is booked${laundry.date ? ` for ${laundry.date}` : ""}${laundry.window ? `, ${laundry.window}` : ""}.`);
+      parts.push(`I've got the whole picture, and I'm already moving on it. Laundry is booked${laundry.date ? ` for ${laundry.date}` : ""}${laundry.window ? `, ${laundry.window}` : ""} — back to you before she arrives.`);
     } else {
-      parts.push(`Handled. ${capitalize(joinLabels(confirmed.map((item) => item.title.toLowerCase())))} ${confirmed.length === 1 ? "is" : "are"} confirmed.`);
+      parts.push(`I've got the whole picture, and I'm already moving on it. ${capitalize(joinLabels(confirmed.map((item) => item.title.toLowerCase())))} ${confirmed.length === 1 ? "is" : "are"} confirmed.`);
     }
   }
 
@@ -960,17 +1017,17 @@ function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
     const deadline = pending.find((item) => item.deadlineReason || item.deadlineDate);
     const label = joinLabels(pending.map((item) => shortServiceLabel(item)));
     const deadlineText = deadline?.deadlineReason
-      ? ` before your ${deadline.deadlineReason.replace(/ visit$/, " arrives")}`
+      ? ` in time for your ${deadline.deadlineReason.replace(/ visit$/, "'s visit")}`
       : deadline?.deadlineDate
-        ? ` before ${deadline.deadlineDate}`
+        ? ` in time for ${deadline.deadlineDate}`
         : "";
-    const prefix = parts.length > 0 ? "I also queued" : "Handled. I queued";
-    parts.push(`${prefix} ${label} for confirmation${deadlineText}.`);
+    const prefix = parts.length > 0 ? "I'm lining up" : "I've got the whole picture. I'm lining up";
+    parts.push(`${prefix} ${label} now${deadlineText} — I'll have a window locked without needing you again.`);
   }
 
   if (failed.length > 0) {
     const label = joinLabels(failed.map((item) => shortServiceLabel(item)));
-    parts.push(`${capitalize(label)} ${failed.length === 1 ? "needs" : "need"} operator review, so I flagged ${failed.length === 1 ? "it" : "them"} instead of pretending ${failed.length === 1 ? "it was" : "they were"} booked.`);
+    parts.push(`${capitalize(label)} needs operator review, so I flagged ${failed.length === 1 ? "it" : "them"} rather than tell you ${failed.length === 1 ? "it was" : "they were"} set when ${failed.length === 1 ? "it isn't" : "they aren't"}.`);
   }
 
   if (profilePending.length > 0) {
@@ -1031,6 +1088,15 @@ function shortServiceLabel(item: PlanItemMetadata): string {
   return item.title.toLowerCase();
 }
 
+function buildCoordinatedSummary(intent: ResidentPlannedIntent): string {
+  const parts: string[] = [getServiceTitle(intent.type).toLowerCase()];
+  if (intent.dogName) parts.push(`for ${intent.dogName}`);
+  if (intent.requestedDate) parts.push(`— ${intent.requestedDate}`);
+  if (intent.requestedWindow) parts.push(intent.requestedWindow);
+  if (intent.deadlineReason) parts.push(`(ahead of ${intent.deadlineReason})`);
+  return parts.join(" ");
+}
+
 function getServiceTitle(type: ResidentMultiIntentType): string {
   const titles: Record<ResidentMultiIntentType, string> = {
     laundry: "Laundry",
@@ -1039,6 +1105,7 @@ function getServiceTitle(type: ResidentMultiIntentType): string {
     car_detail: "Car detail",
     airport_transport: "LAX pickup",
     apartment_cleaning: "Apartment cleaning",
+    haircut: "Haircut",
     other: "Request",
   };
   return titles[type];
