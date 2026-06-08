@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
+import Vault from "@/pages/Vault";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -41,6 +42,8 @@ const HELD_ASSETS = {
   composerTray: "/held/audiomode-nursery-tray.png",
   crest: "/held/crest-h-flat.png",
   galleryBench: "/held/nursery-cradle.png",
+  labyrinthBoard: "/held/held_labyrinth_board.png",
+  labyrinthKnob: "/held/held_labyrinth_knob.png",
   laundryProvider: "/held/laundry-butler-provider.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
@@ -140,6 +143,27 @@ const PHONE_ENGAGE_THRESHOLD_Y = -32;
 const PHONE_ENGAGED_Y = -68;
 const PHONE_ENGAGED_X = -22;
 
+type LabyrinthPanel = "receipts" | "payment" | null;
+
+type LabyrinthCategory = {
+  id: "receipts" | "payment" | "account" | "residence" | "preferences" | "profile";
+  label: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  active?: boolean;
+};
+
+const LABYRINTH_CATEGORIES: LabyrinthCategory[] = [
+  { id: "receipts", label: "Receipts", left: 20.5, top: 9.8, width: 22.6, height: 17.8, active: true },
+  { id: "payment", label: "Payment", left: 63.2, top: 9.7, width: 21.4, height: 17.5, active: true },
+  { id: "account", label: "Account", left: 42.3, top: 35.1, width: 20.7, height: 17.3 },
+  { id: "residence", label: "Residence", left: 18.8, top: 65.3, width: 24, height: 18.6 },
+  { id: "preferences", label: "Preferences", left: 63.5, top: 65.3, width: 23.2, height: 18.8 },
+  { id: "profile", label: "Profile", left: 46.2, top: 79.5, width: 14.9, height: 12.4 },
+];
+
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -197,6 +221,8 @@ export default function PenPullPrototype({
   const [pendingOrderRequest, setPendingOrderRequest] = useState("");
   const [pendingOrderServices, setPendingOrderServices] = useState<HeldParsedService[]>([]);
   const [speechTranscript, setSpeechTranscript] = useState("");
+  const [labyrinthOpen, setLabyrinthOpen] = useState(false);
+  const [labyrinthPanel, setLabyrinthPanel] = useState<LabyrinthPanel>(null);
   const [typedCommandStatus, setTypedCommandStatus] = useState<
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
@@ -604,6 +630,8 @@ export default function PenPullPrototype({
     setLastOrderId(null);
     setPendingOrderRequest("");
     setPendingOrderServices([]);
+    setLabyrinthOpen(false);
+    setLabyrinthPanel(null);
     setTypedCommandStatus("idle");
     setMode("rest");
     physics.reset();
@@ -1049,9 +1077,269 @@ export default function PenPullPrototype({
               services={confirmedServices}
             />
           )}
+
+          <HeldLabyrinthDrawer
+            activePanel={labyrinthPanel}
+            isOpen={labyrinthOpen}
+            onClose={() => setLabyrinthOpen(false)}
+            onOpenChange={setLabyrinthOpen}
+            onSelectPanel={(panel) => {
+              setLabyrinthOpen(false);
+              setLabyrinthPanel(panel);
+            }}
+            visible={showHomeWorld}
+          />
+
+          <AnimatePresence>
+            {labyrinthPanel === "receipts" && (
+              <HeldLabyrinthReceiptsLayer
+                key="labyrinth-receipts"
+                onClose={() => setLabyrinthPanel(null)}
+              />
+            )}
+            {labyrinthPanel === "payment" && (
+              <HeldLabyrinthPaymentLayer
+                key="labyrinth-payment"
+                onClose={() => setLabyrinthPanel(null)}
+              />
+            )}
+          </AnimatePresence>
         </div>
       </section>
     </main>
+  );
+}
+
+function HeldLabyrinthDrawer({
+  activePanel,
+  isOpen,
+  onClose,
+  onOpenChange,
+  onSelectPanel,
+  visible,
+}: {
+  activePanel: LabyrinthPanel;
+  isOpen: boolean;
+  onClose: () => void;
+  onOpenChange: (isOpen: boolean) => void;
+  onSelectPanel: (panel: Exclude<LabyrinthPanel, null>) => void;
+  visible: boolean;
+}) {
+  const dragStartXRef = useRef<number | null>(null);
+  const [pressedCategory, setPressedCategory] = useState<string | null>(null);
+  const isHidden = !visible || activePanel !== null;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen, onClose]);
+
+  if (isHidden) {
+    return null;
+  }
+
+  const startDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    dragStartXRef.current = event.clientX;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const finishDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const startX = dragStartXRef.current;
+    dragStartXRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can already be released on very quick taps.
+    }
+
+    if (startX === null) {
+      onOpenChange(true);
+      return;
+    }
+
+    const dx = event.clientX - startX;
+    if (isOpen && dx > 42) {
+      onOpenChange(false);
+      return;
+    }
+    if (!isOpen && dx < -10) {
+      onOpenChange(true);
+      return;
+    }
+
+    onOpenChange(!isOpen);
+  };
+
+  const handleCategorySelect = (category: LabyrinthCategory) => {
+    setPressedCategory(category.id);
+    window.setTimeout(() => setPressedCategory(null), 170);
+
+    if (category.active && (category.id === "receipts" || category.id === "payment")) {
+      window.navigator.vibrate?.(8);
+      onSelectPanel(category.id);
+    }
+  };
+
+  return (
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.button
+            aria-label="Close labyrinth"
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 z-[118] bg-[#20160e]/18"
+            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            onClick={onClose}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            type="button"
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        animate={
+          isOpen
+            ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
+            : { x: "42%", y: "-50%", rotateX: 0, scale: 0.94 }
+        }
+        className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
+        initial={false}
+        style={{ perspective: 1200 }}
+        transition={{
+          type: "spring",
+          stiffness: 116,
+          damping: 24,
+          mass: 1.25,
+        }}
+      >
+        <div
+          className="relative aspect-[1448/1086] w-full"
+          style={{
+            filter: "drop-shadow(0 30px 34px rgba(36, 22, 10, 0.28))",
+          }}
+        >
+          <img
+            alt=""
+            className="pointer-events-none h-full w-full select-none object-contain"
+            draggable={false}
+            src={HELD_ASSETS.labyrinthBoard}
+          />
+
+          <button
+            aria-label={isOpen ? "Close labyrinth drawer" : "Open labyrinth drawer"}
+            className="absolute left-[-7.2%] top-[38.5%] h-[24%] w-[18%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
+            onPointerDown={startDrag}
+            onPointerUp={finishDrag}
+            type="button"
+          />
+
+          {isOpen &&
+            LABYRINTH_CATEGORIES.map(category => (
+              <button
+                aria-label={category.active ? `Open ${category.label}` : category.label}
+                className="absolute rounded-[6px] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/55"
+                key={category.id}
+                onClick={() => handleCategorySelect(category)}
+                onPointerDown={() => setPressedCategory(category.id)}
+                onPointerLeave={() => setPressedCategory(null)}
+                onPointerUp={() => window.setTimeout(() => setPressedCategory(null), 120)}
+                style={{
+                  left: `${category.left}%`,
+                  top: `${category.top}%`,
+                  width: `${category.width}%`,
+                  height: `${category.height}%`,
+                  transform:
+                    pressedCategory === category.id
+                      ? "translateY(2px) scale(0.985)"
+                      : "translateY(0) scale(1)",
+                }}
+                type="button"
+              />
+            ))}
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.section
+      animate={{ opacity: 1, x: 0 }}
+      className="absolute inset-0 z-[150] overflow-hidden bg-[#2c2824] text-[#f8efe3]"
+      exit={{ opacity: 0, x: 24 }}
+      initial={{ opacity: 0, x: 30 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <Vault initialTab="receipts" onBack={onClose} />
+    </motion.section>
+  );
+}
+
+function HeldLabyrinthPaymentLayer({ onClose }: { onClose: () => void }) {
+  const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
+  const user = profileData?.user || null;
+
+  return (
+    <motion.section
+      animate={{ opacity: 1, x: 0 }}
+      className="absolute inset-0 z-[150] overflow-hidden bg-[#f4ede0] text-[#2a2520]"
+      exit={{ opacity: 0, x: 24 }}
+      initial={{ opacity: 0, x: 30 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,252,246,0.78), rgba(244,237,224,0.94)), url(/held/held-paper-bg.png)",
+          backgroundPosition: "center",
+          backgroundSize: "cover, 420px 420px",
+        }}
+      />
+      <button
+        aria-label="Return to labyrinth"
+        className="absolute right-[7%] top-[6.5%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b8893c]/75 bg-[#fff8ec]/76 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        onClick={onClose}
+        type="button"
+      >
+        ‹
+      </button>
+      <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[18%]">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-[#7a6d5f]">
+          Labyrinth
+        </p>
+        <h1 className="mt-3 font-serif text-[44px] leading-none text-[#2a2520]">
+          Payment
+        </h1>
+        <p className="mt-3 max-w-[280px] font-serif text-[17px] italic leading-6 text-[#594c3f]">
+          The card Held keeps on file for services at your residence.
+        </p>
+
+        <section className="mt-8 rounded-[6px] border border-[#d3be96]/80 bg-[#fff8ec]/76 p-5 shadow-[0_22px_36px_rgba(50,35,20,0.14)] backdrop-blur-[2px]">
+          <div className="mb-5 flex items-center justify-between border-b border-[#b8893c]/24 pb-4">
+            <span className="text-[10px] uppercase tracking-[0.24em] text-[#6f6254]">
+              Current card
+            </span>
+            <span className="font-serif text-[18px] text-[#2a2520]">
+              {user?.paymentMethodSaved ? `•••• ${user.cardLast4 || "****"}` : "Not saved"}
+            </span>
+          </div>
+          <Elements stripe={stripePromise}>
+            <PaymentMethodForm onSuccess={onClose} />
+          </Elements>
+        </section>
+      </div>
+    </motion.section>
   );
 }
 
