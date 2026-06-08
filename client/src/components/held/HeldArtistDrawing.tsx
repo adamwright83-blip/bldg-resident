@@ -4,6 +4,13 @@ export type HeldParsedService = {
   type: string;
   timing?: string | null;
   deadline?: string | null;
+  // Real order/coordination state used by post-order narration. Present only
+  // when the plan/order actually carries it.
+  orderId?: string | number | null;
+  status?: string | null;
+  dogName?: string | null;
+  guestRelation?: string | null;
+  providerCandidates?: Array<{ name: string; window?: string | null }> | null;
 };
 
 type HeldArtistDrawingProps = {

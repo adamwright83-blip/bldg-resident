@@ -1,0 +1,54 @@
+=== HELD post-order chief-of-staff copy — builder trace (no scripted scenario copy) ===
+
+=== Laundry-only (non-demo request) ===
+REQUEST: Pick up my laundry tomorrow.
+OPENING : I’ve taken in the request — I’m moving on it.
+SUBHEAD : Here’s where it sits — I’ll only come back to you when something needs a yes.
+ROW     : LAUNDRY — I’m getting pickup moving and keeping the return protected.
+CLOSING : Nothing else needed right now.
+scripted-leak check (Sunday/wife's mother/mother-in-law/Theo/Maria/Jordan/Saturday at 11): none
+
+=== Laundry with real timing metadata ===
+REQUEST: Pick up my laundry tomorrow morning.
+OPENING : I’ve taken in the request — I’m moving on it.
+SUBHEAD : Here’s where it sits — I’ll only come back to you when something needs a yes.
+ROW     : LAUNDRY — I’m picking it up tomorrow morning and keeping the return protected.
+CLOSING : Nothing else needed right now.
+scripted-leak check (Sunday/wife's mother/mother-in-law/Theo/Maria/Jordan/Saturday at 11): none
+
+=== Laundry + grooming, no dog name, no provider candidates ===
+REQUEST: Laundry and dog grooming please.
+OPENING : I’ve taken in the request — I’m moving on it.
+SUBHEAD : Here’s where each piece sits — I’ll only come back to you when something needs a yes.
+ROW     : LAUNDRY — I’m getting pickup moving and keeping the return protected.
+ROW     : GROOMING — I’m lining up grooming and will come back only if there’s a real decision.
+CLOSING : Nothing else needed right now.
+scripted-leak check (Sunday/wife's mother/mother-in-law/Theo/Maria/Jordan/Saturday at 11): none
+
+=== Guest arrival — actual parsed relation only ===
+REQUEST: Laundry before my brother arrives.
+OPENING : I’ve taken in the request — I’m moving on it.
+SUBHEAD : Here’s where it sits — I’ll only come back to you when something needs a yes.
+ROW     : LAUNDRY — I’m getting pickup moving and keeping the return protected.
+CLOSING : Nothing else needed right now.
+scripted-leak check (Sunday/wife's mother/mother-in-law/Theo/Maria/Jordan/Saturday at 11): none
+
+=== Non-laundry services never booked/confirmed without real confirmation ===
+REQUEST: Grooming, car detail, airport ride, and a haircut.
+OPENING : I’ve taken in the request — I’m moving on it.
+SUBHEAD : Here’s where each piece sits — I’ll only come back to you when something needs a yes.
+ROW     : GROOMING — I’m lining up grooming and will come back only if there’s a real decision.
+ROW     : DETAILING — I’m lining up the detail and will come back only if there’s a real decision.
+ROW     : TRANSPORT — I’m lining up the ride and will come back only if there’s a real decision.
+ROW     : HAIRCUT — I’m lining up the haircut and will come back only if there’s a real decision.
+CLOSING : Nothing else needed right now.
+scripted-leak check (Sunday/wife's mother/mother-in-law/Theo/Maria/Jordan/Saturday at 11): none
+
+=== DEMO ONLY: provider candidates genuinely in metadata (names allowed) ===
+REQUEST: Groom Theo this weekend.
+OPENING : I’ve taken in the request — I’m moving on it.
+SUBHEAD : Here’s where it sits — I’ll only come back to you when something needs a yes.
+ROW     : THEO’S GROOMING — I’m lining up grooming for Theo. Maria has Saturday at 11 open. I’m holding that window unless Jordan is non-negotiable.
+CLOSING : I’ll only reach back if Jordan is non-negotiable. Otherwise, consider it handled.
+scripted-leak check (Sunday/wife's mother/mother-in-law/Theo/Maria/Jordan/Saturday at 11): LEAK: Theo, Maria, Jordan, Saturday at 11
+
