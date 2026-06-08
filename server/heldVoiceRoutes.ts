@@ -16,6 +16,8 @@ type HeldPhoneFollowupBody = {
     type?: string;
     timing?: string | null;
     deadline?: string | null;
+    orderId?: string | null;
+    status?: string | null;
   }>;
 };
 
@@ -43,6 +45,8 @@ export function registerHeldVoiceRoutes(app: Express) {
                 type: service.type!,
                 timing: typeof service.timing === "string" ? service.timing : null,
                 deadline: typeof service.deadline === "string" ? service.deadline : null,
+                orderId: typeof service.orderId === "string" ? service.orderId : null,
+                status: typeof service.status === "string" ? service.status : null,
               }))
           : [],
       });

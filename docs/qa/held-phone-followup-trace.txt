@@ -1,0 +1,20 @@
+=== HELD phone follow-up — streamed reply trace (LLM offline -> deterministic grounding) ===
+
+ACTIVE PLAN: Pickup laundry before Saturday and book Theo's grooming Saturday at 11.
+
+Resident composer  >  Maria works.
+HELD streamed reply >  Good. I’ll hold Maria as your preferred window and keep the grooming moving — I’ll only come back if the provider forces a real decision.
+booked/confirmed?   >  none
+
+Resident composer  >  Jordan is non-negotiable.
+HELD streamed reply >  Understood. I’ll treat that as your preference and hold to it, even if it means waiting, and keep the rest of the plan moving around it.
+booked/confirmed?   >  none
+
+Resident composer  >  Can laundry come earlier?
+HELD streamed reply >  I’ll ask whether that window can move earlier and let you know — I won’t change the time until it’s actually been adjusted.
+booked/confirmed?   >  none
+
+Resident composer  >  Do I need to do anything?
+HELD streamed reply >  Nothing from you right now. The plan is held and moving — I’ll only come back if something needs your yes.
+booked/confirmed?   >  none
+
