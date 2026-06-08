@@ -111,6 +111,59 @@ describe("buildHeldPhoneFollowupReply — v1 reply-only phone follow-up", () => 
     expect(reply).not.toMatch(BOOKED_OR_CONFIRMED);
   });
 
+  // Guard scope: "Maria works" must never produce a grooming booked/confirmed claim,
+  // whether the model is offline or it tries to assert a fake grooming confirmation.
+  it('"Maria works" never reports grooming as booked/confirmed', async () => {
+    const { invokeLLM } = await import("./_core/llm");
+    vi.mocked(invokeLLM).mockResolvedValueOnce({
+      choices: [
+        { message: { role: "assistant", content: "Done — Theo's grooming is booked for Saturday." } },
+      ],
+    } as any);
+
+    const reply = await buildHeldPhoneFollowupReply({
+      ...ACTIVE_PLAN,
+      message: "Maria works.",
+    });
+
+    expect(reply).not.toMatch(/\bgrooming\b[^.]*\b(booked|confirmed)\b/i);
+    expect(reply).not.toMatch(BOOKED_OR_CONFIRMED);
+  });
+
+  // Narrowed guard: a real laundry-pickup confirmation carried by the active plan
+  // is NOT downgraded by the truth guard (pickup is no longer blanket-blocked).
+  it("does not downgrade a valid laundry pickup confirmation from the active plan", async () => {
+    const { invokeLLM } = await import("./_core/llm");
+    vi.mocked(invokeLLM).mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "Your laundry pickup is confirmed for Saturday.",
+          },
+        },
+      ],
+    } as any);
+
+    const reply = await buildHeldPhoneFollowupReply({
+      displayRequest: "Pickup laundry before Saturday.",
+      message: "Is laundry pickup set?",
+      services: [
+        {
+          type: "laundry_pickup",
+          timing: "Saturday",
+          deadline: "Saturday",
+          orderId: "ord_laundry_123",
+          status: "confirmed",
+        },
+      ],
+    });
+
+    // The legitimate pickup confirmation survives untouched.
+    expect(reply).toBe("Your laundry pickup is confirmed for Saturday.");
+    expect(reply).toMatch(/laundry pickup is confirmed/i);
+  });
+
   it("acknowledges a preference grounded in the plan when the model is available", async () => {
     const { invokeLLM } = await import("./_core/llm");
     vi.mocked(invokeLLM).mockResolvedValueOnce({

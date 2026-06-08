@@ -4,6 +4,8 @@ export type HeldPhoneFollowupService = {
   type: string;
   timing?: string | null;
   deadline?: string | null;
+  orderId?: string | null;
+  status?: string | null;
 };
 
 export type HeldPhoneFollowupInput = {
@@ -51,7 +53,7 @@ export async function buildHeldPhoneFollowupReply(input: HeldPhoneFollowupInput)
     });
 
     const reply = response.choices[0]?.message.content?.replace(/\s+/g, " ").trim();
-    if (reply) return enforceNoFakeConfirmation(reply);
+    if (reply) return enforceNoFakeConfirmation(reply, input.services ?? []);
   } catch (error) {
     console.warn("[HeldPhoneFollowup] Falling back to deterministic reply", error);
   }
@@ -59,14 +61,42 @@ export async function buildHeldPhoneFollowupReply(input: HeldPhoneFollowupInput)
   return buildHeldPhoneFollowupFallback(message);
 }
 
-// Truth guard: the phone follow-up path never books or confirms. If a generated
-// reply claims a coordinated service is "booked"/"confirmed", soften it to the
-// honest "holding/moving" framing rather than persisting a fake confirmation.
-function enforceNoFakeConfirmation(reply: string) {
-  if (/\b(grooming|groom|detail|pickup|transport)\b[^.]*\b(booked|confirmed)\b/i.test(reply)) {
-    return buildHeldPhoneFollowupFallback(reply);
+// Coordinated services are arranged by Held, not confirmed on the call. A reply
+// must never claim these are "booked"/"confirmed" unless the active plan already
+// carries a real confirmation for that service. Pickup is intentionally NOT here:
+// laundry pickup can be legitimately confirmed when the plan says so.
+const COORDINATED_SERVICE_PATTERN = /\b(grooming|groom|detail|transport|haircut)\b[^.]*\b(booked|confirmed)\b/i;
+
+const COORDINATED_SERVICE_KEYWORDS: Record<string, RegExp> = {
+  grooming: /\b(grooming|groom)\b/i,
+  detail: /\bdetail\b/i,
+  transport: /\btransport\b/i,
+  haircut: /\bhaircut\b/i,
+};
+
+// Truth guard: the phone follow-up path never books or confirms a coordinated
+// service on its own. If a generated reply claims grooming/detail/transport/
+// haircut is "booked"/"confirmed" — and the active plan does not explicitly mark
+// that service confirmed — soften it rather than persisting a fake confirmation.
+// A real laundry-pickup confirmation from the plan is left untouched.
+function enforceNoFakeConfirmation(reply: string, services: HeldPhoneFollowupService[]) {
+  if (!COORDINATED_SERVICE_PATTERN.test(reply)) return reply;
+
+  for (const [service, keyword] of Object.entries(COORDINATED_SERVICE_KEYWORDS)) {
+    if (keyword.test(reply) && !isServiceConfirmedInPlan(service, services)) {
+      return buildHeldPhoneFollowupFallback(reply);
+    }
   }
   return reply;
+}
+
+function isServiceConfirmedInPlan(service: string, services: HeldPhoneFollowupService[]) {
+  return services.some(entry => {
+    const type = entry.type?.toLowerCase() ?? "";
+    if (!type.includes(service)) return false;
+    const status = entry.status?.toLowerCase() ?? "";
+    return status === "confirmed" || status === "booked" || Boolean(entry.orderId);
+  });
 }
 
 function buildHeldPhoneFollowupFallback(message: string) {
