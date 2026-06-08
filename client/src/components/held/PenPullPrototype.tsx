@@ -26,6 +26,10 @@ import { PenPhysicsDebugPanel } from "./PenPhysicsDebugPanel";
 import { HELD_LARGE_PEN_TUNING } from "./heldPenTuning";
 import { usePenPhysics, type PenUnlockInfo } from "./usePenPhysics";
 import type { PenPhysicsTuningOverrides } from "./penPhysics";
+import {
+  buildPostOrderChiefOfStaffCopy,
+  type PostOrderServiceMeta,
+} from "@shared/heldPostOrderCopy";
 
 type PenPullPrototypeProps = {
   composerOpen?: boolean;
@@ -613,8 +617,29 @@ export default function PenPullPrototype({
     if (!showDebugControls) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("postorder") === "1") {
-      setConfirmedRequest("Laundry before Sunday and Theo grooming with Maria or Jordan.");
+      // Default post-order QA path: a plain request with NO scripted scenario
+      // facts. Proves the screen renders only safe, request-grounded narration.
+      setConfirmedRequest("Pick up my laundry tomorrow and book dog grooming this week.");
       setConfirmedServices([{ type: "laundry_pickup" }, { type: "dog_grooming" }]);
+      setLastOrderId(orderId => orderId ?? 1);
+      setMode("held");
+      return;
+    }
+
+    if (params.get("postorder") === "demo") {
+      // Rich demo path: provider-candidate metadata genuinely exists, so the
+      // narration MAY name providers/windows. This is the only path allowed to.
+      setConfirmedRequest("Groom Theo this weekend.");
+      setConfirmedServices([
+        {
+          type: "dog_grooming",
+          dogName: "Theo",
+          providerCandidates: [
+            { name: "Maria", window: "Saturday at 11" },
+            { name: "Jordan" },
+          ],
+        },
+      ]);
       setLastOrderId(orderId => orderId ?? 1);
       setMode("held");
       return;
@@ -1481,6 +1506,17 @@ function HeldTransformingState({
   const isSettled = phase === "settle";
   const tokens = getTokenAssets(services, displayRequest);
   const drawing = getHeldCompositePath(displayRequest, services);
+  // Post-order narration is built entirely from the active request + parsed
+  // service metadata — no scripted scenario copy. Every fact comes from real
+  // plan state or safe generic fallback language.
+  const postOrderCopy = useMemo(
+    () =>
+      buildPostOrderChiefOfStaffCopy(
+        { displayRequest, services: services as PostOrderServiceMeta[] },
+        displayRequest,
+      ),
+    [displayRequest, services],
+  );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
   const clearLongPress = () => {
@@ -1516,15 +1552,11 @@ function HeldTransformingState({
       return "Of course. I have it held, and I’ll only come back if something needs your yes.";
     }
 
-    if (/\bjordan\b/.test(normalized)) {
-      return "Understood. I’ll hold for Jordan, even if that means waiting, and keep the rest of the plan moving around that preference.";
+    if (/\bnon-?negotiable\b/.test(normalized)) {
+      return "Understood. I’ll treat that as your preference and hold to it, even if it means waiting, and keep the rest of the plan moving around it.";
     }
 
-    if (/\bmaria\b/.test(normalized)) {
-      return "Got it. I’ll keep Maria as the working window for Theo and continue holding the rest of the Sunday picture together. I’ll only come back if that window needs a yes.";
-    }
-
-    return "I heard you. I’ll treat that as the next instruction on this plan and keep the moving pieces held while I work it through.";
+    return "I heard you. I’ll fold that into the current plan and keep the moving pieces held while I work it through.";
   };
   const startPhoneLift = (event: PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -1749,29 +1781,27 @@ function HeldTransformingState({
           <PlanLine
             className="max-w-full font-serif text-[30px] italic leading-[1.22] text-[#2a2520]"
             delay={900}
-            text="I've taken in the whole Sunday picture — I'm already moving on everything."
+            text={postOrderCopy.opening}
           />
           <PlanLine
             className="mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520]"
             delay={4300}
-            text="Here's where each piece sits — I'll only come back to you when something needs a yes."
+            text={postOrderCopy.subhead}
           />
           <div className="mt-5 w-full text-left">
-            <PlanServiceRow
-              delay={8500}
-              label="Laundry"
-              text=" — I'm picking it up tomorrow morning and back before your wife's mother arrives."
-            />
-            <PlanServiceRow
-              delay={13300}
-              label="Theo's grooming"
-              text=" — Maria has Saturday at 11 open. I'm holding that window unless Jordan is non-negotiable."
-            />
+            {postOrderCopy.serviceRows.map((row, index) => (
+              <PlanServiceRow
+                key={`${row.label}-${index}`}
+                delay={8500 + index * 4800}
+                label={row.label}
+                text={` — ${row.body}`}
+              />
+            ))}
           </div>
           <PlanLine
             className="mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b]"
-            delay={19000}
-            text="I'll only reach back if Jordan is non-negotiable. Otherwise, consider it handled."
+            delay={8500 + postOrderCopy.serviceRows.length * 4800 + 1200}
+            text={postOrderCopy.closing}
           />
         </section>
       )}
@@ -2478,7 +2508,7 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
 
 function getServiceLabel(type: string) {
   if (type === "laundry_pickup") return "Laundry pickup";
-  if (type === "dog_grooming") return "Theo's grooming";
+  if (type === "dog_grooming") return "Dog grooming";
   if (type === "car_detail") return "Car detail";
   if (type === "ride_airport") return "Airport pickup";
   if (type === "haircut") return "Haircut";
