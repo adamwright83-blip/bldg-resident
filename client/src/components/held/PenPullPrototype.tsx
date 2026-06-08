@@ -199,6 +199,10 @@ export default function PenPullPrototype({
   const takingCustodyStartRef = useRef<number | null>(null);
   const drawingHandoffTimerRef = useRef<number | null>(null);
   const saveNameMutation = trpc.chat.saveName.useMutation();
+  const { data: profileData } = trpc.chat.getVaultProfile.useQuery(undefined, {
+    enabled: mode === "held",
+  });
+  const residenceLabel = formatHeldResidenceLabel(profileData?.user);
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
   const composerTrayVisible =
     composerOpen &&
@@ -215,7 +219,7 @@ export default function PenPullPrototype({
     mode === "collectPayment" ||
     mode === "takingCustody" ||
     mode === "orderError";
-  const showPenGesture = (showHomeWorld && mode !== "speech") || mode === "held";
+  const showPenGesture = showHomeWorld && mode !== "speech";
   const canReturnToHeld =
     Boolean(confirmedRequest) &&
     Boolean(lastOrderId) &&
@@ -598,6 +602,14 @@ export default function PenPullPrototype({
   useEffect(() => {
     if (!showDebugControls) return;
     const params = new URLSearchParams(window.location.search);
+    if (params.get("postorder") === "1") {
+      setConfirmedRequest("Laundry before Sunday and Theo grooming with Maria or Jordan.");
+      setConfirmedServices([{ type: "laundry_pickup" }, { type: "dog_grooming" }]);
+      setLastOrderId(orderId => orderId ?? 1);
+      setMode("held");
+      return;
+    }
+
     if (params.get("vitrine") !== "1") return;
 
     setConfirmedRequest("Laundry pickup is in motion.");
@@ -739,7 +751,7 @@ export default function PenPullPrototype({
                 {...physics.chainRefs}
                 anchorFill="#9f7528"
                 anchorRadius={2.6}
-                className={mode === "held" ? "z-[88]" : "z-30"}
+                className="z-30"
                 glintStrokeWidth={2.1}
                 highlightStroke="rgba(255, 234, 178, 0.58)"
                 highlightStrokeWidth={0.8}
@@ -749,20 +761,12 @@ export default function PenPullPrototype({
               <PenCharm
                 {...physics.penRefs}
                 {...physics.pointerHandlers}
-                className={mode === "held" ? "z-[92]" : "z-[80]"}
+                className="z-[80]"
                 objectFit="contain"
                 penAssetSrc={penAssetSrc}
                 transformOrigin="50% 3%"
               />
             </>
-          )}
-
-          {mode === "held" && !rootVitrineToken && (
-            <HeldTokenHitTargetLayer
-              displayRequest={confirmedRequest}
-              onOpenToken={setRootVitrineToken}
-              services={confirmedServices}
-            />
           )}
 
           <AnimatePresence>
@@ -1030,6 +1034,8 @@ export default function PenPullPrototype({
               displayRequest={confirmedRequest}
               isHeld={mode === "held"}
               onDebugLaundryVitrineOpened={() => setDebugOpenLaundryVitrine(false)}
+              penAssetSrc={penAssetSrc}
+              residenceLabel={residenceLabel}
               services={confirmedServices}
             />
           )}
@@ -1285,93 +1291,17 @@ function HeldRequestReadyCard({
   );
 }
 
-function HeldTokenHitTargetLayer({
-  displayRequest,
-  onOpenToken,
-  services,
-}: {
-  displayRequest: string;
-  onOpenToken: (token: HeldTokenAsset) => void;
-  services: HeldParsedService[];
-}) {
-  const longPressTimerRef = useRef<number | null>(null);
-  const longPressOpenedRef = useRef(false);
-  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
-  const tokens = getTokenAssets(services, displayRequest);
-  const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
+function formatHeldResidenceLabel(
+  user?: { buildingSlug?: string | null; unit?: string | null } | null
+) {
+  const building = user?.buildingSlug?.trim();
+  const unit = user?.unit?.trim();
 
-  const clearLongPress = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
+  if (!building || !unit) {
+    return "RESIDENCE 1807 · 12A";
+  }
 
-  const openToken = (token: HeldTokenAsset) => {
-    if (token.type === "laundry_pickup") {
-      window.navigator.vibrate?.(8);
-    }
-    onOpenToken(token);
-  };
-
-  const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
-    clearLongPress();
-    longPressOpenedRef.current = false;
-    pressStartRef.current = { x: event.clientX, y: event.clientY };
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressOpenedRef.current = true;
-      openToken(token);
-      longPressTimerRef.current = null;
-    }, 520);
-  };
-
-  const moveTokenPress = (event: PointerEvent<HTMLButtonElement>) => {
-    if (!pressStartRef.current) return;
-    const dx = Math.abs(event.clientX - pressStartRef.current.x);
-    const dy = Math.abs(event.clientY - pressStartRef.current.y);
-    if (dx > 12 || dy > 12) {
-      clearLongPress();
-    }
-  };
-
-  useEffect(() => clearLongPress, []);
-
-  return (
-    <div className="absolute bottom-[35%] left-1/2 z-[130] h-[32%] w-[88%] -translate-x-1/2">
-      {tokens.map((token, index) => (
-        <button
-          aria-label={
-            token.type === "laundry_pickup"
-              ? "Open Laundry Butler service details"
-              : "Open service details"
-          }
-          className="absolute h-[112px] w-[112px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent"
-          key={`${token.src}-${index}-hit-target`}
-          onClick={event => {
-            if (longPressOpenedRef.current) {
-              event.preventDefault();
-              longPressOpenedRef.current = false;
-              return;
-            }
-
-            openToken(token);
-          }}
-          onContextMenu={event => event.preventDefault()}
-          onPointerCancel={clearLongPress}
-          onPointerDown={event => startTokenPress(token, event)}
-          onPointerLeave={clearLongPress}
-          onPointerMove={moveTokenPress}
-          onPointerUp={clearLongPress}
-          style={{
-            left: `${tokenPositions[index]?.left ?? 50}%`,
-            top: `${tokenPositions[index]?.top ?? 50}%`,
-            touchAction: "none",
-          }}
-          type="button"
-        />
-      ))}
-    </div>
-  );
+  return `RESIDENCE ${building.toUpperCase()} · ${unit.toUpperCase()}`;
 }
 
 const PLAN_MS_PER_CHAR = 45;
@@ -1438,8 +1368,8 @@ function PlanServiceRow({
   }, [text, delay]);
   if (!visible) return null;
   return (
-    <p className="mt-[18px] font-serif text-[13px] italic leading-[1.6] text-[#2d251d]">
-      <span className="not-italic text-[10px] uppercase tracking-[0.16em]">{label}</span>
+    <p className="mt-3 font-serif text-[15.5px] italic leading-[1.32] text-[#2a2520]">
+      <span className="not-italic text-[12px] uppercase tracking-[0.18em]">{label}</span>
       {streamed}
     </p>
   );
@@ -1450,12 +1380,16 @@ function HeldTransformingState({
   displayRequest,
   isHeld,
   onDebugLaundryVitrineOpened,
+  penAssetSrc,
+  residenceLabel,
   services,
 }: {
   debugOpenLaundryVitrine?: boolean;
   displayRequest: string;
   isHeld: boolean;
   onDebugLaundryVitrineOpened?: () => void;
+  penAssetSrc: string;
+  residenceLabel: string;
   services: HeldParsedService[];
 }) {
   const longPressTimerRef = useRef<number | null>(null);
@@ -1546,11 +1480,17 @@ function HeldTransformingState({
           backgroundSize: "cover, 420px 420px",
         }}
       />
-      <header className="pointer-events-none absolute left-[8%] top-[8%] z-10">
-        <p className="text-[15px] tracking-[0.08em] text-[#2d251d]">HELD.chat</p>
-        <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
-          {isHeld ? "Held." : "Taking custody."}
-        </p>
+      <header className="pointer-events-none absolute left-[8%] right-[8%] top-[5.2%] z-30 flex items-start justify-between text-[#2a2520]">
+        <div>
+          <p className="text-[14px] uppercase tracking-[0.16em]">HELD.chat</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.28em]">{residenceLabel}</p>
+        </div>
+        <div
+          aria-hidden="true"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#b8893c] font-serif text-[17px] leading-none text-[#b8893c]"
+        >
+          H
+        </div>
       </header>
 
       <section
@@ -1592,58 +1532,87 @@ function HeldTransformingState({
       </section>
 
       {isSettled && (
-        <section className="pointer-events-none absolute left-[9%] top-[10%] z-20 w-[82%]">
+        <section className="pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520]">
           <PlanLine
-            className="font-serif text-[26px] italic leading-[1.15] text-[#2d251d]"
+            className="max-w-full font-serif text-[30px] italic leading-[1.22] text-[#2a2520]"
             delay={900}
-            text="I've taken in the whole Sunday picture — I'm already moving on everything. One small detail I may circle back on, but nothing for you to worry about."
+            text="I've taken in the whole Sunday picture — I'm already moving on everything."
           />
           <PlanLine
-            className="mt-2 font-serif text-[13px] italic leading-[1.6] text-[#55493d]"
-            delay={3420}
+            className="mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520]"
+            delay={4300}
             text="Here's where each piece sits — I'll only come back to you when something needs a yes."
           />
-          <PlanServiceRow
-            delay={7900}
-            label="Laundry"
-            text=" — I'm picking it up tomorrow morning and making sure it's back before she arrives."
-          />
-          <PlanServiceRow
-            delay={13200}
-            label="Theo's grooming"
-            text=" — I'm reaching out to Theo's groomer now. I'll have a Saturday window locked in time for her visit, without needing you again."
-          />
+          <div className="mt-5 w-full text-left">
+            <PlanServiceRow
+              delay={8500}
+              label="Laundry"
+              text=" — I'm picking it up tomorrow morning and back before your wife's mother arrives."
+            />
+            <PlanServiceRow
+              delay={13300}
+              label="Theo's grooming"
+              text=" — Maria has Saturday at 11 open. I'm holding that window unless Jordan is non-negotiable."
+            />
+          </div>
           <PlanLine
-            className="mt-4 font-serif text-[12px] italic leading-[1.6] text-[#a06a2b]"
-            delay={18700}
-            text="Leave the rest to me. Everything is held."
+            className="mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b]"
+            delay={19000}
+            text="I'll only reach back if Jordan is non-negotiable. Otherwise, consider it handled."
           />
         </section>
       )}
 
+      {isSettled && (
+        <div
+          aria-hidden="true"
+          className="absolute bottom-[24.5%] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
+        />
+      )}
+
       <img
         alt=""
-        className={`pointer-events-none absolute left-1/2 z-10 w-[108%] -translate-x-1/2 select-none drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)] transition-all duration-700 ${
-          isSettled ? "bottom-[26%] opacity-100" : "bottom-[-6%] opacity-80"
+        className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 select-none transition-all duration-700 ${
+          isSettled
+            ? "bottom-[0.5%] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
+            : "bottom-[-6%] w-[108%] opacity-80 drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)]"
         }`}
         data-held-home-cradle="true"
         draggable={false}
         src={HELD_ASSETS.trayHeldBox}
       />
+      {isSettled && (
+        <>
+          <div
+            aria-hidden="true"
+            className="absolute bottom-[6.5%] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
+          >
+            H
+          </div>
+          <img
+            alt=""
+            className="pointer-events-none absolute bottom-[5.7%] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
+            draggable={false}
+            src={penAssetSrc}
+          />
+        </>
+      )}
       {/* Token tray is anchored at its settled (walnut-tray) position. The
           clay condenses ~330px higher (at the drawing) during the clay beat,
           then each token glides DOWN into the tray during the settle beat.
           Using transform translateY (not top/bottom:auto) keeps it gliding
           — no teleport. */}
       <div
-        className={`absolute bottom-[35%] left-1/2 h-[32%] w-[88%] -translate-x-1/2 ${
-          isSettled ? "z-[115]" : "z-20"
+        className={`absolute left-1/2 -translate-x-1/2 ${
+          isSettled ? "bottom-[3.8%] z-[115] h-[13%] w-[43%]" : "bottom-[35%] z-20 h-[32%] w-[88%]"
         }`}
       >
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className="absolute h-[80px] w-[80px] object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)]"
+            className={`absolute object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] ${
+              isSettled ? "h-[44px] w-[44px]" : "h-[80px] w-[80px]"
+            }`}
             key={`${token.src}-${index}`}
             onClick={event => {
               if (longPressOpenedRef.current) {
@@ -1686,32 +1655,6 @@ function HeldTransformingState({
             />
           </button>
         ))}
-      </div>
-      <div
-        className={`absolute bottom-[3%] left-1/2 z-30 w-[84%] -translate-x-1/2 transition-all duration-700 ${
-          isHeld ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-        }`}
-      >
-        <img
-          alt=""
-          className="pointer-events-none w-full select-none drop-shadow-[0_10px_18px_rgba(54,38,23,0.10)]"
-          draggable={false}
-          src={HELD_ASSETS.postTokenField}
-        />
-        <div className="pointer-events-none absolute inset-x-[18%] top-[32%] text-center">
-          <p className="font-serif text-[13px] italic leading-4 text-[#4f4439]">
-            {tokens.length === 1
-              ? `${getServiceLabel(tokens[0].type)} is in motion.`
-              : `${tokens.length} things are in motion.`}
-          </p>
-          <p className="mt-1 font-serif text-[11px] italic leading-4 text-[#7a6d5f]">
-            Pull the pen for what&apos;s next.
-          </p>
-        </div>
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute right-[8.5%] top-[23%] h-[52%] w-[15%] rounded-r-[18px] bg-[#f8eddd]"
-        />
       </div>
       <AnimatePresence>
         {selectedToken?.type === "laundry_pickup" ? (
