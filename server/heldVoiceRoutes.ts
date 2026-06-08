@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { buildHeldPhoneFollowupReply } from "./_core/heldPhoneFollowup";
 import { parseHeldVoiceIntent } from "./_core/heldVoiceIntent";
 import { transcribeAudioBuffer } from "./_core/voiceTranscription";
 
@@ -7,7 +8,54 @@ type HeldVoiceCommandBody = {
   mimeType?: string;
 };
 
+type HeldPhoneFollowupBody = {
+  displayRequest?: string;
+  message?: string;
+  previousMessages?: string[];
+  services?: Array<{
+    type?: string;
+    timing?: string | null;
+    deadline?: string | null;
+  }>;
+};
+
 export function registerHeldVoiceRoutes(app: Express) {
+  app.post("/api/held/phone-followup", async (req: Request, res: Response) => {
+    const body = req.body as HeldPhoneFollowupBody;
+    const message = body.message?.replace(/\s+/g, " ").trim();
+
+    if (!message) {
+      res.status(400).json({ error: "Message is required." });
+      return;
+    }
+
+    try {
+      const reply = await buildHeldPhoneFollowupReply({
+        displayRequest: body.displayRequest,
+        message,
+        previousMessages: Array.isArray(body.previousMessages)
+          ? body.previousMessages.filter((item): item is string => typeof item === "string")
+          : [],
+        services: Array.isArray(body.services)
+          ? body.services
+              .filter(service => typeof service.type === "string")
+              .map(service => ({
+                type: service.type!,
+                timing: typeof service.timing === "string" ? service.timing : null,
+                deadline: typeof service.deadline === "string" ? service.deadline : null,
+              }))
+          : [],
+      });
+
+      res.json({ reply });
+    } catch (error) {
+      console.error("[HeldVoiceRoutes] phone follow-up failed", error);
+      res.status(500).json({
+        error: "Phone follow-up processing failed.",
+      });
+    }
+  });
+
   app.post("/api/held/voice-command", async (req: Request, res: Response) => {
     const body = req.body as HeldVoiceCommandBody;
     const audioBase64 = body.audioBase64?.trim();

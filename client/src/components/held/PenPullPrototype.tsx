@@ -1451,6 +1451,7 @@ function HeldTransformingState({
   const [composerValue, setComposerValue] = useState("");
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [phoneReply, setPhoneReply] = useState("");
+  const [phoneReplyStatus, setPhoneReplyStatus] = useState<"idle" | "thinking">("idle");
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
@@ -1501,17 +1502,22 @@ function HeldTransformingState({
     setPhoneDragY(0);
     setIsComposerFocused(false);
     setPhoneReply("");
+    setPhoneReplyStatus("idle");
   };
   const engagePhone = () => {
     window.navigator.vibrate?.(8);
     setIsPhoneEngaged(true);
     setPhoneDragY(0);
   };
-  const buildPhoneReply = (value: string) => {
+  const buildPhoneFallbackReply = (value: string) => {
     const normalized = value.toLowerCase();
 
+    if (/\b(thanks|thank you|appreciate|perfect|great|ok|okay)\b/.test(normalized)) {
+      return "Of course. I have it held, and I’ll only come back if something needs your yes.";
+    }
+
     if (/\bjordan\b/.test(normalized)) {
-      return "Understood. I’ll stop treating Maria as the default and hold for Jordan, even if that means waiting. Laundry keeps moving as planned; I’ll come back only if Jordan’s window needs a yes from you.";
+      return "Understood. I’ll hold for Jordan, even if that means waiting, and keep the rest of the plan moving around that preference.";
     }
 
     if (/\bmaria\b/.test(normalized)) {
@@ -1572,18 +1578,51 @@ function HeldTransformingState({
     pointer.pointerId = null;
     pointer.didDrag = false;
   };
+  const fetchPhoneReply = async (message: string) => {
+    const response = await fetch("/api/held/phone-followup", {
+      body: JSON.stringify({
+        displayRequest,
+        message,
+        previousMessages: submittedFollowupsRef.current,
+        services,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Phone follow-up failed: ${response.status}`);
+    }
+
+    const result = (await response.json()) as { reply?: string };
+    return result.reply?.trim() || buildPhoneFallbackReply(message);
+  };
   const submitFollowup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submitFollowupValue(composerInputRef.current?.value);
+    void submitFollowupValue(composerInputRef.current?.value);
   };
-  const submitFollowupValue = (valueOverride?: string) => {
+  const submitFollowupValue = async (valueOverride?: string) => {
     const nextValue = (valueOverride ?? composerValue).trim();
-    if (!nextValue) return;
+    if (!nextValue || phoneReplyStatus === "thinking") return;
 
-    submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
     console.debug("[HELD] local phone follow-up captured", nextValue);
-    setPhoneReply(buildPhoneReply(nextValue));
     setComposerValue("");
+    setPhoneReply("Held is listening.");
+    setPhoneReplyStatus("thinking");
+
+    try {
+      const reply = await fetchPhoneReply(nextValue);
+      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+      setPhoneReply(reply);
+    } catch (error) {
+      console.error("[HELD] phone follow-up failed", error);
+      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+      setPhoneReply(buildPhoneFallbackReply(nextValue));
+    } finally {
+      setPhoneReplyStatus("idle");
+    }
   };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
     clearLongPress();
@@ -1763,18 +1802,20 @@ function HeldTransformingState({
           </label>
           <input
             className="h-9 w-full border-0 border-b border-[#b8893c] bg-transparent px-1 text-center font-serif text-[16px] italic leading-none text-[#2a2520] outline-none placeholder:text-[#756452]/65 focus:border-[#9f6f24]"
+            disabled={phoneReplyStatus === "thinking"}
             id="held-phone-followup"
             ref={composerInputRef}
             onBlur={() => setIsComposerFocused(false)}
             onFocus={() => setIsComposerFocused(true)}
             onChange={event => {
               if (phoneReply) setPhoneReply("");
+              if (phoneReplyStatus !== "idle") setPhoneReplyStatus("idle");
               setComposerValue(event.target.value);
             }}
             onKeyDown={event => {
               if (event.key !== "Enter") return;
               event.preventDefault();
-              submitFollowupValue(event.currentTarget.value);
+              void submitFollowupValue(event.currentTarget.value);
             }}
             placeholder="Ask Held..."
             type="text"
@@ -1783,7 +1824,7 @@ function HeldTransformingState({
           <p className="mt-1 text-center font-serif text-[12px] italic leading-none text-[#7a6d5f]">
             speak or type
           </p>
-          {isPhoneEngaged && !isComposerFocused && !phoneReply && (
+          {isPhoneEngaged && !isComposerFocused && (!phoneReply || phoneReplyStatus === "thinking") && (
             <HeldPhoneListeningGlyph />
           )}
         </form>
