@@ -1319,10 +1319,12 @@ const PLAN_MS_PER_CHAR = 45;
 function PlanLine({
   className,
   delay,
+  msPerChar = PLAN_MS_PER_CHAR,
   text,
 }: {
   className?: string;
   delay: number;
+  msPerChar?: number;
   text: string;
 }) {
   const [displayed, setDisplayed] = useState("");
@@ -1332,7 +1334,7 @@ function PlanLine({
       let startTime = 0;
       const tick = (ts: number) => {
         if (!startTime) startTime = ts;
-        const chars = Math.min(Math.floor((ts - startTime) / PLAN_MS_PER_CHAR), text.length);
+        const chars = Math.min(Math.floor((ts - startTime) / msPerChar), text.length);
         setDisplayed(text.slice(0, chars));
         if (chars < text.length) raf = requestAnimationFrame(tick);
       };
@@ -1342,7 +1344,7 @@ function PlanLine({
       clearTimeout(timer);
       cancelAnimationFrame(raf);
     };
-  }, [text, delay]);
+  }, [text, delay, msPerChar]);
   if (!displayed) return null;
   return <p className={className}>{displayed}</p>;
 }
@@ -1385,6 +1387,32 @@ function PlanServiceRow({
   );
 }
 
+function HeldPhoneListeningGlyph() {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute left-1/2 top-[42px] flex -translate-x-1/2 items-end gap-[3px]"
+    >
+      {[10, 16, 24, 16, 10].map((height, index) => (
+        <motion.span
+          animate={{
+            height: [height, height + 9, height],
+            opacity: [0.32, 0.92, 0.32],
+          }}
+          className="w-[2px] rounded-full bg-[#b8893c]"
+          key={`${height}-${index}`}
+          transition={{
+            duration: 0.9,
+            ease: "easeInOut",
+            repeat: Infinity,
+            delay: index * 0.08,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -1422,6 +1450,8 @@ function HeldTransformingState({
   const [phoneDragY, setPhoneDragY] = useState(0);
   const [composerValue, setComposerValue] = useState("");
   const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [phoneReply, setPhoneReply] = useState("");
+  const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
@@ -1470,11 +1500,25 @@ function HeldTransformingState({
     setIsPhoneEngaged(false);
     setPhoneDragY(0);
     setIsComposerFocused(false);
+    setPhoneReply("");
   };
   const engagePhone = () => {
     window.navigator.vibrate?.(8);
     setIsPhoneEngaged(true);
     setPhoneDragY(0);
+  };
+  const buildPhoneReply = (value: string) => {
+    const normalized = value.toLowerCase();
+
+    if (/\bjordan\b/.test(normalized)) {
+      return "Understood. I’ll stop treating Maria as the default and hold for Jordan, even if that means waiting. Laundry keeps moving as planned; I’ll come back only if Jordan’s window needs a yes from you.";
+    }
+
+    if (/\bmaria\b/.test(normalized)) {
+      return "Got it. I’ll keep Maria as the working window for Theo and continue holding the rest of the Sunday picture together. I’ll only come back if that window needs a yes.";
+    }
+
+    return "I heard you. I’ll treat that as the next instruction on this plan and keep the moving pieces held while I work it through.";
   };
   const startPhoneLift = (event: PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -1530,19 +1574,15 @@ function HeldTransformingState({
   };
   const submitFollowup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const nextValue = composerValue.trim();
-    if (!nextValue) return;
-
-    submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
-    console.debug("[HELD] local phone follow-up captured", nextValue);
-    setComposerValue("");
+    submitFollowupValue(composerInputRef.current?.value);
   };
-  const submitFollowupValue = () => {
-    const nextValue = composerValue.trim();
+  const submitFollowupValue = (valueOverride?: string) => {
+    const nextValue = (valueOverride ?? composerValue).trim();
     if (!nextValue) return;
 
     submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
     console.debug("[HELD] local phone follow-up captured", nextValue);
+    setPhoneReply(buildPhoneReply(nextValue));
     setComposerValue("");
   };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
@@ -1664,7 +1704,7 @@ function HeldTransformingState({
       {isSettled && (
         <section
           className={`pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520] transition-opacity duration-200 ${
-            isPhoneEngaged ? "opacity-[0.76]" : "opacity-100"
+            phoneReply ? "opacity-[0.08]" : isPhoneEngaged ? "opacity-[0.76]" : "opacity-100"
           }`}
         >
           <PlanLine
@@ -1697,6 +1737,17 @@ function HeldTransformingState({
         </section>
       )}
 
+      {isSettled && phoneReply && (
+        <section className="pointer-events-none absolute left-1/2 top-[31%] z-[65] w-[82%] -translate-x-1/2 text-center">
+          <PlanLine
+            className="font-serif text-[16.5px] italic leading-[1.32] text-[#2a2520]"
+            delay={120}
+            msPerChar={20}
+            text={phoneReply}
+          />
+        </section>
+      )}
+
       {isSettled && (
         <form
           className={`absolute bottom-[27.2%] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
@@ -1713,13 +1764,17 @@ function HeldTransformingState({
           <input
             className="h-9 w-full border-0 border-b border-[#b8893c] bg-transparent px-1 text-center font-serif text-[16px] italic leading-none text-[#2a2520] outline-none placeholder:text-[#756452]/65 focus:border-[#9f6f24]"
             id="held-phone-followup"
+            ref={composerInputRef}
             onBlur={() => setIsComposerFocused(false)}
             onFocus={() => setIsComposerFocused(true)}
-            onChange={event => setComposerValue(event.target.value)}
+            onChange={event => {
+              if (phoneReply) setPhoneReply("");
+              setComposerValue(event.target.value);
+            }}
             onKeyDown={event => {
               if (event.key !== "Enter") return;
               event.preventDefault();
-              submitFollowupValue();
+              submitFollowupValue(event.currentTarget.value);
             }}
             placeholder="Ask Held..."
             type="text"
@@ -1728,6 +1783,9 @@ function HeldTransformingState({
           <p className="mt-1 text-center font-serif text-[12px] italic leading-none text-[#7a6d5f]">
             speak or type
           </p>
+          {isPhoneEngaged && !isComposerFocused && !phoneReply && (
+            <HeldPhoneListeningGlyph />
+          )}
         </form>
       )}
 
