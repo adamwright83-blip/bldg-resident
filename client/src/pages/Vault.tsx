@@ -12,6 +12,7 @@ import { trpc } from "@/lib/trpc";
 
 interface VaultProps {
   onBack: () => void;
+  initialTab?: VaultTab;
 }
 
 type VaultTab = "active" | "history" | "receipts";
@@ -118,9 +119,9 @@ function formatDate(date: string | Date | null | undefined): string {
 
 // ─── Component ───
 
-export default function Vault({ onBack }: VaultProps) {
+export default function Vault({ onBack, initialTab = "active" }: VaultProps) {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<VaultTab>("active");
+  const [activeTab, setActiveTab] = useState<VaultTab>(initialTab);
 
   const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
   const user = profileData?.user || null;
