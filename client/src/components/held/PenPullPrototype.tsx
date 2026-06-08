@@ -44,6 +44,8 @@ const HELD_ASSETS = {
   laundryProvider: "/held/laundry-butler-provider.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
+  phoneBody: "/held/phone_3.png",
+  phoneCord: "/held/phone_chain_alone.png",
   postTokenField: "/held/textfield-posttoken.png",
   requestCard: "/held/your-request-card.png",
   tokenCarDetail: "/held/token-cardetail.png",
@@ -133,6 +135,14 @@ const TOKEN_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
     { left: 50, top: 72 },
   ],
 };
+
+const PHONE_ENGAGE_THRESHOLD_Y = -32;
+const PHONE_ENGAGED_Y = -68;
+const PHONE_ENGAGED_X = -22;
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
 // Duration of the request-card stamp -> compress -> lift ceremony (Part 1).
 // The card's internal timers run: stamp(~0) -> compress(200ms) -> lift(380ms)
@@ -1395,7 +1405,23 @@ function HeldTransformingState({
   const longPressTimerRef = useRef<number | null>(null);
   const longPressOpenedRef = useRef(false);
   const pressStartRef = useRef<{ x: number; y: number } | null>(null);
+  const submittedFollowupsRef = useRef<string[]>([]);
+  const phonePointerRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    didDrag: boolean;
+  }>({
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    didDrag: false,
+  });
   const [selectedToken, setSelectedToken] = useState<HeldTokenAsset | null>(null);
+  const [isPhoneEngaged, setIsPhoneEngaged] = useState(false);
+  const [phoneDragY, setPhoneDragY] = useState(0);
+  const [composerValue, setComposerValue] = useState("");
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
@@ -1435,6 +1461,90 @@ function HeldTransformingState({
   const openToken = (token: HeldTokenAsset) => {
     setSelectedToken(token);
   };
+  const returnPhoneToDock = () => {
+    phonePointerRef.current.pointerId = null;
+    phonePointerRef.current.didDrag = false;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setIsPhoneEngaged(false);
+    setPhoneDragY(0);
+    setIsComposerFocused(false);
+  };
+  const engagePhone = () => {
+    window.navigator.vibrate?.(8);
+    setIsPhoneEngaged(true);
+    setPhoneDragY(0);
+  };
+  const startPhoneLift = (event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    phonePointerRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      didDrag: false,
+    };
+    setPhoneDragY(0);
+  };
+  const movePhoneLift = (event: PointerEvent<HTMLButtonElement>) => {
+    const pointer = phonePointerRef.current;
+    if (pointer.pointerId !== event.pointerId) return;
+
+    event.preventDefault();
+    const deltaY = event.clientY - pointer.startY;
+    const deltaX = event.clientX - pointer.startX;
+    pointer.didDrag = pointer.didDrag || Math.hypot(deltaX, deltaY) > 4;
+
+    if (isPhoneEngaged && deltaY > 28) {
+      returnPhoneToDock();
+      return;
+    }
+
+    const resistedY = clampNumber(deltaY, PHONE_ENGAGED_Y, 16);
+    setPhoneDragY(resistedY);
+
+    if (resistedY <= PHONE_ENGAGE_THRESHOLD_Y) {
+      engagePhone();
+    }
+  };
+  const finishPhoneLift = (event: PointerEvent<HTMLButtonElement>) => {
+    const pointer = phonePointerRef.current;
+    if (pointer.pointerId !== event.pointerId) return;
+
+    event.preventDefault();
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may already be released after a quick tap.
+    }
+
+    if (phoneDragY <= PHONE_ENGAGE_THRESHOLD_Y || (!pointer.didDrag && event.pointerType === "mouse")) {
+      engagePhone();
+    } else if (!isPhoneEngaged) {
+      setPhoneDragY(0);
+    }
+
+    pointer.pointerId = null;
+    pointer.didDrag = false;
+  };
+  const submitFollowup = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextValue = composerValue.trim();
+    if (!nextValue) return;
+
+    submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+    console.debug("[HELD] local phone follow-up captured", nextValue);
+    setComposerValue("");
+  };
+  const submitFollowupValue = () => {
+    const nextValue = composerValue.trim();
+    if (!nextValue) return;
+
+    submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+    console.debug("[HELD] local phone follow-up captured", nextValue);
+    setComposerValue("");
+  };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
     clearLongPress();
     longPressOpenedRef.current = false;
@@ -1460,6 +1570,19 @@ function HeldTransformingState({
   useEffect(() => clearLongPress, []);
 
   useEffect(() => {
+    if (!isPhoneEngaged) return undefined;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        returnPhoneToDock();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isPhoneEngaged]);
+
+  useEffect(() => {
     if (!debugOpenLaundryVitrine) return;
     setSelectedToken({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
     onDebugLaundryVitrineOpened?.();
@@ -1470,6 +1593,13 @@ function HeldTransformingState({
       className={`absolute inset-0 overflow-hidden bg-[#f4ecdf] ${
         selectedToken ? "z-[120]" : "z-[85]"
       }`}
+      onPointerDownCapture={event => {
+        if (!isPhoneEngaged) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest("[data-held-phone-interactive='true']")) return;
+        returnPhoneToDock();
+      }}
     >
       <div
         className="absolute inset-0"
@@ -1532,7 +1662,11 @@ function HeldTransformingState({
       </section>
 
       {isSettled && (
-        <section className="pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520]">
+        <section
+          className={`pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520] transition-opacity duration-200 ${
+            isPhoneEngaged ? "opacity-[0.76]" : "opacity-100"
+          }`}
+        >
           <PlanLine
             className="max-w-full font-serif text-[30px] italic leading-[1.22] text-[#2a2520]"
             delay={900}
@@ -1561,6 +1695,40 @@ function HeldTransformingState({
             text="I'll only reach back if Jordan is non-negotiable. Otherwise, consider it handled."
           />
         </section>
+      )}
+
+      {isSettled && (
+        <form
+          className={`absolute bottom-[27.2%] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
+            isPhoneEngaged
+              ? "translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-[6px] opacity-0"
+          }`}
+          data-held-phone-interactive="true"
+          onSubmit={submitFollowup}
+        >
+          <label className="sr-only" htmlFor="held-phone-followup">
+            Ask Held
+          </label>
+          <input
+            className="h-9 w-full border-0 border-b border-[#b8893c] bg-transparent px-1 text-center font-serif text-[16px] italic leading-none text-[#2a2520] outline-none placeholder:text-[#756452]/65 focus:border-[#9f6f24]"
+            id="held-phone-followup"
+            onBlur={() => setIsComposerFocused(false)}
+            onFocus={() => setIsComposerFocused(true)}
+            onChange={event => setComposerValue(event.target.value)}
+            onKeyDown={event => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              submitFollowupValue();
+            }}
+            placeholder="Ask Held..."
+            type="text"
+            value={composerValue}
+          />
+          <p className="mt-1 text-center font-serif text-[12px] italic leading-none text-[#7a6d5f]">
+            speak or type
+          </p>
+        </form>
       )}
 
       {isSettled && (
@@ -1595,6 +1763,56 @@ function HeldTransformingState({
             draggable={false}
             src={penAssetSrc}
           />
+        </>
+      )}
+      {isSettled && (
+        <>
+          <img
+            alt=""
+            aria-hidden="true"
+            className={`pointer-events-none absolute bottom-[1.1%] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
+              isPhoneEngaged ? "opacity-90" : "opacity-0"
+            }`}
+            draggable={false}
+            src={HELD_ASSETS.phoneCord}
+            style={{
+              transform: isPhoneEngaged
+                ? "translate(-12px, -50px) rotate(-2deg) scaleX(0.62)"
+                : "translate(18px, 10px) rotate(4deg) scale(0.48)",
+              transformOrigin: "82% 92%",
+            }}
+          />
+          <button
+            aria-label="Lift phone to speak to Held"
+            className={`absolute bottom-[0.8%] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
+              isPhoneEngaged ? "drop-shadow-[0_12px_14px_rgba(44,28,14,0.24)]" : "drop-shadow-[0_8px_10px_rgba(44,28,14,0.18)]"
+            }`}
+            data-held-phone-interactive="true"
+            data-held-phone-state={isPhoneEngaged ? "engaged" : "docked"}
+            onPointerCancel={finishPhoneLift}
+            onPointerDown={startPhoneLift}
+            onPointerMove={movePhoneLift}
+            onPointerUp={finishPhoneLift}
+            style={{
+              transform: isPhoneEngaged
+                ? `translate(${PHONE_ENGAGED_X}px, ${PHONE_ENGAGED_Y}px) rotate(-4deg)`
+                : `translate(0, ${phoneDragY}px) rotate(${phoneDragY < -8 ? -2 : 0}deg)`,
+            }}
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute left-[36px] top-[28px] h-16 w-16 rounded-full border border-[#b8893c]/30 transition-opacity duration-200 ${
+                isPhoneEngaged && !isComposerFocused ? "opacity-60 shadow-[0_0_22px_rgba(184,137,60,0.22)]" : "opacity-0"
+              }`}
+            />
+            <img
+              alt=""
+              className="pointer-events-none absolute bottom-0 left-[-22px] h-full w-auto max-w-none select-none"
+              draggable={false}
+              src={HELD_ASSETS.phoneBody}
+            />
+          </button>
         </>
       )}
       {/* Token tray is anchored at its settled (walnut-tray) position. The
