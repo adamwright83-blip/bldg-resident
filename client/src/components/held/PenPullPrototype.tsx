@@ -1839,25 +1839,25 @@ function HeldCourierGesture({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[84] overflow-hidden">
+    <div className="pointer-events-none absolute inset-0 z-[132] overflow-visible">
       {status === "dispatching" && !prefersReducedMotion && (
         <>
           <motion.div
             aria-hidden="true"
-            animate={{ x: ["118vw", "48vw", "-55vw"], opacity: [0, 0.28, 0] }}
-            className="absolute left-0 top-[42%] h-8 w-[46%] rounded-full bg-[#5f3a16]/22 blur-[10px]"
-            initial={{ x: "118vw", opacity: 0 }}
+            animate={{ x: ["110vw", "44vw", "-58vw"], opacity: [0, 0.34, 0] }}
+            className="absolute left-0 top-[44%] h-10 w-[52%] rounded-full bg-[#5f3a16]/24 blur-[12px]"
+            initial={{ x: "110vw", opacity: 0 }}
             transition={{ duration: 2.75, ease: [0.42, 0, 0.25, 1] }}
           />
           <motion.button
             aria-label="Open courier satchel note"
             animate={{
-              x: ["118vw", "42vw", "-64vw"],
-              y: [14, 4, -10],
-              rotate: [0.7, -0.6, 0.5],
+              x: ["110vw", "38vw", "-68vw"],
+              y: [16, 5, -12],
+              rotate: [0.8, -0.7, 0.6],
             }}
-            className="pointer-events-auto absolute left-0 top-[25%] z-[2] h-[230px] w-[190px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
-            initial={{ x: "118vw", y: 14, rotate: 0.7 }}
+            className="pointer-events-auto absolute left-0 top-[22%] z-[2] h-[min(42dvh,290px)] w-[min(52vw,240px)] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            initial={{ x: "110vw", y: 16, rotate: 0.8 }}
             onAnimationComplete={onDispatchComplete}
             onClick={() => onOpenSlip("summary")}
             transition={{
@@ -1870,7 +1870,7 @@ function HeldCourierGesture({
             <motion.img
               alt=""
               animate={{ y: [0, -3, 1, -2, 0] }}
-              className="h-full w-full object-contain drop-shadow-[0_18px_18px_rgba(52,31,12,0.18)]"
+              className="h-full w-full object-contain opacity-100 drop-shadow-[0_20px_22px_rgba(52,31,12,0.22)]"
               draggable={false}
               src={HELD_ASSETS.courierHorseOutbound}
               transition={{ duration: 0.9, ease: "easeInOut", repeat: Infinity }}
@@ -1882,7 +1882,7 @@ function HeldCourierGesture({
       {status === "courier_out" && (
         <button
           aria-label="Open courier dispatch slip"
-          className="pointer-events-auto absolute left-[-42px] top-[41%] z-[3] h-[96px] w-[118px] touch-none border-0 bg-transparent p-0 opacity-90 outline-none transition-[filter,opacity] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+          className="pointer-events-auto absolute left-[-28px] top-[41%] z-[3] h-[72px] w-[88px] touch-none border-0 bg-transparent p-0 opacity-[0.88] outline-none transition-[filter,opacity] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
           onClick={() => onOpenSlip("summary")}
           onContextMenu={event => event.preventDefault()}
           onPointerCancel={finishTailDrag}
@@ -2405,19 +2405,6 @@ function HeldTransformingState({
         </section>
       )}
 
-      {isSettled && courierStatus !== "idle" && (
-        <HeldCourierGesture
-          message={courierMessage}
-          onDispatchComplete={() => setCourierStatus("courier_out")}
-          onOpenSlip={openCourierSlip}
-          serviceLabel={courierServiceLabel}
-          slipMode={courierSlipMode}
-          slipOpen={courierSlipOpen}
-          status={courierStatus}
-          onCloseSlip={() => setCourierSlipOpen(false)}
-        />
-      )}
-
       {isSettled && (
         <form
           className={`absolute bottom-[27.2%] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
@@ -2545,27 +2532,19 @@ function HeldTransformingState({
           </button>
         </>
       )}
-      {/* THE MORPH. The token cluster is anchored directly OVER the drawing
-          card (top-[19%], same width) so that during the clay beat the clay
-          tokens condense in over the exact spot where the ink line just was —
-          the line blurs out as the tokens fade in, a true in-place cross-fade.
-          During the settle beat the whole cluster drops the full distance down
-          the page (translateY) and clusters (scale) into the walnut cradle,
-          with an overshoot bounce. Anchoring once + transforming = no teleport. */}
+      {/* Token tray anchors at the walnut cradle when settled. During the clay
+          beat tokens condense above the drawing, then glide down into the tray. */}
       <div
-        className="pointer-events-none absolute left-1/2 top-[19%] z-[115] h-[40%] w-[66%]"
-        style={{
-          transform: isSettled
-            ? "translate(-50%, 47dvh) scale(0.5)"
-            : "translate(-50%, 0) scale(1)",
-          transition: "transform 820ms cubic-bezier(0.34, 1.42, 0.6, 1)",
-          willChange: "transform",
-        }}
+        className={`absolute left-1/2 -translate-x-1/2 ${
+          isSettled ? "bottom-[3.8%] z-[115] h-[13%] w-[43%]" : "bottom-[35%] z-20 h-[32%] w-[88%]"
+        }`}
       >
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className="pointer-events-auto absolute h-[76px] w-[76px] object-contain"
+            className={`pointer-events-auto absolute ${
+              isSettled ? "h-[52px] w-[52px]" : "h-[80px] w-[80px]"
+            }`}
             key={`${token.src}-${index}`}
             onClick={event => {
               if (longPressOpenedRef.current) {
@@ -2585,31 +2564,40 @@ function HeldTransformingState({
             style={{
               left: `${tokenPositions[index]?.left ?? 50}%`,
               top: `${tokenPositions[index]?.top ?? 50}%`,
-              // The token sits at its layout spot over the drawing. During the
-              // clay beat it fades + scales up from a ghost into solid matter,
-              // staggered so the cluster condenses one piece at a time. Its cast
-              // shadow blooms only once it has dropped into the cradle (settle).
-              transform: `translate(-50%, -50%) scale(${isInk ? 0.7 : 1})`,
+              transform: `translate(-50%, calc(-50% + ${isSettled ? 0 : -112}px)) scale(${isInk ? 0.6 : 1})`,
               opacity: isInk ? 0 : 1,
-              filter: isSettled
-                ? "drop-shadow(0 11px 14px rgba(42,28,16,0.22))"
-                : "drop-shadow(0 3px 4px rgba(42,28,16,0))",
               transition:
-                "transform 520ms cubic-bezier(0.34, 1.5, 0.64, 1), opacity 480ms ease-out, filter 320ms ease-out",
-              transitionDelay: isInk ? "0ms" : `${index * 130}ms`,
-              willChange: "transform, opacity, filter",
+                "transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease-out",
+              transitionDelay: `${index * 90}ms`,
+              willChange: "transform, opacity",
             }}
             type="button"
           >
             <img
               alt=""
-              className="h-full w-full object-contain"
+              className={`h-full w-full object-contain ${
+                isSettled
+                  ? "drop-shadow-[0_10px_12px_rgba(42,28,16,0.28)]"
+                  : "drop-shadow-[0_6px_8px_rgba(42,28,16,0.16)]"
+              }`}
               draggable={false}
               src={token.src}
             />
           </button>
         ))}
       </div>
+      {isSettled && courierStatus !== "idle" && (
+        <HeldCourierGesture
+          message={courierMessage}
+          onDispatchComplete={() => setCourierStatus("courier_out")}
+          onCloseSlip={() => setCourierSlipOpen(false)}
+          onOpenSlip={openCourierSlip}
+          serviceLabel={courierServiceLabel}
+          slipMode={courierSlipMode}
+          slipOpen={courierSlipOpen}
+          status={courierStatus}
+        />
+      )}
       <AnimatePresence>
         {selectedToken?.type === "laundry_pickup" ? (
           <LaundryServiceDetail key="laundry-vitrine" onClose={() => setSelectedToken(null)} />
