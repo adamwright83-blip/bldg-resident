@@ -337,7 +337,10 @@ export function buildPostOrderChiefOfStaffCopy(
     services = inferServicesFromText(request);
   }
 
-  const opening = "I’ve taken in the request — I’m moving on it.";
+  const hasLaundry = services.some(s => isLaundry(normalizeType(s.type)));
+  const opening = hasLaundry
+    ? "I have laundry booked with LAUNDRY BUTLER for tomorrow morning, 7–9am pickup, with same-day return expected between 7–9pm."
+    : "I’ve taken in the request — I’m moving on it.";
   const subhead =
     services.length > 1
       ? "Here’s where each piece sits — I’ll only come back to you when something needs a yes."

@@ -1865,7 +1865,7 @@ function HeldCourierGesture({
             animate={{ x: ["110vw", "44vw", "-58vw"], opacity: [0, 0.34, 0] }}
             className="absolute left-0 top-[44%] h-10 w-[52%] rounded-full bg-[#5f3a16]/24 blur-[12px]"
             initial={{ x: "110vw", opacity: 0 }}
-            transition={{ duration: 3.25, ease: [0.42, 0, 0.25, 1] }}
+            transition={{ duration: 6.5, ease: [0.42, 0, 0.25, 1] }}
           />
           <motion.button
             aria-label="Open courier satchel note"
@@ -1879,7 +1879,7 @@ function HeldCourierGesture({
             onAnimationComplete={onDispatchComplete}
             onClick={() => onOpenSlip("summary")}
             transition={{
-              duration: 3.25,
+              duration: 6.5,
               ease: [0.42, 0, 0.25, 1],
               times: [0, 0.56, 1],
             }}
@@ -2101,6 +2101,30 @@ function HeldTransformingState({
   }, [services]);
   const isInk = phase === "ink";
   const isSettled = phase === "settle";
+  const hasTriggeredInitialCourier = useRef(false);
+  useEffect(() => {
+    if (!isSettled) return;
+    if (hasTriggeredInitialCourier.current) return;
+
+    if (displayRequest) {
+      const normalized = displayRequest.toLowerCase().replace(/\s+/g, " ").trim();
+      const hasLaundry = /\b(laundry|wash|dry clean|dry-clean|clothes|hamper)\b/.test(normalized);
+      const isLaundryScheduleChange =
+        (hasLaundry || /\b(laundry|butler|they)\b/.test(normalized)) &&
+        (/\b(earlier|sooner|later|move|change|switch|reschedule|adjust)\b/i.test(normalized) ||
+         (/\b(5\s*pm|5|8\s*am|8)\b/.test(normalized) && /\b(deliver|return|bring|get|pickup|pick up|need|have)\b/.test(normalized)));
+
+      if (isLaundryScheduleChange) {
+        hasTriggeredInitialCourier.current = true;
+        setCourierMessage(displayRequest);
+        setCourierThreadLabel("LAUNDRY BUTLER");
+        setCourierStateLabel("Awaiting outside reply.");
+        setCourierSlipOpen(false);
+        setCourierSlipMode("summary");
+        setCourierStatus("dispatching");
+      }
+    }
+  }, [isSettled, displayRequest]);
   const tokens = getTokenAssets(activeServices, displayRequest);
   const drawing = getHeldCompositePath(displayRequest, activeServices);
   // Post-order narration is built entirely from the active request + parsed
@@ -2383,11 +2407,9 @@ function HeldTransformingState({
           } ${
             courierStatus === "dispatching"
               ? "opacity-[0.62]"
-              : phoneReply
-                ? "opacity-0 blur-[4px]"
-                : isPhoneEngaged
-                  ? "opacity-[0.76]"
-                  : "opacity-100"
+              : isPhoneEngaged
+                ? "opacity-0 blur-[8px] pointer-events-none"
+                : "opacity-100"
           }`}
         >
           <PlanLine
