@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
+import Vault from "@/pages/Vault";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -44,7 +45,16 @@ type PenPullPrototypeProps = {
 const HELD_ASSETS = {
   composerTray: "/held/audiomode-nursery-tray.png",
   crest: "/held/crest-h-flat.png",
+  courierEnvelope: "/held/held_courier_envelope.png",
+  courierHorseOutbound: "/held/held_courier_horse_outbound.png",
+  courierHorseReturn: "/held/held_courier_horse_return.png",
+  courierNote: "/held/held_courier_note.png",
+  courierSatchel: "/held/held_courier_satchel.png",
+  courierTail: "/held/held_courier_tail.png",
+  courierTailGlow: "/held/held_courier_tail_glow.png",
   galleryBench: "/held/nursery-cradle.png",
+  labyrinthBoard: "/held/held_labyrinth_board.png",
+  labyrinthKnob: "/held/held_labyrinth_knob.png",
   laundryProvider: "/held/laundry-butler-provider.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
@@ -144,6 +154,31 @@ const PHONE_ENGAGE_THRESHOLD_Y = -32;
 const PHONE_ENGAGED_Y = -68;
 const PHONE_ENGAGED_X = -22;
 
+type LabyrinthPanel = "receipts" | "payment" | null;
+type CourierStatus = "idle" | "dispatching" | "courier_out";
+type CourierSlipMode = "summary" | "detail";
+
+type LabyrinthCategory = {
+  id: "receipts" | "payment" | "account" | "residence" | "preferences" | "profile";
+  label: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  active?: boolean;
+};
+
+const LABYRINTH_CATEGORIES: LabyrinthCategory[] = [
+  { id: "receipts", label: "Receipts", left: 20.5, top: 9.8, width: 22.6, height: 17.8, active: true },
+  { id: "payment", label: "Payment", left: 63.2, top: 9.7, width: 21.4, height: 17.5, active: true },
+  { id: "account", label: "Account", left: 42.3, top: 35.1, width: 20.7, height: 17.3 },
+  { id: "residence", label: "Residence", left: 18.8, top: 65.3, width: 24, height: 18.6 },
+  { id: "preferences", label: "Preferences", left: 63.5, top: 65.3, width: 23.2, height: 18.8 },
+  { id: "profile", label: "Profile", left: 46.2, top: 79.5, width: 14.9, height: 12.4 },
+];
+
+const COURIER_DISPATCH_TEXT = "Understood. I’m sending word now.";
+
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -201,6 +236,8 @@ export default function PenPullPrototype({
   const [pendingOrderRequest, setPendingOrderRequest] = useState("");
   const [pendingOrderServices, setPendingOrderServices] = useState<HeldParsedService[]>([]);
   const [speechTranscript, setSpeechTranscript] = useState("");
+  const [labyrinthOpen, setLabyrinthOpen] = useState(false);
+  const [labyrinthPanel, setLabyrinthPanel] = useState<LabyrinthPanel>(null);
   const [typedCommandStatus, setTypedCommandStatus] = useState<
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
@@ -608,6 +645,8 @@ export default function PenPullPrototype({
     setLastOrderId(null);
     setPendingOrderRequest("");
     setPendingOrderServices([]);
+    setLabyrinthOpen(false);
+    setLabyrinthPanel(null);
     setTypedCommandStatus("idle");
     setMode("rest");
     physics.reset();
@@ -1074,9 +1113,269 @@ export default function PenPullPrototype({
               services={confirmedServices}
             />
           )}
+
+          <HeldLabyrinthDrawer
+            activePanel={labyrinthPanel}
+            isOpen={labyrinthOpen}
+            onClose={() => setLabyrinthOpen(false)}
+            onOpenChange={setLabyrinthOpen}
+            onSelectPanel={(panel) => {
+              setLabyrinthOpen(false);
+              setLabyrinthPanel(panel);
+            }}
+            visible={showHomeWorld}
+          />
+
+          <AnimatePresence>
+            {labyrinthPanel === "receipts" && (
+              <HeldLabyrinthReceiptsLayer
+                key="labyrinth-receipts"
+                onClose={() => setLabyrinthPanel(null)}
+              />
+            )}
+            {labyrinthPanel === "payment" && (
+              <HeldLabyrinthPaymentLayer
+                key="labyrinth-payment"
+                onClose={() => setLabyrinthPanel(null)}
+              />
+            )}
+          </AnimatePresence>
         </div>
       </section>
     </main>
+  );
+}
+
+function HeldLabyrinthDrawer({
+  activePanel,
+  isOpen,
+  onClose,
+  onOpenChange,
+  onSelectPanel,
+  visible,
+}: {
+  activePanel: LabyrinthPanel;
+  isOpen: boolean;
+  onClose: () => void;
+  onOpenChange: (isOpen: boolean) => void;
+  onSelectPanel: (panel: Exclude<LabyrinthPanel, null>) => void;
+  visible: boolean;
+}) {
+  const dragStartXRef = useRef<number | null>(null);
+  const [pressedCategory, setPressedCategory] = useState<string | null>(null);
+  const isHidden = !visible || activePanel !== null;
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen, onClose]);
+
+  if (isHidden) {
+    return null;
+  }
+
+  const startDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    dragStartXRef.current = event.clientX;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const finishDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const startX = dragStartXRef.current;
+    dragStartXRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can already be released on very quick taps.
+    }
+
+    if (startX === null) {
+      onOpenChange(true);
+      return;
+    }
+
+    const dx = event.clientX - startX;
+    if (isOpen && dx > 42) {
+      onOpenChange(false);
+      return;
+    }
+    if (!isOpen && dx < -10) {
+      onOpenChange(true);
+      return;
+    }
+
+    onOpenChange(!isOpen);
+  };
+
+  const handleCategorySelect = (category: LabyrinthCategory) => {
+    setPressedCategory(category.id);
+    window.setTimeout(() => setPressedCategory(null), 170);
+
+    if (category.active && (category.id === "receipts" || category.id === "payment")) {
+      window.navigator.vibrate?.(8);
+      onSelectPanel(category.id);
+    }
+  };
+
+  return (
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.button
+            aria-label="Close labyrinth"
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 z-[118] bg-[#20160e]/18"
+            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            onClick={onClose}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            type="button"
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        animate={
+          isOpen
+            ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
+            : { x: "42%", y: "-50%", rotateX: 0, scale: 0.94 }
+        }
+        className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
+        initial={false}
+        style={{ perspective: 1200 }}
+        transition={{
+          type: "spring",
+          stiffness: 116,
+          damping: 24,
+          mass: 1.25,
+        }}
+      >
+        <div
+          className="relative aspect-[1448/1086] w-full"
+          style={{
+            filter: "drop-shadow(0 30px 34px rgba(36, 22, 10, 0.28))",
+          }}
+        >
+          <img
+            alt=""
+            className="pointer-events-none h-full w-full select-none object-contain"
+            draggable={false}
+            src={HELD_ASSETS.labyrinthBoard}
+          />
+
+          <button
+            aria-label={isOpen ? "Close labyrinth drawer" : "Open labyrinth drawer"}
+            className="absolute left-[-7.2%] top-[38.5%] h-[24%] w-[18%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
+            onPointerDown={startDrag}
+            onPointerUp={finishDrag}
+            type="button"
+          />
+
+          {isOpen &&
+            LABYRINTH_CATEGORIES.map(category => (
+              <button
+                aria-label={category.active ? `Open ${category.label}` : category.label}
+                className="absolute rounded-[6px] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/55"
+                key={category.id}
+                onClick={() => handleCategorySelect(category)}
+                onPointerDown={() => setPressedCategory(category.id)}
+                onPointerLeave={() => setPressedCategory(null)}
+                onPointerUp={() => window.setTimeout(() => setPressedCategory(null), 120)}
+                style={{
+                  left: `${category.left}%`,
+                  top: `${category.top}%`,
+                  width: `${category.width}%`,
+                  height: `${category.height}%`,
+                  transform:
+                    pressedCategory === category.id
+                      ? "translateY(2px) scale(0.985)"
+                      : "translateY(0) scale(1)",
+                }}
+                type="button"
+              />
+            ))}
+        </div>
+      </motion.div>
+    </>
+  );
+}
+
+function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.section
+      animate={{ opacity: 1, x: 0 }}
+      className="absolute inset-0 z-[150] overflow-hidden bg-[#2c2824] text-[#f8efe3]"
+      exit={{ opacity: 0, x: 24 }}
+      initial={{ opacity: 0, x: 30 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <Vault initialTab="receipts" onBack={onClose} />
+    </motion.section>
+  );
+}
+
+function HeldLabyrinthPaymentLayer({ onClose }: { onClose: () => void }) {
+  const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
+  const user = profileData?.user || null;
+
+  return (
+    <motion.section
+      animate={{ opacity: 1, x: 0 }}
+      className="absolute inset-0 z-[150] overflow-hidden bg-[#f4ede0] text-[#2a2520]"
+      exit={{ opacity: 0, x: 24 }}
+      initial={{ opacity: 0, x: 30 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,252,246,0.78), rgba(244,237,224,0.94)), url(/held/held-paper-bg.png)",
+          backgroundPosition: "center",
+          backgroundSize: "cover, 420px 420px",
+        }}
+      />
+      <button
+        aria-label="Return to labyrinth"
+        className="absolute right-[7%] top-[6.5%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b8893c]/75 bg-[#fff8ec]/76 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        onClick={onClose}
+        type="button"
+      >
+        ‹
+      </button>
+      <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[18%]">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-[#7a6d5f]">
+          Labyrinth
+        </p>
+        <h1 className="mt-3 font-serif text-[44px] leading-none text-[#2a2520]">
+          Payment
+        </h1>
+        <p className="mt-3 max-w-[280px] font-serif text-[17px] italic leading-6 text-[#594c3f]">
+          The card Held keeps on file for services at your residence.
+        </p>
+
+        <section className="mt-8 rounded-[6px] border border-[#d3be96]/80 bg-[#fff8ec]/76 p-5 shadow-[0_22px_36px_rgba(50,35,20,0.14)] backdrop-blur-[2px]">
+          <div className="mb-5 flex items-center justify-between border-b border-[#b8893c]/24 pb-4">
+            <span className="text-[10px] uppercase tracking-[0.24em] text-[#6f6254]">
+              Current card
+            </span>
+            <span className="font-serif text-[18px] text-[#2a2520]">
+              {user?.paymentMethodSaved ? `•••• ${user.cardLast4 || "****"}` : "Not saved"}
+            </span>
+          </div>
+          <Elements stripe={stripePromise}>
+            <PaymentMethodForm onSuccess={onClose} />
+          </Elements>
+        </section>
+      </div>
+    </motion.section>
   );
 }
 
@@ -1438,6 +1737,262 @@ function HeldPhoneListeningGlyph() {
   );
 }
 
+function HeldCourierGesture({
+  message,
+  onCloseSlip,
+  onDispatchComplete,
+  onOpenSlip,
+  serviceLabel,
+  slipMode,
+  slipOpen,
+  status,
+}: {
+  message: string;
+  onCloseSlip: () => void;
+  onDispatchComplete: () => void;
+  onOpenSlip: (mode: CourierSlipMode) => void;
+  serviceLabel: string;
+  slipMode: CourierSlipMode;
+  slipOpen: boolean;
+  status: CourierStatus;
+}) {
+  const [tailDragX, setTailDragX] = useState(0);
+  const [tailPointerId, setTailPointerId] = useState<number | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const tailLongPressTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReducedMotion(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (tailLongPressTimerRef.current !== null) {
+        window.clearTimeout(tailLongPressTimerRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (status !== "dispatching" || !prefersReducedMotion) return undefined;
+    const timer = window.setTimeout(onDispatchComplete, 360);
+    return () => window.clearTimeout(timer);
+  }, [onDispatchComplete, prefersReducedMotion, status]);
+
+  useEffect(() => {
+    if (!slipOpen) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseSlip();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onCloseSlip, slipOpen]);
+
+  const startTailDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    setTailPointerId(event.pointerId);
+    setTailDragX(0);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (tailLongPressTimerRef.current !== null) {
+      window.clearTimeout(tailLongPressTimerRef.current);
+    }
+    tailLongPressTimerRef.current = window.setTimeout(() => {
+      onOpenSlip("detail");
+      tailLongPressTimerRef.current = null;
+    }, 520);
+  };
+
+  const moveTailDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (tailPointerId !== event.pointerId) return;
+    if (Math.abs(event.movementX) > 3 && tailLongPressTimerRef.current !== null) {
+      window.clearTimeout(tailLongPressTimerRef.current);
+      tailLongPressTimerRef.current = null;
+    }
+    const nextX = clampNumber(event.movementX + tailDragX, 0, 86);
+    setTailDragX(nextX);
+    if (nextX > 34) {
+      onOpenSlip("summary");
+    }
+  };
+
+  const finishTailDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (tailPointerId !== event.pointerId) return;
+    if (tailLongPressTimerRef.current !== null) {
+      window.clearTimeout(tailLongPressTimerRef.current);
+      tailLongPressTimerRef.current = null;
+    }
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // The pointer can already be released on a quick tap.
+    }
+    if (tailDragX > 28) {
+      onOpenSlip("summary");
+    }
+    setTailPointerId(null);
+    window.setTimeout(() => setTailDragX(0), 120);
+  };
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[84] overflow-hidden">
+      {status === "dispatching" && !prefersReducedMotion && (
+        <>
+          <motion.div
+            aria-hidden="true"
+            animate={{ x: ["118vw", "48vw", "-55vw"], opacity: [0, 0.28, 0] }}
+            className="absolute left-0 top-[42%] h-8 w-[46%] rounded-full bg-[#5f3a16]/22 blur-[10px]"
+            initial={{ x: "118vw", opacity: 0 }}
+            transition={{ duration: 2.75, ease: [0.42, 0, 0.25, 1] }}
+          />
+          <motion.button
+            aria-label="Open courier satchel note"
+            animate={{
+              x: ["118vw", "42vw", "-64vw"],
+              y: [14, 4, -10],
+              rotate: [0.7, -0.6, 0.5],
+            }}
+            className="pointer-events-auto absolute left-0 top-[25%] z-[2] h-[230px] w-[190px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            initial={{ x: "118vw", y: 14, rotate: 0.7 }}
+            onAnimationComplete={onDispatchComplete}
+            onClick={() => onOpenSlip("summary")}
+            transition={{
+              duration: 2.75,
+              ease: [0.42, 0, 0.25, 1],
+              times: [0, 0.56, 1],
+            }}
+            type="button"
+          >
+            <motion.img
+              alt=""
+              animate={{ y: [0, -3, 1, -2, 0] }}
+              className="h-full w-full object-contain drop-shadow-[0_18px_18px_rgba(52,31,12,0.18)]"
+              draggable={false}
+              src={HELD_ASSETS.courierHorseOutbound}
+              transition={{ duration: 0.9, ease: "easeInOut", repeat: Infinity }}
+            />
+          </motion.button>
+        </>
+      )}
+
+      {status === "courier_out" && (
+        <button
+          aria-label="Open courier dispatch slip"
+          className="pointer-events-auto absolute left-[-42px] top-[41%] z-[3] h-[96px] w-[118px] touch-none border-0 bg-transparent p-0 opacity-90 outline-none transition-[filter,opacity] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+          onClick={() => onOpenSlip("summary")}
+          onContextMenu={event => event.preventDefault()}
+          onPointerCancel={finishTailDrag}
+          onPointerDown={startTailDrag}
+          onPointerMove={moveTailDrag}
+          onPointerUp={finishTailDrag}
+          onPointerLeave={() => {
+            if (tailPointerId === null) return;
+            if (tailLongPressTimerRef.current !== null) {
+              window.clearTimeout(tailLongPressTimerRef.current);
+              tailLongPressTimerRef.current = null;
+            }
+            setTailPointerId(null);
+            setTailDragX(0);
+          }}
+          onTouchStart={() => window.navigator.vibrate?.(4)}
+          style={{ transform: `translateX(${tailDragX}px)` }}
+          type="button"
+        >
+          <img
+            alt=""
+            className="h-full w-full object-contain drop-shadow-[0_8px_10px_rgba(54,34,16,0.18)]"
+            draggable={false}
+            src={HELD_ASSETS.courierTail}
+          />
+        </button>
+      )}
+
+      {slipOpen && (
+        <motion.section
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          className="pointer-events-auto absolute left-[8%] right-[8%] top-[27%] z-[12] text-[#2a2520]"
+          exit={{ opacity: 0, x: -14 }}
+          initial={{ opacity: 0, x: -18, y: 4 }}
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="relative min-h-[252px] overflow-hidden rounded-[3px] border border-[#c39a54]/42 bg-[#fff8ea]/88 px-5 py-5 shadow-[0_18px_34px_rgba(52,33,15,0.18)] backdrop-blur-[1px]">
+            <img
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-16 -right-14 w-[220px] rotate-[-4deg] opacity-[0.08]"
+              draggable={false}
+              src={HELD_ASSETS.courierNote}
+            />
+            <img
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-10 -top-8 w-[148px] rotate-[8deg] opacity-20"
+              draggable={false}
+              src={HELD_ASSETS.courierEnvelope}
+            />
+            <img
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-8 right-2 w-[96px] rotate-[6deg] opacity-25"
+              draggable={false}
+              src={HELD_ASSETS.courierSatchel}
+            />
+            <div className="relative z-10">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
+                Courier slip
+              </p>
+              <h2 className="mt-2 font-serif text-[25px] italic leading-tight text-[#2a2520]">
+                Word is out.
+              </h2>
+              <div className="mt-4 border-y border-[#b8893c]/24 py-3">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-[#6f6254]">
+                  Asked on your behalf
+                </p>
+                <p className="mt-2 font-serif text-[16px] italic leading-6 text-[#2f2923]">
+                  “{message}”
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-[34%_1fr] gap-3 text-[12px] leading-5 text-[#56483b]">
+                <span className="uppercase tracking-[0.16em] text-[#7a6d5f]">Thread</span>
+                <span className="font-serif text-[15px] italic text-[#2f2923]">{serviceLabel}</span>
+                <span className="uppercase tracking-[0.16em] text-[#7a6d5f]">State</span>
+                <span className="font-serif text-[15px] italic text-[#2f2923]">
+                  Awaiting outside reply.
+                </span>
+              </div>
+              {slipMode === "detail" && (
+                <p className="mt-4 border-t border-[#b8893c]/20 pt-3 font-serif text-[14px] italic leading-5 text-[#5c4c3e]">
+                  Held has not received a vendor or operator answer yet, so nothing is marked confirmed.
+                </p>
+              )}
+              <div className="mt-5 flex items-center justify-between gap-4">
+                <button
+                  className="font-serif text-[14px] italic text-[#8d6828] underline decoration-[#b8893c]/35 underline-offset-4"
+                  onClick={() => onOpenSlip(slipMode === "detail" ? "summary" : "detail")}
+                  type="button"
+                >
+                  {slipMode === "detail" ? "Less detail" : "Operational truth"}
+                </button>
+                <button
+                  className="font-serif text-[14px] italic text-[#8d6828]"
+                  onClick={onCloseSlip}
+                  type="button"
+                >
+                  Fold
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      )}
+    </div>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -1477,6 +2032,10 @@ function HeldTransformingState({
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [phoneReply, setPhoneReply] = useState("");
   const [phoneReplyStatus, setPhoneReplyStatus] = useState<"idle" | "thinking">("idle");
+  const [courierStatus, setCourierStatus] = useState<CourierStatus>("idle");
+  const [courierMessage, setCourierMessage] = useState("");
+  const [courierSlipOpen, setCourierSlipOpen] = useState(false);
+  const [courierSlipMode, setCourierSlipMode] = useState<CourierSlipMode>("summary");
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
@@ -1519,6 +2078,7 @@ function HeldTransformingState({
   );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
+  const courierServiceLabel = getCourierServiceLabel(services, displayRequest);
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -1641,6 +2201,19 @@ function HeldTransformingState({
 
     console.debug("[HELD] local phone follow-up captured", nextValue);
     setComposerValue("");
+    const needsCourierDispatch = shouldTriggerCourierDispatch(nextValue);
+
+    if (needsCourierDispatch) {
+      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+      setCourierMessage(nextValue);
+      setCourierSlipOpen(false);
+      setCourierSlipMode("summary");
+      setCourierStatus("dispatching");
+      setPhoneReply(COURIER_DISPATCH_TEXT);
+      setPhoneReplyStatus("idle");
+      return;
+    }
+
     setPhoneReply("Held is listening.");
     setPhoneReplyStatus("thinking");
 
@@ -1699,6 +2272,11 @@ function HeldTransformingState({
     onDebugLaundryVitrineOpened?.();
   }, [debugOpenLaundryVitrine, onDebugLaundryVitrineOpened]);
 
+  const openCourierSlip = (mode: CourierSlipMode) => {
+    setCourierSlipMode(mode);
+    setCourierSlipOpen(true);
+  };
+
   return (
     <div
       className={`absolute inset-0 overflow-hidden bg-[#f4ecdf] ${
@@ -1736,7 +2314,7 @@ function HeldTransformingState({
 
       <section
         className={`absolute left-1/2 top-[18%] z-10 w-[66%] -translate-x-1/2 transition-all duration-700 ${
-          isInk ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
+          isInk ? "translate-y-0 opacity-100 scale-100" : "-translate-y-3 opacity-0 scale-[0.88]"
         }`}
       >
         <div
@@ -1747,6 +2325,10 @@ function HeldTransformingState({
             aria-hidden="true"
             className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
             preserveAspectRatio="xMidYMid meet"
+            style={{
+              filter: phase === "clay" ? "blur(1.5px)" : "none",
+              transition: "filter 200ms ease-in-out",
+            }}
             viewBox="0 0 430 260"
           >
             {ghostPaths.map((d, index) => (
@@ -1754,17 +2336,17 @@ function HeldTransformingState({
                 key={index}
                 d={d}
                 fill="none"
-                stroke="#1A1A1A"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 style={{
-                  // Ink -> Clay: the line thickens & darkens (gathering into
-                  // matter) the instant it is asked to become a token, then
+                  // Ink -> Clay: the line thickens, warms, & darkens (gathering
+                  // into matter) the instant it is asked to become a token, then
                   // dissolves as the clay condenses out of it.
                   opacity: isInk ? 0.18 : phase === "clay" ? 0.4 : 0,
+                  stroke: phase === "clay" ? "#5c3d20" : "#1A1A1A",
                   strokeWidth: isInk ? 2 : 4.5,
                   transition:
-                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1)",
+                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1), stroke 320ms ease-out",
                 }}
               />
             ))}
@@ -1775,7 +2357,13 @@ function HeldTransformingState({
       {isSettled && (
         <section
           className={`pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520] transition-opacity duration-200 ${
-            phoneReply ? "opacity-[0.08]" : isPhoneEngaged ? "opacity-[0.76]" : "opacity-100"
+            courierStatus === "dispatching"
+              ? "opacity-[0.62]"
+              : phoneReply
+                ? "opacity-[0.08]"
+                : isPhoneEngaged
+                  ? "opacity-[0.76]"
+                  : "opacity-100"
           }`}
         >
           <PlanLine
@@ -1815,6 +2403,19 @@ function HeldTransformingState({
             text={phoneReply}
           />
         </section>
+      )}
+
+      {isSettled && courierStatus !== "idle" && (
+        <HeldCourierGesture
+          message={courierMessage}
+          onDispatchComplete={() => setCourierStatus("courier_out")}
+          onOpenSlip={openCourierSlip}
+          serviceLabel={courierServiceLabel}
+          slipMode={courierSlipMode}
+          slipOpen={courierSlipOpen}
+          status={courierStatus}
+          onCloseSlip={() => setCourierSlipOpen(false)}
+        />
       )}
 
       {isSettled && (
@@ -1957,7 +2558,7 @@ function HeldTransformingState({
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className={`absolute object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] ${
+            className={`absolute object-contain ${
               isSettled ? "h-[44px] w-[44px]" : "h-[80px] w-[80px]"
             }`}
             key={`${token.src}-${index}`}
@@ -1981,16 +2582,20 @@ function HeldTransformingState({
               top: `${tokenPositions[index]?.top ?? 50}%`,
               // Clay beat: token condenses out of the ink right where it was
               //   drawn (lifted ~112px to the drawing center, small -> full,
-              //   fades in, no spin — it is forming, not flying).
-              // Settle beat: token glides DOWN into the walnut tray (offset->0).
+              //   fades in ghostly, no spin — it is forming, not flying).
+              // Settle beat: token spring-drops into the walnut tray (offset->0)
+              //   with a slight overshoot bounce, and its shadow fades in as it lands.
               transform: `translate(-50%, calc(-50% + ${
                 isSettled ? 0 : -112
               }px)) scale(${isInk ? 0.6 : 1})`,
-              opacity: isInk ? 0 : 1,
+              opacity: isInk ? 0 : phase === "clay" ? 0.65 : 1,
+              filter: isSettled
+                ? "drop-shadow(0 12px 16px rgba(42,28,16,0.2))"
+                : "drop-shadow(0 4px 4px rgba(42,28,16,0))",
               transition:
-                "transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease-out",
+                "transform 580ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 420ms ease-out, filter 300ms ease-out",
               transitionDelay: `${index * 90}ms`,
-              willChange: "transform, opacity",
+              willChange: "transform, opacity, filter",
             }}
             type="button"
           >
@@ -2513,6 +3118,46 @@ function getServiceLabel(type: string) {
   if (type === "ride_airport") return "Airport pickup";
   if (type === "haircut") return "Haircut";
   return "Service";
+}
+
+function getCourierServiceLabel(services: HeldParsedService[], request: string) {
+  const serviceLabels = getTokenAssets(services, request)
+    .map(token => getServiceLabel(token.type))
+    .filter(Boolean);
+  const unique = Array.from(new Set(serviceLabels));
+  if (unique.length === 0) return "Current service thread";
+  if (unique.length === 1) return `${unique[0]} thread`;
+  return `${unique.slice(0, -1).join(", ")} and ${unique[unique.length - 1]} threads`;
+}
+
+function shouldTriggerCourierDispatch(message: string) {
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+
+  const localOnly =
+    /\b(status|already booked|what did i book|what's booked|what is booked|how much|price|cost|receipt|total)\b/.test(
+      normalized
+    ) ||
+    /\b(what time|when is|when's|pickup time|return time)\b/.test(normalized);
+  const explicitOutbound =
+    /\b(ask|tell|message|send|notify|let)\b.*\b(them|vendor|provider|driver|groomer|detailer|cleaner|laundry|maria|jordan|concierge)\b/.test(
+      normalized
+    );
+  const timingChange =
+    /\b(can|could|would|is it possible|please)\b.*\b(come|return|arrive|pickup|pick up|do|move|change|switch|make it)\b/.test(
+      normalized
+    ) &&
+    /\b(earlier|later|before|after|instead|morning|afternoon|evening|today|tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|3|11)\b/.test(
+      normalized
+    );
+  const handoffNote =
+    /\b(leave|left|bag|keys|door|front desk|concierge|instructions?|note)\b/.test(normalized) &&
+    /\b(tell|let|driver|them|vendor|provider|laundry|groomer|detailer)\b/.test(normalized);
+  const namedProvider = /\b(maria|jordan|groomer|detailer|driver|provider|vendor)\b/.test(normalized);
+
+  if (explicitOutbound || timingChange || handoffNote) return true;
+  if (namedProvider && !localOnly) return true;
+  return false;
 }
 
 function inferServicesFromRequest(request: string): HeldParsedService[] {

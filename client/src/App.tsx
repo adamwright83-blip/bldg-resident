@@ -49,8 +49,13 @@ function PageSwitch() {
     location.startsWith("/marketplace/") ||
     location.startsWith("/pulse")
   ) {
+    const hideHeldDebugControls =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("clean") === "1";
     return (
-      <PenPullPrototype showDebugControls={location === "/held-pen-prototype"} />
+      <PenPullPrototype
+        showDebugControls={location === "/held-pen-prototype" && !hideHeldDebugControls}
+      />
     );
   }
 
