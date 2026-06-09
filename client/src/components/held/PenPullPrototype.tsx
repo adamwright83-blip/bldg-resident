@@ -2745,15 +2745,18 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
       />
       <button
         aria-label="Return to held home"
-        className="absolute right-[7%] top-[6.4%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b8893c]/80 bg-[#fff8ec]/62 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        className="absolute left-[7%] top-[6.2%] z-30 flex h-11 items-center gap-2 rounded-full border border-[#b8893c]/80 bg-[#fff8ec]/78 px-4 font-serif text-[15px] italic text-[#8d6322] shadow-[0_8px_18px_rgba(68,45,20,0.12)] backdrop-blur-[2px] transition-transform active:scale-[0.98]"
         onClick={onClose}
         type="button"
       >
-        H
+        <span aria-hidden="true" className="text-[22px] leading-none">
+          ‹
+        </span>
+        <span>Back to Held</span>
       </button>
       <motion.div
         animate={{ opacity: 1, y: 0 }}
-        className="absolute inset-x-[7.5%] bottom-0 top-[3.5%] z-20 overflow-y-auto pb-[178px] pr-1"
+        className="absolute inset-x-[7.5%] bottom-0 top-[12%] z-20 overflow-y-auto pb-[178px] pr-1"
         exit={{ opacity: 0, y: 28 }}
         initial={{ opacity: 0, y: 18 }}
         transition={{ delay: 0.05, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
