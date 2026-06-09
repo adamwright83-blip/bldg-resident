@@ -2042,16 +2042,22 @@ function HeldTransformingState({
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
   //             materializing at the drawing's position (upper paper)
   //   settle -> the clay tokens travel down and settle into the walnut tray
-  const [phase, setPhase] = useState<"ink" | "clay" | "settle">(isHeld ? "settle" : "clay");
+  const [phase, setPhase] = useState<"ink" | "clay" | "settle">(isHeld ? "settle" : "ink");
   useEffect(() => {
-    if (!isHeld) {
-      // Stay at clay — the drawing card (ink phase) is already shown in
-      // HeldArtistDrawing; we don't need to replay it here as a static ghost.
+    // The ink->clay->settle ceremony is driven by its own timeline on mount,
+    // NOT by the backend (isHeld). This keeps the morph snappy and continuous:
+    //   ink   (0–650ms)   the Picasso line rests on the paper
+    //   clay  (650ms)     the line blurs & dissolves AS the clay tokens
+    //                     condense in over the exact same spot (the morph)
+    //   settle(1450ms)    the formed clay tokens drop into the walnut cradle
+    if (isHeld) {
+      setPhase("settle");
       return;
     }
-    // Clay is already active. Settle the tokens into the tray.
-    const toSettle = window.setTimeout(() => setPhase("settle"), 780);
+    const toClay = window.setTimeout(() => setPhase("clay"), 650);
+    const toSettle = window.setTimeout(() => setPhase("settle"), 1450);
     return () => {
+      window.clearTimeout(toClay);
       window.clearTimeout(toSettle);
     };
   }, [isHeld]);
@@ -2465,7 +2471,7 @@ function HeldTransformingState({
       <img
         alt=""
         className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 select-none transition-all duration-700 ${
-          isSettled
+          !isInk
             ? "bottom-[0.5%] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
             : "bottom-[-6%] w-[108%] opacity-80 drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)]"
         }`}
@@ -2539,22 +2545,27 @@ function HeldTransformingState({
           </button>
         </>
       )}
-      {/* Token tray is anchored at its settled (walnut-tray) position. The
-          clay condenses ~330px higher (at the drawing) during the clay beat,
-          then each token glides DOWN into the tray during the settle beat.
-          Using transform translateY (not top/bottom:auto) keeps it gliding
-          — no teleport. */}
+      {/* THE MORPH. The token cluster is anchored directly OVER the drawing
+          card (top-[19%], same width) so that during the clay beat the clay
+          tokens condense in over the exact spot where the ink line just was —
+          the line blurs out as the tokens fade in, a true in-place cross-fade.
+          During the settle beat the whole cluster drops the full distance down
+          the page (translateY) and clusters (scale) into the walnut cradle,
+          with an overshoot bounce. Anchoring once + transforming = no teleport. */}
       <div
-        className={`absolute left-1/2 -translate-x-1/2 ${
-          isSettled ? "bottom-[3.8%] z-[115] h-[13%] w-[43%]" : "bottom-[35%] z-20 h-[32%] w-[88%]"
-        }`}
+        className="pointer-events-none absolute left-1/2 top-[19%] z-[115] h-[40%] w-[66%]"
+        style={{
+          transform: isSettled
+            ? "translate(-50%, 47dvh) scale(0.5)"
+            : "translate(-50%, 0) scale(1)",
+          transition: "transform 820ms cubic-bezier(0.34, 1.42, 0.6, 1)",
+          willChange: "transform",
+        }}
       >
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className={`absolute object-contain ${
-              isSettled ? "h-[44px] w-[44px]" : "h-[80px] w-[80px]"
-            }`}
+            className="pointer-events-auto absolute h-[76px] w-[76px] object-contain"
             key={`${token.src}-${index}`}
             onClick={event => {
               if (longPressOpenedRef.current) {
@@ -2574,21 +2585,18 @@ function HeldTransformingState({
             style={{
               left: `${tokenPositions[index]?.left ?? 50}%`,
               top: `${tokenPositions[index]?.top ?? 50}%`,
-              // Clay beat: token condenses out of the ink right where it was
-              //   drawn (lifted ~112px to the drawing center, small -> full,
-              //   fades in ghostly, no spin — it is forming, not flying).
-              // Settle beat: token spring-drops into the walnut tray (offset->0)
-              //   with a slight overshoot bounce, and its shadow fades in as it lands.
-              transform: `translate(-50%, calc(-50% + ${
-                isSettled ? 0 : -112
-              }px)) scale(${isInk ? 0.6 : 1})`,
-              opacity: isInk ? 0 : phase === "clay" ? 0.65 : 1,
+              // The token sits at its layout spot over the drawing. During the
+              // clay beat it fades + scales up from a ghost into solid matter,
+              // staggered so the cluster condenses one piece at a time. Its cast
+              // shadow blooms only once it has dropped into the cradle (settle).
+              transform: `translate(-50%, -50%) scale(${isInk ? 0.7 : 1})`,
+              opacity: isInk ? 0 : 1,
               filter: isSettled
-                ? "drop-shadow(0 12px 16px rgba(42,28,16,0.2))"
-                : "drop-shadow(0 4px 4px rgba(42,28,16,0))",
+                ? "drop-shadow(0 11px 14px rgba(42,28,16,0.22))"
+                : "drop-shadow(0 3px 4px rgba(42,28,16,0))",
               transition:
-                "transform 580ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 420ms ease-out, filter 300ms ease-out",
-              transitionDelay: `${index * 90}ms`,
+                "transform 520ms cubic-bezier(0.34, 1.5, 0.64, 1), opacity 480ms ease-out, filter 320ms ease-out",
+              transitionDelay: isInk ? "0ms" : `${index * 130}ms`,
               willChange: "transform, opacity, filter",
             }}
             type="button"
