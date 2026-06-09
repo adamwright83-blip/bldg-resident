@@ -447,8 +447,9 @@ export default function PenPullPrototype({
       const nextServices = services.length
         ? services
         : inferServicesFromRequest(`${request} ${response.booking.service ?? ""}`);
+      const bookedServices = markBookableDemoServices(nextServices, request, orderId);
       setConfirmedRequest(request);
-      setConfirmedServices(nextServices);
+      setConfirmedServices(bookedServices);
       setPendingOrderRequest("");
       setPendingOrderServices([]);
       setLastOrderId(orderId);
@@ -694,8 +695,8 @@ export default function PenPullPrototype({
   }, [showDebugControls]);
 
   return (
-    <main className="min-h-dvh overflow-hidden bg-[#151311] text-[#2C2824] sm:flex sm:items-center sm:justify-center sm:p-4">
-      <section className="relative h-dvh w-full max-w-[430px] sm:h-[min(844px,calc(100dvh-32px))] sm:min-h-[720px] sm:overflow-hidden sm:rounded-[48px] sm:border-[10px] sm:border-[#11100e] sm:shadow-[0_24px_80px_rgba(0,0,0,0.44)]">
+    <main className="min-h-dvh overflow-hidden bg-[#f4ecdf] text-[#2C2824] md:flex md:items-center md:justify-center md:bg-[#151311] md:p-4">
+      <section className="relative h-dvh w-full md:h-[min(844px,calc(100dvh-32px))] md:min-h-[720px] md:max-w-[430px] md:overflow-hidden md:rounded-[48px] md:border-[10px] md:border-[#11100e] md:shadow-[0_24px_80px_rgba(0,0,0,0.44)]">
         <div
           ref={stageRef}
           className="relative h-full w-full overflow-hidden bg-[#f4ecdf]"
@@ -710,7 +711,7 @@ export default function PenPullPrototype({
             WebkitUserSelect: "none",
           }}
         >
-          <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black sm:block" />
+          <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black md:block" />
 
           {showHomeWorld && (
             <img
@@ -1743,6 +1744,7 @@ function HeldCourierGesture({
   onDispatchComplete,
   onOpenSlip,
   serviceLabel,
+  stateLabel,
   slipMode,
   slipOpen,
   status,
@@ -1752,6 +1754,7 @@ function HeldCourierGesture({
   onDispatchComplete: () => void;
   onOpenSlip: (mode: CourierSlipMode) => void;
   serviceLabel: string;
+  stateLabel: string;
   slipMode: CourierSlipMode;
   slipOpen: boolean;
   status: CourierStatus;
@@ -1960,9 +1963,7 @@ function HeldCourierGesture({
                 <span className="uppercase tracking-[0.16em] text-[#7a6d5f]">Thread</span>
                 <span className="font-serif text-[15px] italic text-[#2f2923]">{serviceLabel}</span>
                 <span className="uppercase tracking-[0.16em] text-[#7a6d5f]">State</span>
-                <span className="font-serif text-[15px] italic text-[#2f2923]">
-                  Awaiting outside reply.
-                </span>
+                <span className="font-serif text-[15px] italic text-[#2f2923]">{stateLabel}</span>
               </div>
               {slipMode === "detail" && (
                 <p className="mt-4 border-t border-[#b8893c]/20 pt-3 font-serif text-[14px] italic leading-5 text-[#5c4c3e]">
@@ -2026,6 +2027,7 @@ function HeldTransformingState({
     didDrag: false,
   });
   const [selectedToken, setSelectedToken] = useState<HeldTokenAsset | null>(null);
+  const [activeServices, setActiveServices] = useState<HeldParsedService[]>(services);
   const [isPhoneEngaged, setIsPhoneEngaged] = useState(false);
   const [phoneDragY, setPhoneDragY] = useState(0);
   const [composerValue, setComposerValue] = useState("");
@@ -2034,6 +2036,8 @@ function HeldTransformingState({
   const [phoneReplyStatus, setPhoneReplyStatus] = useState<"idle" | "thinking">("idle");
   const [courierStatus, setCourierStatus] = useState<CourierStatus>("idle");
   const [courierMessage, setCourierMessage] = useState("");
+  const [courierThreadLabel, setCourierThreadLabel] = useState("Current service thread");
+  const [courierStateLabel, setCourierStateLabel] = useState("Awaiting outside reply.");
   const [courierSlipOpen, setCourierSlipOpen] = useState(false);
   const [courierSlipMode, setCourierSlipMode] = useState<CourierSlipMode>("summary");
   const composerInputRef = useRef<HTMLInputElement | null>(null);
@@ -2061,24 +2065,27 @@ function HeldTransformingState({
       window.clearTimeout(toSettle);
     };
   }, [isHeld]);
+  useEffect(() => {
+    setActiveServices(services);
+  }, [services]);
   const isInk = phase === "ink";
   const isSettled = phase === "settle";
-  const tokens = getTokenAssets(services, displayRequest);
-  const drawing = getHeldCompositePath(displayRequest, services);
+  const tokens = getTokenAssets(activeServices, displayRequest);
+  const drawing = getHeldCompositePath(displayRequest, activeServices);
   // Post-order narration is built entirely from the active request + parsed
   // service metadata — no scripted scenario copy. Every fact comes from real
   // plan state or safe generic fallback language.
   const postOrderCopy = useMemo(
     () =>
       buildPostOrderChiefOfStaffCopy(
-        { displayRequest, services: services as PostOrderServiceMeta[] },
+        { displayRequest, services: activeServices as PostOrderServiceMeta[] },
         displayRequest,
       ),
-    [displayRequest, services],
+    [activeServices, displayRequest],
   );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
-  const courierServiceLabel = getCourierServiceLabel(services, displayRequest);
+  const courierServiceLabel = courierThreadLabel || getCourierServiceLabel(activeServices, displayRequest);
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -2176,7 +2183,7 @@ function HeldTransformingState({
         displayRequest,
         message,
         previousMessages: submittedFollowupsRef.current,
-        services,
+        services: activeServices,
       }),
       headers: {
         "Content-Type": "application/json",
@@ -2201,32 +2208,24 @@ function HeldTransformingState({
 
     console.debug("[HELD] local phone follow-up captured", nextValue);
     setComposerValue("");
-    const needsCourierDispatch = shouldTriggerCourierDispatch(nextValue);
+    const followup = buildReactivePhoneFollowup(nextValue, activeServices, displayRequest);
+    submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
 
-    if (needsCourierDispatch) {
-      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+    if (followup.nextServices) {
+      setActiveServices(followup.nextServices);
+    }
+
+    setPhoneReply(followup.reply);
+    setPhoneReplyStatus("idle");
+
+    if (followup.triggersCourier) {
       setCourierMessage(nextValue);
+      setCourierThreadLabel(followup.threadLabel);
+      setCourierStateLabel(followup.courierStateLabel);
       setCourierSlipOpen(false);
       setCourierSlipMode("summary");
       setCourierStatus("dispatching");
-      setPhoneReply(COURIER_DISPATCH_TEXT);
-      setPhoneReplyStatus("idle");
       return;
-    }
-
-    setPhoneReply("Held is listening.");
-    setPhoneReplyStatus("thinking");
-
-    try {
-      const reply = await fetchPhoneReply(nextValue);
-      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
-      setPhoneReply(reply);
-    } catch (error) {
-      console.error("[HELD] phone follow-up failed", error);
-      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
-      setPhoneReply(buildPhoneFallbackReply(nextValue));
-    } finally {
-      setPhoneReplyStatus("idle");
     }
   };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
@@ -2593,6 +2592,7 @@ function HeldTransformingState({
           onCloseSlip={() => setCourierSlipOpen(false)}
           onOpenSlip={openCourierSlip}
           serviceLabel={courierServiceLabel}
+          stateLabel={courierStateLabel}
           slipMode={courierSlipMode}
           slipOpen={courierSlipOpen}
           status={courierStatus}
@@ -3121,6 +3121,199 @@ function getCourierServiceLabel(services: HeldParsedService[], request: string) 
   if (unique.length === 0) return "Current service thread";
   if (unique.length === 1) return `${unique[0]} thread`;
   return `${unique.slice(0, -1).join(", ")} and ${unique[unique.length - 1]} threads`;
+}
+
+function markBookableDemoServices(
+  services: HeldParsedService[],
+  request: string,
+  orderId: number,
+): HeldParsedService[] {
+  return services.map(service => {
+    if (service.type === "laundry_pickup") {
+      return { ...service, orderId, status: service.status ?? "booked" };
+    }
+
+    if (service.type === "car_detail") {
+      return {
+        ...service,
+        orderId: service.orderId ?? `manual-car-detail-${orderId}`,
+        status: service.status ?? "booked_internal",
+        deadline: service.deadline ?? inferDeadlinePhrase(request),
+      };
+    }
+
+    return service;
+  });
+}
+
+function buildReactivePhoneFollowup(
+  message: string,
+  services: HeldParsedService[],
+  displayRequest: string,
+): {
+  courierStateLabel: string;
+  nextServices?: HeldParsedService[];
+  reply: string;
+  threadLabel: string;
+  triggersCourier: boolean;
+} {
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  const hasCarDetail = /\b(car detail|auto detail|detail my car|detail the car|car wash|wash my car|car cleaned|clean my car|detail the prius|detail the tesla|detail the suv|detail my suv)\b/.test(
+    normalized,
+  );
+  const hasLaundry = /\b(laundry|wash|dry clean|dry-clean|clothes|hamper)\b/.test(normalized);
+  const asksStatus = /\b(what'?s already booked|what is already booked|what'?s booked|what is booked|already booked|status|recap|where (are|is) we|what do i have)\b/.test(
+    normalized,
+  );
+  const asksPrice = /\b(price|cost|how much|total|receipt)\b/.test(normalized);
+  const gratitude = /\b(thanks|thank you|appreciate|perfect|great|ok|okay)\b/.test(normalized);
+  const timingChange =
+    /\b(earlier|sooner|later|before|after|move|change|switch|reschedule|come back|return|pickup|pick up)\b/.test(
+      normalized,
+    ) && (hasLaundry || hasCarDetail || /\b(driver|vendor|provider|groomer|detailer)\b/.test(normalized));
+
+  if (asksStatus) {
+    return {
+      courierStateLabel: "Local status only.",
+      reply: buildPlanStatusReply(services),
+      threadLabel: "Current plan",
+      triggersCourier: false,
+    };
+  }
+
+  if (asksPrice) {
+    return {
+      courierStateLabel: "Local status only.",
+      reply: "I’ll keep pricing tied to the actual service records and receipts. Nothing is changing from this question.",
+      threadLabel: "Current plan",
+      triggersCourier: false,
+    };
+  }
+
+  if (gratitude) {
+    return {
+      courierStateLabel: "Local acknowledgement.",
+      reply: "Of course. I have the plan held and I’ll come back only when something needs your yes.",
+      threadLabel: "Current plan",
+      triggersCourier: false,
+    };
+  }
+
+  if (hasCarDetail) {
+    const existing = services.some(service => service.type === "car_detail");
+    const nextServices = existing
+      ? services.map(service =>
+          service.type === "car_detail"
+            ? {
+                ...service,
+                orderId: service.orderId ?? "manual-car-detail-phone",
+                status: service.status ?? "booked_internal",
+                deadline: service.deadline ?? inferDeadlinePhrase(`${displayRequest} ${message}`),
+              }
+            : service,
+        )
+      : [
+          ...services,
+          {
+            type: "car_detail",
+            orderId: "manual-car-detail-phone",
+            status: "booked_internal",
+            deadline: inferDeadlinePhrase(`${displayRequest} ${message}`),
+          },
+        ];
+
+    return {
+      courierStateLabel: "Booked internally / awaiting operator coordination.",
+      nextServices,
+      reply: hasGuestDeadline(`${displayRequest} ${message}`)
+        ? "I’m adding car detail to the plan and scheduling it before your guest arrives."
+        : "I’m adding car detail to the plan and booking it for operator coordination.",
+      threadLabel: "Car detail",
+      triggersCourier: true,
+    };
+  }
+
+  if (timingChange && hasLaundry) {
+    return {
+      courierStateLabel: "Awaiting outside reply.",
+      reply: "Understood. I’m asking for an earlier laundry return window now.",
+      threadLabel: "Laundry",
+      triggersCourier: true,
+    };
+  }
+
+  if (shouldTriggerCourierDispatch(message)) {
+    const threadLabel = inferFollowupThreadLabel(message, services, displayRequest);
+    return {
+      courierStateLabel: "Awaiting outside reply.",
+      reply: `Understood. I’m sending that to the ${threadLabel.toLowerCase()} thread now.`,
+      threadLabel,
+      triggersCourier: true,
+    };
+  }
+
+  return {
+    courierStateLabel: "Local note only.",
+    reply: "I heard you. I’ll keep that with the current plan without marking anything confirmed.",
+    threadLabel: "Current plan",
+    triggersCourier: false,
+  };
+}
+
+function buildPlanStatusReply(services: HeldParsedService[]) {
+  const booked = services
+    .filter(service => isBookedService(service))
+    .map(service => getServiceLabel(service.type).replace(" pickup", ""));
+  const pending = services
+    .filter(service => !isBookedService(service))
+    .map(service => getServiceLabel(service.type).replace(" pickup", ""));
+
+  if (booked.length && pending.length) {
+    return `${formatList(booked)} ${booked.length === 1 ? "is" : "are"} booked. ${formatList(pending)} ${
+      pending.length === 1 ? "is" : "are"
+    } still awaiting confirmation.`;
+  }
+  if (booked.length) {
+    return `${formatList(booked)} ${booked.length === 1 ? "is" : "are"} booked.`;
+  }
+  if (pending.length) {
+    return `I have the plan, but ${formatList(pending)} ${
+      pending.length === 1 ? "still needs" : "still need"
+    } confirmation before I can call it booked.`;
+  }
+  return "I have the plan, but nothing is marked booked yet.";
+}
+
+function isBookedService(service: HeldParsedService) {
+  const status = service.status?.toLowerCase();
+  return status === "booked" || status === "confirmed" || status === "booked_internal" || service.orderId != null;
+}
+
+function formatList(items: string[]) {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+function inferFollowupThreadLabel(message: string, services: HeldParsedService[], request: string) {
+  const normalized = message.toLowerCase();
+  if (/\blaundry|wash|dry clean|dry-clean|clothes|hamper\b/.test(normalized)) return "Laundry";
+  if (/\bcar|detail|wash my car|car wash\b/.test(normalized)) return "Car detail";
+  if (/\bdog|groom\b/.test(normalized)) return "Grooming";
+  return getCourierServiceLabel(services, request).replace(/ thread(s)?$/i, "");
+}
+
+function inferDeadlinePhrase(text: string) {
+  const normalized = text.toLowerCase();
+  if (/\b(before|by)\b.*\b(wednesday|thursday|friday|saturday|sunday|monday|tuesday)\b/.test(normalized)) {
+    return "before the requested deadline";
+  }
+  if (hasGuestDeadline(text)) return "before your guest arrives";
+  return null;
+}
+
+function hasGuestDeadline(text: string) {
+  return /\b(step\s*mother|stepmother|mother|father|guest|guests|arrives?|visits?|coming)\b/i.test(text);
 }
 
 function shouldTriggerCourierDispatch(message: string) {

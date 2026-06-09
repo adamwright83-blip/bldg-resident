@@ -207,7 +207,7 @@ function groomingRow(
     const windowPhrase = primary.window?.trim() ? ` ${primary.window.trim()} open` : " an open window";
     let body = `${primary.name} has${windowPhrase}. I’m holding that window`;
     if (candidates.length > 1 && candidates[1]?.name) {
-      body += ` unless ${candidates[1].name} is non-negotiable.`;
+      body += ` unless you choose ${candidates[1].name} instead.`;
     } else {
       body += " unless you tell me otherwise.";
     }
@@ -227,6 +227,13 @@ function coordinatedRow(
   label: string,
   noun: string,
 ): PostOrderServiceRow {
+  if (isDetail(normalizeType(service.type)) && service.status === "booked_internal") {
+    return {
+      label,
+      body: "I have car detail booked internally and queued for operator coordination.",
+    };
+  }
+
   // Non-laundry coordinated services never claim booked/confirmed unless a real
   // provider confirmation exists in the plan/order state.
   if (hasRealConfirmation(service)) {
@@ -275,25 +282,26 @@ export function buildPostOrderChiefOfStaffCopy(
 
   const serviceRows = services.map(service => buildRow(service, request, safePlan));
 
-  // Closing acknowledges the most uncertain coordinated provider boundary only
-  // when real candidate metadata supplies a named alternative. Otherwise it is
-  // safe generic language that invents nothing.
   const closing = buildClosing(services);
 
   return { opening, subhead, serviceRows, closing };
 }
 
 function buildClosing(services: PostOrderServiceMeta[]): string {
-  for (const service of services) {
+  const hasPendingCoordination = services.some(service => {
     const type = normalizeType(service.type);
-    if (!COORDINATED_TYPES.has(type) && !isGrooming(type) && !isDetail(type) && !isTransport(type) && !isHaircut(type)) {
-      continue;
-    }
-    const candidates = service.providerCandidates ?? [];
-    const alternate = candidates[1]?.name;
-    if (alternate) {
-      return `I’ll only reach back if ${alternate} is non-negotiable. Otherwise, consider it handled.`;
-    }
-  }
-  return "Nothing else needed right now.";
+    return (
+      (COORDINATED_TYPES.has(type) ||
+        isGrooming(type) ||
+        isDetail(type) ||
+        isTransport(type) ||
+        isHaircut(type)) &&
+      !hasRealConfirmation(service) &&
+      service.status !== "booked_internal"
+    );
+  });
+
+  return hasPendingCoordination
+    ? "I’ll keep the open threads moving and come back only when something needs a real decision."
+    : "Nothing else needed right now.";
 }

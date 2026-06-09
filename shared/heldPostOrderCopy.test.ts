@@ -182,7 +182,8 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     expect(row.body).toContain("Maria");
     expect(row.body).toContain("Saturday at 11");
     expect(row.body).toContain("Jordan");
-    expect(copy.closing).toContain("Jordan");
+    expect(copy.closing).not.toContain("Jordan");
+    expect(copy.closing).not.toMatch(/consider it handled|non-negotiable/i);
   });
 
   it("renders THEO label only when dogName metadata exists", () => {
