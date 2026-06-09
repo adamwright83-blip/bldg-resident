@@ -2400,7 +2400,7 @@ function HeldTransformingState({
 
       {isSettled && (
         <section
-          className={`pointer-events-none absolute top-[12.5%] z-20 flex h-[52%] flex-col text-[#2a2520] transition-all duration-200 ${
+          className={`pointer-events-auto absolute top-[11%] bottom-[38%] z-20 flex flex-col text-[#2a2520] transition-all duration-200 overflow-y-auto no-scrollbar ${
             courierRailActive
               ? "left-[54px] right-[8%] items-start text-left"
               : "left-1/2 w-[84%] -translate-x-1/2 items-center text-center"
