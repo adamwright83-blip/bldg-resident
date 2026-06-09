@@ -2054,8 +2054,8 @@ function HeldTransformingState({
       setPhase("settle");
       return;
     }
-    const toClay = window.setTimeout(() => setPhase("clay"), 650);
-    const toSettle = window.setTimeout(() => setPhase("settle"), 1450);
+    const toClay = window.setTimeout(() => setPhase("clay"), 600);
+    const toSettle = window.setTimeout(() => setPhase("settle"), 1600);
     return () => {
       window.clearTimeout(toClay);
       window.clearTimeout(toSettle);
@@ -2314,7 +2314,7 @@ function HeldTransformingState({
 
       <section
         className={`absolute left-1/2 top-[18%] z-10 w-[66%] -translate-x-1/2 transition-all duration-700 ${
-          isInk ? "translate-y-0 opacity-100 scale-100" : "-translate-y-3 opacity-0 scale-[0.88]"
+          !isSettled ? "translate-y-0 opacity-100 scale-100" : "-translate-y-3 opacity-0 scale-[0.92]"
         }`}
       >
         <div
@@ -2325,31 +2325,51 @@ function HeldTransformingState({
             aria-hidden="true"
             className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
             preserveAspectRatio="xMidYMid meet"
-            style={{
-              filter: phase === "clay" ? "blur(1.5px)" : "none",
-              transition: "filter 200ms ease-in-out",
-            }}
             viewBox="0 0 430 260"
           >
-            {ghostPaths.map((d, index) => (
-              <path
-                key={index}
-                d={d}
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{
-                  // Ink -> Clay: the line thickens, warms, & darkens (gathering
-                  // into matter) the instant it is asked to become a token, then
-                  // dissolves as the clay condenses out of it.
-                  opacity: isInk ? 0.18 : phase === "clay" ? 0.4 : 0,
-                  stroke: phase === "clay" ? "#5c3d20" : "#1A1A1A",
-                  strokeWidth: isInk ? 2 : 4.5,
-                  transition:
-                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1), stroke 320ms ease-out",
-                }}
-              />
-            ))}
+            <defs>
+              {/* Gooey / metaball filter: blur, then a high-contrast alpha
+                  channel so that wherever the (fattened) strokes overlap they
+                  fuse into a single organic mass. This is what turns the thin
+                  Picasso lines into clay PUTTY when strokeWidth floods up. */}
+              <filter id="held-goo" x="-40%" y="-40%" width="180%" height="180%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="goo-blur" />
+                <feColorMatrix
+                  in="goo-blur"
+                  type="matrix"
+                  values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9"
+                  result="goo"
+                />
+                <feBlend in="SourceGraphic" in2="goo" />
+              </filter>
+            </defs>
+            <g
+              style={{
+                filter: isInk ? "none" : "url(#held-goo)",
+              }}
+            >
+              {ghostPaths.map((d, index) => (
+                <path
+                  key={index}
+                  d={d}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    // Ink: crisp thin Picasso line.
+                    // Clay: the stroke FLOODS (2 -> 26) and warms to terracotta;
+                    //   under the goo filter the fattened lines melt and fuse
+                    //   into clay putty blobs — the visible morph.
+                    // Settle: the putty dissolves away as the formed tokens drop.
+                    opacity: isInk ? 0.2 : phase === "clay" ? 0.95 : 0,
+                    stroke: isInk ? "#1A1A1A" : "#7c5230",
+                    strokeWidth: isInk ? 2 : 26,
+                    transition:
+                      "opacity 520ms ease-out, stroke-width 640ms cubic-bezier(0.5, 0, 0.25, 1.1), stroke 420ms ease-out",
+                  }}
+                />
+              ))}
+            </g>
           </svg>
         </div>
       </section>
@@ -2596,7 +2616,10 @@ function HeldTransformingState({
                 : "drop-shadow(0 3px 4px rgba(42,28,16,0))",
               transition:
                 "transform 520ms cubic-bezier(0.34, 1.5, 0.64, 1), opacity 480ms ease-out, filter 320ms ease-out",
-              transitionDelay: isInk ? "0ms" : `${index * 130}ms`,
+              // Hold the tokens back ~420ms into the clay beat so the putty
+              // forms first and the solid figures appear to resolve OUT of it,
+              // one at a time.
+              transitionDelay: isInk ? "0ms" : `${420 + index * 110}ms`,
               willChange: "transform, opacity, filter",
             }}
             type="button"
