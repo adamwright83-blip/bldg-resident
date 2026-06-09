@@ -2282,7 +2282,7 @@ function HeldTransformingState({
 
       <section
         className={`absolute left-1/2 top-[18%] z-10 w-[66%] -translate-x-1/2 transition-all duration-700 ${
-          isInk ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
+          isInk ? "translate-y-0 opacity-100 scale-100" : "-translate-y-3 opacity-0 scale-[0.88]"
         }`}
       >
         <div
@@ -2293,6 +2293,10 @@ function HeldTransformingState({
             aria-hidden="true"
             className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
             preserveAspectRatio="xMidYMid meet"
+            style={{
+              filter: phase === "clay" ? "blur(1.5px)" : "none",
+              transition: "filter 200ms ease-in-out",
+            }}
             viewBox="0 0 430 260"
           >
             {ghostPaths.map((d, index) => (
@@ -2300,17 +2304,17 @@ function HeldTransformingState({
                 key={index}
                 d={d}
                 fill="none"
-                stroke="#1A1A1A"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 style={{
-                  // Ink -> Clay: the line thickens & darkens (gathering into
-                  // matter) the instant it is asked to become a token, then
+                  // Ink -> Clay: the line thickens, warms, & darkens (gathering
+                  // into matter) the instant it is asked to become a token, then
                   // dissolves as the clay condenses out of it.
                   opacity: isInk ? 0.18 : phase === "clay" ? 0.4 : 0,
+                  stroke: phase === "clay" ? "#5c3d20" : "#1A1A1A",
                   strokeWidth: isInk ? 2 : 4.5,
                   transition:
-                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1)",
+                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1), stroke 320ms ease-out",
                 }}
               />
             ))}
@@ -2524,7 +2528,7 @@ function HeldTransformingState({
         {tokens.map((token, index) => (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className={`absolute object-contain drop-shadow-[0_12px_16px_rgba(42,28,16,0.2)] ${
+            className={`absolute object-contain ${
               isSettled ? "h-[44px] w-[44px]" : "h-[80px] w-[80px]"
             }`}
             key={`${token.src}-${index}`}
@@ -2548,16 +2552,20 @@ function HeldTransformingState({
               top: `${tokenPositions[index]?.top ?? 50}%`,
               // Clay beat: token condenses out of the ink right where it was
               //   drawn (lifted ~112px to the drawing center, small -> full,
-              //   fades in, no spin — it is forming, not flying).
-              // Settle beat: token glides DOWN into the walnut tray (offset->0).
+              //   fades in ghostly, no spin — it is forming, not flying).
+              // Settle beat: token spring-drops into the walnut tray (offset->0)
+              //   with a slight overshoot bounce, and its shadow fades in as it lands.
               transform: `translate(-50%, calc(-50% + ${
                 isSettled ? 0 : -112
               }px)) scale(${isInk ? 0.6 : 1})`,
-              opacity: isInk ? 0 : 1,
+              opacity: isInk ? 0 : phase === "clay" ? 0.65 : 1,
+              filter: isSettled
+                ? "drop-shadow(0 12px 16px rgba(42,28,16,0.2))"
+                : "drop-shadow(0 4px 4px rgba(42,28,16,0))",
               transition:
-                "transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease-out",
+                "transform 580ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 420ms ease-out, filter 300ms ease-out",
               transitionDelay: `${index * 90}ms`,
-              willChange: "transform, opacity",
+              willChange: "transform, opacity, filter",
             }}
             type="button"
           >
