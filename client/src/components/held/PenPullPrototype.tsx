@@ -2042,22 +2042,16 @@ function HeldTransformingState({
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
   //             materializing at the drawing's position (upper paper)
   //   settle -> the clay tokens travel down and settle into the walnut tray
-  const [phase, setPhase] = useState<"ink" | "clay" | "settle">(isHeld ? "settle" : "ink");
+  const [phase, setPhase] = useState<"ink" | "clay" | "settle">(isHeld ? "settle" : "clay");
   useEffect(() => {
     if (!isHeld) {
-      setPhase("ink");
+      // Stay at clay — the drawing card (ink phase) is already shown in
+      // HeldArtistDrawing; we don't need to replay it here as a static ghost.
       return;
     }
-    // Beat 1: ink becomes clay (next frame so the ink state paints first).
-    let raf = window.requestAnimationFrame(() => {
-      raf = window.requestAnimationFrame(() => setPhase("clay"));
-    });
-    // Beat 2: tokens settle into the tray AFTER the clay has fully formed at
-    // the drawing (clay scale/fade transition is ~560ms; hold a touch longer
-    // so the "it became a thing" beat is legible before it travels down).
+    // Clay is already active. Settle the tokens into the tray.
     const toSettle = window.setTimeout(() => setPhase("settle"), 780);
     return () => {
-      window.cancelAnimationFrame(raf);
       window.clearTimeout(toSettle);
     };
   }, [isHeld]);
