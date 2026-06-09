@@ -29,6 +29,7 @@ import { usePenPhysics, type PenUnlockInfo } from "./usePenPhysics";
 import type { PenPhysicsTuningOverrides } from "./penPhysics";
 import {
   buildPostOrderChiefOfStaffCopy,
+  type PostOrderServiceDetail,
   type PostOrderServiceMeta,
 } from "@shared/heldPostOrderCopy";
 import {
@@ -1685,39 +1686,44 @@ function PlanLine({
 
 function PlanServiceRow({
   delay,
+  details,
   label,
-  text,
+  onHighlight,
+  serviceType,
 }: {
   delay: number;
+  details: PostOrderServiceDetail[];
   label: string;
-  text: string;
+  onHighlight?: (serviceType: string) => void;
+  serviceType: string;
 }) {
-  const [streamed, setStreamed] = useState("");
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    let raf: number;
-    const timer = setTimeout(() => {
-      setVisible(true);
-      let startTime = 0;
-      const tick = (ts: number) => {
-        if (!startTime) startTime = ts;
-        const chars = Math.min(Math.floor((ts - startTime) / PLAN_MS_PER_CHAR), text.length);
-        setStreamed(text.slice(0, chars));
-        if (chars < text.length) raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    }, delay);
-    return () => {
-      clearTimeout(timer);
-      cancelAnimationFrame(raf);
-    };
-  }, [text, delay]);
+    const timer = setTimeout(() => setVisible(true), delay);
+    return () => clearTimeout(timer);
+  }, [delay]);
   if (!visible) return null;
   return (
-    <p className="mt-3 font-serif text-[15.5px] italic leading-[1.32] text-[#2a2520]">
-      <span className="not-italic text-[12px] uppercase tracking-[0.18em]">{label}</span>
-      {streamed}
-    </p>
+    <button
+      className="group mt-4 w-full touch-manipulation rounded-[2px] text-left transition-[transform,background] duration-200 active:scale-[0.995] active:bg-[#f7edd8]/35"
+      onPointerDown={() => onHighlight?.(serviceType)}
+      type="button"
+    >
+      <p className="text-[11px] uppercase tracking-[0.2em] text-[#5c4f42]">{label}</p>
+      <div className="mt-1.5 space-y-1">
+        {details.map(detail => (
+          <p
+            className="font-sans text-[12.5px] leading-[1.45] text-[#342e28]"
+            key={`${detail.label}-${detail.value}`}
+          >
+            <span className="text-[10px] uppercase tracking-[0.12em] text-[#7a6d5f]">
+              {detail.label}:
+            </span>{" "}
+            <span>{detail.value}</span>
+          </p>
+        ))}
+      </div>
+    </button>
   );
 }
 
@@ -1892,35 +1898,48 @@ function HeldCourierGesture({
       )}
 
       {status === "courier_out" && (
-        <button
-          aria-label="Open courier dispatch slip"
-          className="pointer-events-auto absolute left-[-28px] top-[41%] z-[3] h-[72px] w-[88px] touch-none border-0 bg-transparent p-0 opacity-[0.88] outline-none transition-[filter,opacity] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
-          onClick={() => onOpenSlip("summary")}
-          onContextMenu={event => event.preventDefault()}
-          onPointerCancel={finishTailDrag}
-          onPointerDown={startTailDrag}
-          onPointerMove={moveTailDrag}
-          onPointerUp={finishTailDrag}
-          onPointerLeave={() => {
-            if (tailPointerId === null) return;
-            if (tailLongPressTimerRef.current !== null) {
-              window.clearTimeout(tailLongPressTimerRef.current);
-              tailLongPressTimerRef.current = null;
-            }
-            setTailPointerId(null);
-            setTailDragX(0);
-          }}
-          onTouchStart={() => window.navigator.vibrate?.(4)}
-          style={{ transform: `translateX(${tailDragX}px)` }}
-          type="button"
-        >
-          <img
-            alt=""
-            className="h-full w-full object-contain drop-shadow-[0_8px_10px_rgba(54,34,16,0.18)]"
-            draggable={false}
-            src={HELD_ASSETS.courierTail}
-          />
-        </button>
+        <>
+          <aside
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-[calc(26%+env(safe-area-inset-bottom))] left-0 top-[11%] z-[3] w-[54px]"
+          >
+            <div className="absolute inset-y-3 right-0 w-px bg-[#b8893c]/14" />
+            <div className="absolute inset-y-4 left-[7px] w-[38px] rounded-r-[3px] bg-[linear-gradient(90deg,rgba(247,237,216,0.5),rgba(247,237,216,0))] shadow-[2px_0_10px_rgba(54,34,16,0.06)]" />
+          </aside>
+          <button
+            aria-label="Open courier dispatch slip"
+            className="pointer-events-auto absolute left-[5px] top-[40%] z-[4] h-[64px] w-[46px] touch-none border-0 bg-transparent p-0 opacity-[0.9] outline-none transition-[filter,opacity,transform] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            onClick={() => onOpenSlip("summary")}
+            onContextMenu={event => event.preventDefault()}
+            onPointerCancel={finishTailDrag}
+            onPointerDown={startTailDrag}
+            onPointerMove={moveTailDrag}
+            onPointerUp={finishTailDrag}
+            onPointerLeave={() => {
+              if (tailPointerId === null) return;
+              if (tailLongPressTimerRef.current !== null) {
+                window.clearTimeout(tailLongPressTimerRef.current);
+                tailLongPressTimerRef.current = null;
+              }
+              setTailPointerId(null);
+              setTailDragX(0);
+            }}
+            onTouchStart={() => window.navigator.vibrate?.(4)}
+            style={{ transform: `translateX(${tailDragX}px)` }}
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className="absolute -bottom-1 left-1/2 z-0 h-[5px] w-[72%] -translate-x-1/2 rounded-full bg-[#5f3a16]/16 blur-[4px]"
+            />
+            <img
+              alt=""
+              className="relative z-[1] h-full w-full object-contain drop-shadow-[0_7px_9px_rgba(54,34,16,0.24)]"
+              draggable={false}
+              src={HELD_ASSETS.courierTail}
+            />
+          </button>
+        </>
       )}
 
       {slipOpen && (
@@ -2050,6 +2069,8 @@ function HeldTransformingState({
   const [courierStateLabel, setCourierStateLabel] = useState("Awaiting outside reply.");
   const [courierSlipOpen, setCourierSlipOpen] = useState(false);
   const [courierSlipMode, setCourierSlipMode] = useState<CourierSlipMode>("summary");
+  const [highlightedServiceType, setHighlightedServiceType] = useState<string | null>(null);
+  const highlightTimerRef = useRef<number | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
@@ -2254,10 +2275,31 @@ function HeldTransformingState({
     setCourierSlipMode(mode);
     setCourierSlipOpen(true);
   };
+  const emphasizeServiceType = (serviceType: string) => {
+    setHighlightedServiceType(serviceType);
+    if (highlightTimerRef.current !== null) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedServiceType(current => (current === serviceType ? null : current));
+      highlightTimerRef.current = null;
+    }, 920);
+  };
+  const courierRailActive = courierStatus === "courier_out";
+  const hasActiveTrayWork = isSettled && tokens.length > 0;
+
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    },
+    []
+  );
 
   return (
     <div
-      className={`absolute inset-0 overflow-hidden bg-[#f4ecdf] ${
+      className={`absolute inset-0 overflow-hidden bg-[#f4ecdf] pb-[max(10px,env(safe-area-inset-bottom))] ${
         selectedToken ? "z-[120]" : "z-[85]"
       }`}
       onPointerDownCapture={event => {
@@ -2334,9 +2376,13 @@ function HeldTransformingState({
 
       {isSettled && (
         <section
-          className={`pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520] transition-opacity duration-200 ${
+          className={`pointer-events-none absolute top-[12.5%] z-20 flex h-[52%] flex-col text-[#2a2520] transition-opacity duration-200 ${
+            courierRailActive
+              ? "left-[54px] right-[8%] items-start text-left"
+              : "left-1/2 w-[84%] -translate-x-1/2 items-center text-center"
+          } ${
             courierStatus === "dispatching"
-              ? "opacity-0 blur-[4px]"
+              ? "opacity-[0.62]"
               : phoneReply
                 ? "opacity-0 blur-[4px]"
                 : isPhoneEngaged
@@ -2345,27 +2391,35 @@ function HeldTransformingState({
           }`}
         >
           <PlanLine
-            className="max-w-full font-serif text-[30px] italic leading-[1.22] text-[#2a2520]"
+            className={`max-w-full font-serif text-[30px] italic leading-[1.22] text-[#2a2520] ${
+              courierRailActive ? "pr-2" : ""
+            }`}
             delay={900}
             text={postOrderCopy.opening}
           />
           <PlanLine
-            className="mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520]"
+            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520] ${
+              courierRailActive ? "pr-2" : ""
+            }`}
             delay={4300}
             text={postOrderCopy.subhead}
           />
-          <div className="mt-5 w-full text-left">
+          <div className="pointer-events-auto mt-5 w-full text-left">
             {postOrderCopy.serviceRows.map((row, index) => (
               <PlanServiceRow
+                details={row.details}
                 key={`${row.label}-${index}`}
                 delay={8500 + index * 4800}
                 label={row.label}
-                text={` — ${row.body}`}
+                onHighlight={emphasizeServiceType}
+                serviceType={row.serviceType}
               />
             ))}
           </div>
           <PlanLine
-            className="mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b]"
+            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b] ${
+              courierRailActive ? "pr-2 text-left" : ""
+            }`}
             delay={8500 + postOrderCopy.serviceRows.length * 4800 + 1200}
             text={postOrderCopy.closing}
           />
@@ -2389,7 +2443,7 @@ function HeldTransformingState({
 
       {isSettled && (
         <form
-          className={`absolute bottom-[27.2%] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
+          className={`absolute bottom-[calc(27.2%+env(safe-area-inset-bottom))] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
             isPhoneEngaged
               ? "translate-y-0 opacity-100"
               : "pointer-events-none translate-y-[6px] opacity-0"
@@ -2436,7 +2490,7 @@ function HeldTransformingState({
       {isSettled && (
         <div
           aria-hidden="true"
-          className="absolute bottom-[24.5%] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
+          className="absolute bottom-[calc(24.5%+env(safe-area-inset-bottom))] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
         />
       )}
 
@@ -2444,7 +2498,7 @@ function HeldTransformingState({
         alt=""
         className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 select-none transition-all duration-700 ${
           !isInk
-            ? "bottom-[0.5%] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
+            ? "bottom-[calc(10px+env(safe-area-inset-bottom))] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
             : "bottom-[-6%] w-[108%] opacity-80 drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)]"
         }`}
         data-held-home-cradle="true"
@@ -2455,13 +2509,13 @@ function HeldTransformingState({
         <>
           <div
             aria-hidden="true"
-            className="absolute bottom-[6.5%] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
+            className="absolute bottom-[calc(6.5%+env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
           >
             H
           </div>
           <img
             alt=""
-            className="pointer-events-none absolute bottom-[5.7%] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
+            className="pointer-events-none absolute bottom-[calc(5.7%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
             draggable={false}
             src={penAssetSrc}
           />
@@ -2472,7 +2526,7 @@ function HeldTransformingState({
           <img
             alt=""
             aria-hidden="true"
-            className={`pointer-events-none absolute bottom-[1.1%] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
+            className={`pointer-events-none absolute bottom-[calc(12px+env(safe-area-inset-bottom))] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
               isPhoneEngaged ? "opacity-90" : "opacity-0"
             }`}
             draggable={false}
@@ -2486,8 +2540,12 @@ function HeldTransformingState({
           />
           <button
             aria-label="Lift phone to speak to Held"
-            className={`absolute bottom-[0.8%] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
-              isPhoneEngaged ? "drop-shadow-[0_12px_14px_rgba(44,28,14,0.24)]" : "drop-shadow-[0_8px_10px_rgba(44,28,14,0.18)]"
+            className={`group absolute bottom-[calc(10px+env(safe-area-inset-bottom))] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
+              isPhoneEngaged
+                ? "drop-shadow-[0_12px_14px_rgba(44,28,14,0.24)]"
+                : hasActiveTrayWork
+                  ? "drop-shadow-[0_10px_12px_rgba(184,137,60,0.16)]"
+                  : "drop-shadow-[0_8px_10px_rgba(44,28,14,0.18)]"
             }`}
             data-held-phone-interactive="true"
             data-held-phone-state={isPhoneEngaged ? "engaged" : "docked"}
@@ -2502,6 +2560,14 @@ function HeldTransformingState({
             }}
             type="button"
           >
+            {hasActiveTrayWork && !isPhoneEngaged && (
+              <motion.span
+                animate={{ opacity: [0.1, 0.26, 0.1] }}
+                aria-hidden="true"
+                className="pointer-events-none absolute left-[20px] top-[16px] h-[78px] w-[58px] rounded-[42%] bg-[radial-gradient(circle_at_28%_18%,rgba(255,244,214,0.62),transparent_70%)]"
+                transition={{ duration: 4.4, ease: "easeInOut", repeat: Infinity }}
+              />
+            )}
             <span
               aria-hidden="true"
               className={`absolute left-[36px] top-[28px] h-16 w-16 rounded-full border border-[#b8893c]/30 transition-opacity duration-200 ${
@@ -2521,15 +2587,20 @@ function HeldTransformingState({
           beat tokens condense above the drawing, then glide down into the tray. */}
       <div
         className={`absolute left-1/2 -translate-x-1/2 ${
-          isSettled ? "bottom-[3.8%] z-[115] h-[13%] w-[43%]" : "bottom-[35%] z-20 h-[32%] w-[88%]"
+          isSettled
+            ? "bottom-[calc(3.8%+env(safe-area-inset-bottom))] z-[115] h-[13%] w-[43%]"
+            : "bottom-[35%] z-20 h-[32%] w-[88%]"
         }`}
       >
-        {tokens.map((token, index) => (
+        {tokens.map((token, index) => {
+          const isEmphasized =
+            highlightedServiceType === token.type || selectedToken?.type === token.type;
+          return (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
-            className={`pointer-events-auto absolute ${
+            className={`pointer-events-auto absolute touch-manipulation transition-[transform,filter] duration-200 active:scale-[0.94] ${
               isSettled ? "h-[52px] w-[52px]" : "h-[80px] w-[80px]"
-            }`}
+            } ${isEmphasized ? "z-[2]" : ""}`}
             key={`${token.src}-${index}`}
             onClick={event => {
               if (longPressOpenedRef.current) {
@@ -2549,7 +2620,9 @@ function HeldTransformingState({
             style={{
               left: `${tokenPositions[index]?.left ?? 50}%`,
               top: `${tokenPositions[index]?.top ?? 50}%`,
-              transform: `translate(-50%, calc(-50% + ${isSettled ? 0 : -112}px)) scale(${isInk ? 0.6 : 1})`,
+              transform: `translate(-50%, calc(-50% + ${isSettled ? 0 : -112}px)) scale(${
+                isInk ? 0.6 : isEmphasized ? 1.06 : 1
+              })`,
               opacity: isInk ? 0 : 1,
               transition:
                 "transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease-out",
@@ -2561,15 +2634,18 @@ function HeldTransformingState({
             <img
               alt=""
               className={`h-full w-full object-contain ${
-                isSettled
-                  ? "drop-shadow-[0_10px_12px_rgba(42,28,16,0.28)]"
-                  : "drop-shadow-[0_6px_8px_rgba(42,28,16,0.16)]"
+                isEmphasized
+                  ? "drop-shadow-[0_12px_14px_rgba(184,137,60,0.28)]"
+                  : isSettled
+                    ? "drop-shadow-[0_10px_12px_rgba(42,28,16,0.28)]"
+                    : "drop-shadow-[0_6px_8px_rgba(42,28,16,0.16)]"
               }`}
               draggable={false}
               src={token.src}
             />
           </button>
-        ))}
+        );
+        })}
       </div>
       {isSettled && courierStatus !== "idle" && (
         <HeldCourierGesture

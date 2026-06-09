@@ -8,8 +8,8 @@
 // This module is intentionally pure (no React, no DOM) so the truth rules can
 // be unit-tested directly. The UI renders whatever blocks this returns.
 import {
-  buildCarDetailBookedSentence,
-  buildLaundryBookedSentence,
+  CAR_DETAIL_KNOWLEDGE,
+  LAUNDRY_BUTLER_KNOWLEDGE,
   isCarDetailService,
 } from "./heldVendorKnowledge";
 
@@ -48,9 +48,15 @@ export type PostOrderPlan = {
   guestRelation?: string | null;
 };
 
+export type PostOrderServiceDetail = {
+  label: string;
+  value: string;
+};
+
 export type PostOrderServiceRow = {
   label: string;
-  body: string;
+  serviceType: string;
+  details: PostOrderServiceDetail[];
 };
 
 export type PostOrderChiefOfStaffCopy = {
@@ -96,6 +102,20 @@ function isTransport(type: string) {
 }
 function isHaircut(type: string) {
   return type.includes("haircut") || type.includes("hair");
+}
+
+function capitalizePhrase(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+function pendingLabelForType(type: string): string {
+  if (isGrooming(type)) return "Groomer availability";
+  if (isDetail(type)) return "Detail scheduling";
+  if (isTransport(type)) return "Schedule match";
+  if (isHaircut(type)) return "Availability";
+  return "Coordination";
 }
 
 // A coordinated (non-laundry) service may say booked/confirmed only when real
@@ -146,52 +166,39 @@ function resolveDogName(
   return null;
 }
 
-// Resolve a guest relation strictly from real sources. Returns the actual
-// parsed relation phrase (e.g. "wife's mother", "mother-in-law") or null. The
-// builder never substitutes one relation for another or invents one.
-const GUEST_RELATIONS = [
-  /\bmother[\s-]in[\s-]law\b/i,
-  /\bfather[\s-]in[\s-]law\b/i,
-  /\b(?:my\s+)?wife's\s+mother\b/i,
-  /\b(?:my\s+)?wife's\s+father\b/i,
-  /\b(?:my\s+)?husband's\s+mother\b/i,
-  /\b(?:my\s+)?husband's\s+father\b/i,
-  /\bin[\s-]laws\b/i,
-  /\bparents\b/i,
-];
-
-function resolveGuestRelation(
-  request: string,
-  service: PostOrderServiceMeta | undefined,
-  plan: PostOrderPlan,
-): string | null {
-  const metaRelation = service?.guestRelation ?? plan.guestRelation ?? null;
-  if (metaRelation && metaRelation.trim()) return metaRelation.trim();
-
-  for (const pattern of GUEST_RELATIONS) {
-    const match = request.match(pattern);
-    if (match?.[0]) return match[0].toLowerCase().replace(/^my\s+/, "");
-  }
-  return null;
-}
-
 function laundryRow(service: PostOrderServiceMeta): PostOrderServiceRow {
-  const timing = service.timing?.trim();
   if (laundryIsConfirmed(service)) {
+    const pickup =
+      service.pickupWindow?.trim() || LAUNDRY_BUTLER_KNOWLEDGE.pickupWindowLabel;
+    const ret =
+      service.returnWindow?.trim() || LAUNDRY_BUTLER_KNOWLEDGE.deliveryWindowLabel;
+    const vendor =
+      service.vendorName?.trim() || LAUNDRY_BUTLER_KNOWLEDGE.vendorName;
     return {
       label: "LAUNDRY",
-      body: buildLaundryBookedSentence(),
+      serviceType: "laundry_pickup",
+      details: [
+        { label: "Status", value: "Booked" },
+        { label: "Vendor", value: vendor },
+        { label: "Pickup", value: capitalizePhrase(pickup) },
+        { label: "Return", value: capitalizePhrase(ret) },
+      ],
     };
   }
-  if (timing) {
-    return {
-      label: "LAUNDRY",
-      body: `I’m picking it up ${timing} and keeping the return protected.`,
-    };
-  }
+
+  const timing = service.timing?.trim();
   return {
     label: "LAUNDRY",
-    body: "I’m getting pickup moving and keeping the return protected.",
+    serviceType: "laundry_pickup",
+    details: timing
+      ? [
+          { label: "Status", value: "In motion" },
+          { label: "Pickup", value: capitalizePhrase(timing) },
+        ]
+      : [
+          { label: "Status", value: "In motion" },
+          { label: "Pending", value: "Pickup scheduling" },
+        ],
   };
 }
 
@@ -203,59 +210,97 @@ function groomingRow(
   const dogName = resolveDogName(request, service, plan);
   const label = dogName ? `${dogName.toUpperCase()}’S GROOMING` : "GROOMING";
 
-  // Real provider confirmation is the only path to "confirmed" language.
   if (hasRealConfirmation(service)) {
-    const subject = dogName ? `grooming for ${dogName}` : "grooming";
-    return { label, body: `I’ve got ${subject} confirmed and I’m holding the window.` };
+    const windowValue = service.bookingWindow?.trim() || service.timing?.trim();
+    const details: PostOrderServiceDetail[] = [{ label: "Status", value: "Confirmed" }];
+    if (windowValue) {
+      details.push({ label: "Window", value: capitalizePhrase(windowValue) });
+    }
+    return { label, serviceType: "dog_grooming", details };
   }
 
   const candidates = service.providerCandidates ?? [];
-
-  // Provider names/windows may appear ONLY when real candidate metadata exists.
   if (candidates.length > 0) {
     const primary = candidates[0];
-    const windowPhrase = primary.window?.trim() ? ` ${primary.window.trim()} open` : " an open window";
-    let body = `${primary.name} has${windowPhrase}. I’m holding that window`;
-    if (candidates.length > 1 && candidates[1]?.name) {
-      body += ` unless you choose ${candidates[1].name} instead.`;
-    } else {
-      body += " unless you tell me otherwise.";
-    }
-    const subject = dogName ? `grooming for ${dogName}` : "grooming";
-    return { label, body: `I’m lining up ${subject}. ${body}` };
-  }
-
-  const subject = dogName ? `grooming for ${dogName}` : "grooming";
-  return {
-    label,
-    body: `I’m lining up ${subject} and will come back only if there’s a real decision.`,
-  };
-}
-
-function coordinatedRow(
-  service: PostOrderServiceMeta,
-  label: string,
-  noun: string,
-  request: string,
-): PostOrderServiceRow {
-  if (isDetail(normalizeType(service.type)) && service.status === "booked_internal") {
+    const pendingValue = primary.window?.trim()
+      ? `${primary.name} — ${primary.window.trim()}`
+      : primary.name;
     return {
       label,
-      body: buildCarDetailBookedSentence(service, request),
+      serviceType: "dog_grooming",
+      details: [
+        { label: "Status", value: "Awaiting outside confirmation" },
+        { label: "Pending", value: pendingValue },
+      ],
     };
   }
 
-  // Non-laundry coordinated services never claim booked/confirmed unless a real
-  // provider confirmation exists in the plan/order state.
-  if (hasRealConfirmation(service)) {
-    if (isCarDetailService(service.type)) {
-      return { label, body: buildCarDetailBookedSentence(service, request) };
-    }
-    return { label, body: `I’ve got ${noun} confirmed and I’m holding the window.` };
-  }
   return {
     label,
-    body: `I’m lining up ${noun} and will come back only if there’s a real decision.`,
+    serviceType: "dog_grooming",
+    details: [
+      { label: "Status", value: "Awaiting outside confirmation" },
+      { label: "Pending", value: "Groomer availability" },
+    ],
+  };
+}
+
+function detailRow(service: PostOrderServiceMeta): PostOrderServiceRow {
+  if (isDetail(normalizeType(service.type)) && service.status === "booked_internal") {
+    const bookingDate = service.bookingDate?.trim() || CAR_DETAIL_KNOWLEDGE.defaultBookingDate;
+    const bookingWindow =
+      service.bookingWindow?.trim() || CAR_DETAIL_KNOWLEDGE.defaultBookingWindow;
+    return {
+      label: "DETAILING",
+      serviceType: "car_detail",
+      details: [
+        { label: "Status", value: "Booked internally" },
+        {
+          label: "Window",
+          value: `${capitalizePhrase(bookingDate)}, ${bookingWindow}`,
+        },
+      ],
+    };
+  }
+
+  if (hasRealConfirmation(service)) {
+    const windowValue = service.bookingWindow?.trim() || service.timing?.trim();
+    const details: PostOrderServiceDetail[] = [{ label: "Status", value: "Confirmed" }];
+    if (windowValue) {
+      details.push({ label: "Window", value: capitalizePhrase(windowValue) });
+    }
+    return { label: "DETAILING", serviceType: "car_detail", details };
+  }
+
+  return {
+    label: "DETAILING",
+    serviceType: "car_detail",
+    details: [
+      { label: "Status", value: "Awaiting outside confirmation" },
+      { label: "Pending", value: pendingLabelForType(service.type) },
+    ],
+  };
+}
+
+function coordinatedRow(service: PostOrderServiceMeta, label: string): PostOrderServiceRow {
+  const type = normalizeType(service.type);
+
+  if (hasRealConfirmation(service)) {
+    const windowValue = service.bookingWindow?.trim() || service.timing?.trim();
+    const details: PostOrderServiceDetail[] = [{ label: "Status", value: "Confirmed" }];
+    if (windowValue) {
+      details.push({ label: "Window", value: capitalizePhrase(windowValue) });
+    }
+    return { label, serviceType: service.type, details };
+  }
+
+  return {
+    label,
+    serviceType: service.type,
+    details: [
+      { label: "Status", value: "Awaiting outside confirmation" },
+      { label: "Pending", value: pendingLabelForType(type) },
+    ],
   };
 }
 
@@ -267,12 +312,16 @@ function buildRow(
   const type = normalizeType(service.type);
   if (isLaundry(type)) return laundryRow(service);
   if (isGrooming(type)) return groomingRow(service, request, plan);
-  if (isDetail(type)) return coordinatedRow(service, "DETAILING", "the detail", request);
-  if (isTransport(type)) return coordinatedRow(service, "TRANSPORT", "the ride", request);
-  if (isHaircut(type)) return coordinatedRow(service, "HAIRCUT", "the haircut", request);
+  if (isDetail(type)) return detailRow(service);
+  if (isTransport(type)) return coordinatedRow(service, "TRANSPORT");
+  if (isHaircut(type)) return coordinatedRow(service, "HAIRCUT");
   return {
     label: "REQUEST",
-    body: "I’ve taken it in and I’m moving on it.",
+    serviceType: service.type,
+    details: [
+      { label: "Status", value: "In motion" },
+      { label: "Pending", value: "Coordination" },
+    ],
   };
 }
 
@@ -318,4 +367,9 @@ function buildClosing(services: PostOrderServiceMeta[]): string {
   return hasPendingCoordination
     ? "I’ll keep the open threads moving and come back only when something needs a real decision."
     : "Nothing else needed right now.";
+}
+
+// Flatten a row for tests and search.
+export function formatPostOrderServiceRow(row: PostOrderServiceRow): string {
+  return [row.label, ...row.details.map(d => `${d.label}: ${d.value}`)].join("\n");
 }

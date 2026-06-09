@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPostOrderChiefOfStaffCopy,
+  formatPostOrderServiceRow,
   type PostOrderPlan,
 } from "./heldPostOrderCopy";
 
@@ -8,7 +9,7 @@ function renderAll(copy: ReturnType<typeof buildPostOrderChiefOfStaffCopy>): str
   return [
     copy.opening,
     copy.subhead,
-    ...copy.serviceRows.flatMap(row => [row.label, row.body]),
+    ...copy.serviceRows.flatMap(row => formatPostOrderServiceRow(row).split("\n")),
     copy.closing,
   ].join("\n");
 }
@@ -80,9 +81,8 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     expect(copy.opening).toBe("I’ve taken in the request — I’m moving on it.");
     expect(copy.serviceRows).toHaveLength(1);
     expect(copy.serviceRows[0].label).toBe("LAUNDRY");
-    expect(copy.serviceRows[0].body).toBe(
-      "I’m getting pickup moving and keeping the return protected.",
-    );
+    expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Status: In motion");
+    expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Pending: Pickup scheduling");
     expect(copy.closing).toBe("Nothing else needed right now.");
   });
 
@@ -91,9 +91,7 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
       { services: [{ type: "laundry_pickup", timing: "tomorrow morning" }] },
       "Pick up my laundry tomorrow morning.",
     );
-    expect(copy.serviceRows[0].body).toBe(
-      "I’m picking it up tomorrow morning and keeping the return protected.",
-    );
+    expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Pickup: Tomorrow morning");
   });
 
   // 7
@@ -105,9 +103,13 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     expect(copy.serviceRows).toHaveLength(2);
     expect(copy.serviceRows[0].label).toBe("LAUNDRY");
     expect(copy.serviceRows[1].label).toBe("GROOMING");
-    expect(copy.serviceRows[1].body).toBe(
-      "I’m lining up grooming and will come back only if there’s a real decision.",
+    expect(formatPostOrderServiceRow(copy.serviceRows[1])).toContain(
+      "Status: Awaiting outside confirmation",
     );
+    expect(formatPostOrderServiceRow(copy.serviceRows[1])).toContain(
+      "Pending: Groomer availability",
+    );
+    expect(renderAll(copy)).not.toMatch(/come back only if there’s a real decision/i);
     const rendered = renderAll(copy);
     for (const leak of SCRIPTED_LEAKS) {
       expect(rendered).not.toContain(leak);
@@ -140,30 +142,32 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
       },
       "Grooming, car detail, airport ride, and a haircut.",
     );
-    const bodies = copy.serviceRows.map(r => r.body).join("\n");
-    expect(bodies).not.toMatch(/\b(booked|confirmed)\b/i);
+    const rendered = copy.serviceRows.map(row => formatPostOrderServiceRow(row)).join("\n");
+    expect(rendered).not.toMatch(/\bStatus: Booked\b/i);
+    expect(rendered).not.toMatch(/\bStatus: Confirmed\b/i);
   });
 
   it("allows booked/confirmed for non-laundry only with a real provider confirmation", () => {
     const copy = buildPostOrderChiefOfStaffCopy({
       services: [{ type: "dog_grooming", status: "confirmed", orderId: 9001 }],
     });
-    expect(copy.serviceRows[0].body).toMatch(/confirmed/i);
+    expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Status: Confirmed");
   });
 
   it("allows laundry booked copy only when a real order exists", () => {
     const unconfirmed = buildPostOrderChiefOfStaffCopy({
       services: [{ type: "laundry_pickup" }],
     });
-    expect(unconfirmed.serviceRows[0].body).not.toMatch(/booked|LAUNDRY BUTLER/i);
+    expect(formatPostOrderServiceRow(unconfirmed.serviceRows[0])).not.toMatch(/LAUNDRY BUTLER/i);
 
     const confirmed = buildPostOrderChiefOfStaffCopy({
       services: [{ type: "laundry_pickup", orderId: 12345 }],
     });
-    expect(confirmed.serviceRows[0].body).toMatch(/booked/i);
-    expect(confirmed.serviceRows[0].body).toContain("LAUNDRY BUTLER");
-    expect(confirmed.serviceRows[0].body).toContain("7–9am");
-    expect(confirmed.serviceRows[0].body).toContain("7–9pm");
+    const rowText = formatPostOrderServiceRow(confirmed.serviceRows[0]);
+    expect(rowText).toContain("Status: Booked");
+    expect(rowText).toContain("LAUNDRY BUTLER");
+    expect(rowText).toContain("7–9am");
+    expect(rowText).toContain("7–9pm");
   });
 
   it("renders provider names and window ONLY from real candidate metadata", () => {
@@ -182,9 +186,10 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     });
     const row = copy.serviceRows[0];
     expect(row.label).toBe("THEO’S GROOMING");
-    expect(row.body).toContain("Maria");
-    expect(row.body).toContain("Saturday at 11");
-    expect(row.body).toContain("Jordan");
+    const rowText = formatPostOrderServiceRow(row);
+    expect(rowText).toContain("Maria");
+    expect(rowText).toContain("Saturday at 11");
+    expect(rowText).not.toContain("Jordan");
     expect(copy.closing).not.toContain("Jordan");
     expect(copy.closing).not.toMatch(/consider it handled|non-negotiable/i);
   });
@@ -194,13 +199,13 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
       services: [{ type: "dog_grooming", dogName: "Theo" }],
     });
     expect(withName.serviceRows[0].label).toBe("THEO’S GROOMING");
-    expect(withName.serviceRows[0].body).toContain("Theo");
+    expect(formatPostOrderServiceRow(withName.serviceRows[0])).toContain("Groomer availability");
 
     const withoutName = buildPostOrderChiefOfStaffCopy({
       services: [{ type: "dog_grooming" }],
     });
     expect(withoutName.serviceRows[0].label).toBe("GROOMING");
-    expect(withoutName.serviceRows[0].body).not.toContain("Theo");
+    expect(formatPostOrderServiceRow(withoutName.serviceRows[0])).not.toContain("Theo");
   });
 
   it("extracts a dog name from possessive request text", () => {
@@ -209,5 +214,15 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
       "Book Rex's grooming.",
     );
     expect(copy.serviceRows[0].label).toBe("REX’S GROOMING");
+  });
+
+  it("renders operational detail rows for booked internal car detail", () => {
+    const copy = buildPostOrderChiefOfStaffCopy({
+      services: [{ type: "car_detail", status: "booked_internal", orderId: "manual-car-detail-1" }],
+    });
+    const rowText = formatPostOrderServiceRow(copy.serviceRows[0]);
+    expect(rowText).toContain("Status: Booked internally");
+    expect(rowText).toContain("Window:");
+    expect(rowText).not.toMatch(/come back only/i);
   });
 });
