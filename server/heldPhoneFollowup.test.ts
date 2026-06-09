@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { buildHeldPhoneFollowupReply } from "./_core/heldPhoneFollowup";
@@ -18,6 +18,9 @@ const ACTIVE_PLAN = {
 const BOOKED_OR_CONFIRMED = /\b(booked|confirmed)\b/i;
 
 describe("buildHeldPhoneFollowupReply — v1 reply-only phone follow-up", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
   it("treats gratitude as acknowledgement when the LLM is unavailable", async () => {
     const { invokeLLM } = await import("./_core/llm");
     vi.mocked(invokeLLM).mockRejectedValueOnce(new Error("missing key"));

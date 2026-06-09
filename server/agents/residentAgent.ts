@@ -34,6 +34,7 @@ import {
   buildHeldSpecialInstructions,
   getHeldRequestPayloadFields,
 } from "./heldRequestInstructions";
+import { buildLaundryBookedSentence } from "../../shared/heldVendorKnowledge";
 
 const INTAKE_FAILURE_MESSAGE =
   "Your request did not go through. Please try again in a moment.";
@@ -460,7 +461,9 @@ async function executeLaundryIntent(input: {
   await updateServiceRequest(sr.id, { orderId: executionResult.orderId });
   console.log(`[ResidentAgent] stored orderId=${executionResult.orderId} on service_request #${sr.id}`);
 
-  const confirmText = `Laundry booked for ${defaults.date}, ${defaults.window}.`;
+  const confirmText = input.source === "held"
+    ? buildLaundryBookedSentence()
+    : `Laundry booked for ${defaults.date}, ${defaults.window}.`;
   if (!input.suppressAssistantMessage) {
     await insertChatMessage({
       bldgUserId: input.bldgUserId,

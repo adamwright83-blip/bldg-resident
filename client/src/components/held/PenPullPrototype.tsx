@@ -1134,7 +1134,7 @@ export default function PenPullPrototype({
               setLabyrinthOpen(false);
               setLabyrinthPanel(panel);
             }}
-            visible={showHomeWorld}
+            visible={showHomeWorld || mode === "held" || mode === "transforming"}
           />
 
           <AnimatePresence>
@@ -2216,7 +2216,7 @@ function HeldTransformingState({
     setPhoneReplyVisible(false);
     setPhoneReply(followup.reply);
     setPhoneReplyStatus("idle");
-    window.setTimeout(() => setPhoneReplyVisible(true), 260);
+    window.setTimeout(() => setPhoneReplyVisible(true), 320);
 
     if (followup.triggersCourier) {
       setCourierMessage(nextValue);
@@ -2376,7 +2376,7 @@ function HeldTransformingState({
 
       {isSettled && (
         <section
-          className={`pointer-events-none absolute top-[12.5%] z-20 flex h-[52%] flex-col text-[#2a2520] transition-opacity duration-200 ${
+          className={`pointer-events-none absolute top-[12.5%] z-20 flex h-[52%] flex-col text-[#2a2520] transition-all duration-200 ${
             courierRailActive
               ? "left-[54px] right-[8%] items-start text-left"
               : "left-1/2 w-[84%] -translate-x-1/2 items-center text-center"
@@ -2443,7 +2443,7 @@ function HeldTransformingState({
 
       {isSettled && (
         <form
-          className={`absolute bottom-[calc(27.2%+env(safe-area-inset-bottom))] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
+          className={`absolute bottom-[calc(22px+27.2%+env(safe-area-inset-bottom))] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
             isPhoneEngaged
               ? "translate-y-0 opacity-100"
               : "pointer-events-none translate-y-[6px] opacity-0"
@@ -2490,7 +2490,7 @@ function HeldTransformingState({
       {isSettled && (
         <div
           aria-hidden="true"
-          className="absolute bottom-[calc(24.5%+env(safe-area-inset-bottom))] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
+          className="absolute bottom-[calc(22px+24.5%+env(safe-area-inset-bottom))] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
         />
       )}
 
@@ -2498,7 +2498,7 @@ function HeldTransformingState({
         alt=""
         className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 select-none transition-all duration-700 ${
           !isInk
-            ? "bottom-[calc(10px+env(safe-area-inset-bottom))] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
+            ? "bottom-[calc(32px+env(safe-area-inset-bottom))] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
             : "bottom-[-6%] w-[108%] opacity-80 drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)]"
         }`}
         data-held-home-cradle="true"
@@ -2509,13 +2509,13 @@ function HeldTransformingState({
         <>
           <div
             aria-hidden="true"
-            className="absolute bottom-[calc(6.5%+env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
+            className="absolute bottom-[calc(22px+6.5%+env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
           >
             H
           </div>
           <img
             alt=""
-            className="pointer-events-none absolute bottom-[calc(5.7%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
+            className="pointer-events-none absolute bottom-[calc(22px+5.7%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
             draggable={false}
             src={penAssetSrc}
           />
@@ -2526,7 +2526,7 @@ function HeldTransformingState({
           <img
             alt=""
             aria-hidden="true"
-            className={`pointer-events-none absolute bottom-[calc(12px+env(safe-area-inset-bottom))] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
+            className={`pointer-events-none absolute bottom-[calc(34px+env(safe-area-inset-bottom))] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
               isPhoneEngaged ? "opacity-90" : "opacity-0"
             }`}
             draggable={false}
@@ -2540,7 +2540,7 @@ function HeldTransformingState({
           />
           <button
             aria-label="Lift phone to speak to Held"
-            className={`group absolute bottom-[calc(10px+env(safe-area-inset-bottom))] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
+            className={`group absolute bottom-[calc(32px+env(safe-area-inset-bottom))] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
               isPhoneEngaged
                 ? "drop-shadow-[0_12px_14px_rgba(44,28,14,0.24)]"
                 : hasActiveTrayWork
@@ -2588,7 +2588,7 @@ function HeldTransformingState({
       <div
         className={`absolute left-1/2 -translate-x-1/2 ${
           isSettled
-            ? "bottom-[calc(3.8%+env(safe-area-inset-bottom))] z-[115] h-[13%] w-[43%]"
+            ? "bottom-[calc(22px+3.8%+env(safe-area-inset-bottom))] z-[115] h-[13%] w-[43%]"
             : "bottom-[35%] z-20 h-[32%] w-[88%]"
         }`}
       >
@@ -3214,21 +3214,41 @@ function buildReactivePhoneFollowup(
   );
   const asksPrice = /\b(price|cost|how much|total|receipt)\b/.test(normalized);
   const gratitude = /\b(thanks|thank you|appreciate|perfect|great|ok|okay)\b/.test(normalized);
-  const asksKnownLaundry =
-    hasLaundry &&
-    /\b(when|what time|who|which vendor|return|back|pickup|pick up|picked up|doing my laundry|get my laundry back)\b/.test(
-      normalized,
-    ) &&
-    !/\b(earlier|sooner|later|move|change|switch|reschedule|ask|tell|bring)\b/.test(normalized);
-  const asksKnownCarDetail =
-    hasCarDetail &&
-    /\b(is|what time|when|booked|scheduled|who)\b/.test(normalized) &&
-    !/\b(earlier|sooner|later|move|change|switch|reschedule|ask|tell|before noon)\b/.test(normalized);
-  const timingChange =
-    /\b(earlier|sooner|later|before|after|move|change|switch|reschedule|come back|return|pickup|pick up)\b/.test(
-      normalized,
-    ) && (hasLaundry || hasCarDetail || /\b(driver|vendor|provider|groomer|detailer)\b/.test(normalized));
 
+  // A. Known-answer questions (laundry)
+  const isWho = /\bwho\b.*\b(doing|handling|laundry|butler)\b/i.test(normalized) || /\bwho is doing my laundry\b/i.test(normalized);
+  const isReturn = (/\b(when|how)\b.*\b(get|receive|return|back|deliver)\b.*\blaundry\b/i.test(normalized)) ||
+                   (/\b(laundry|it|back)\b.*\b(return|get back|delivered)\b/i.test(normalized)) ||
+                   /\bget my laundry back\b/i.test(normalized);
+  const isPickup = /\b(what time|when|scheduled)\b.*\b(pickup|pick up)\b/i.test(normalized) ||
+                   /\b(laundry pickup time|time is laundry pickup|when is laundry pickup)\b/i.test(normalized);
+
+  if (isReturn) {
+    return {
+      courierStateLabel: "Known vendor intake.",
+      reply: "LAUNDRY BUTLER picks up tomorrow morning between 7–9am and returns same day between 7–9pm.",
+      threadLabel: "LAUNDRY BUTLER",
+      triggersCourier: false,
+    };
+  }
+  if (isPickup) {
+    return {
+      courierStateLabel: "Known vendor intake.",
+      reply: "LAUNDRY BUTLER is booked for tomorrow morning, 7–9am.",
+      threadLabel: "LAUNDRY BUTLER",
+      triggersCourier: false,
+    };
+  }
+  if (isWho) {
+    return {
+      courierStateLabel: "Known vendor intake.",
+      reply: "Your laundry is booked with LAUNDRY BUTLER.",
+      threadLabel: "LAUNDRY BUTLER",
+      triggersCourier: false,
+    };
+  }
+
+  // B. Status recap
   if (asksStatus) {
     return {
       courierStateLabel: "Local status only.",
@@ -3238,46 +3258,13 @@ function buildReactivePhoneFollowup(
     };
   }
 
-  if (asksKnownLaundry) {
-    return {
-      courierStateLabel: "Known vendor intake.",
-      reply: buildLaundryReturnAnswer(),
-      threadLabel: "Laundry Butler",
-      triggersCourier: false,
-    };
-  }
+  // C. Add-service request
+  const isLaundryScheduleChange =
+    (hasLaundry || /\b(laundry|butler|they)\b/.test(normalized)) &&
+    (/\b(earlier|sooner|later|move|change|switch|reschedule|adjust)\b/i.test(normalized) ||
+     (/\b(5\s*pm|5|8\s*am|8)\b/.test(normalized) && /\b(deliver|return|bring|get|pickup|pick up|need|have)\b/.test(normalized)));
 
-  if (asksKnownCarDetail) {
-    const detail = services.find(service => service.type === "car_detail");
-    return {
-      courierStateLabel: "Known internal booking.",
-      reply: detail && isBookedService(detail)
-        ? buildCarDetailBookedSentence(detail, displayRequest)
-        : "Car detail is not booked yet.",
-      threadLabel: "Car detail",
-      triggersCourier: false,
-    };
-  }
-
-  if (asksPrice) {
-    return {
-      courierStateLabel: "Local status only.",
-      reply: "I’ll keep pricing tied to the actual service records and receipts. Nothing is changing from this question.",
-      threadLabel: "Current plan",
-      triggersCourier: false,
-    };
-  }
-
-  if (gratitude) {
-    return {
-      courierStateLabel: "Local acknowledgement.",
-      reply: "Of course. I have the plan held and I’ll come back only when something needs your yes.",
-      threadLabel: "Current plan",
-      triggersCourier: false,
-    };
-  }
-
-  if (hasCarDetail) {
+  if (hasCarDetail && !isLaundryScheduleChange) {
     const existing = services.some(service => service.type === "car_detail");
     const nextServices = existing
       ? services.map(service =>
@@ -3304,12 +3291,41 @@ function buildReactivePhoneFollowup(
     };
   }
 
-  if (timingChange && hasLaundry) {
+  // D. Laundry schedule change request
+  if (isLaundryScheduleChange) {
+    let reply = "Understood. I’m asking LAUNDRY BUTLER for an earlier return window.";
+    if (/\b(5\s*pm|5)\b/.test(normalized)) {
+      reply = "Understood. I’m asking LAUNDRY BUTLER for a 5pm return instead of the standard 7–9pm window.";
+    } else if (/\b(8\s*am|8)\b/.test(normalized)) {
+      reply = "Understood. I’m asking LAUNDRY BUTLER for an 8am pickup instead of the standard 7–9am window.";
+    } else if (/\b(pickup|pick up)\b/.test(normalized)) {
+      reply = "Understood. I’m asking LAUNDRY BUTLER to adjust the pickup window.";
+    }
+
     return {
       courierStateLabel: "Awaiting outside reply.",
-      reply: `Understood. I’m asking ${LAUNDRY_BUTLER_KNOWLEDGE.vendorName} for an earlier return window.`,
-      threadLabel: "Laundry Butler",
+      reply,
+      threadLabel: "LAUNDRY BUTLER",
       triggersCourier: true,
+    };
+  }
+
+  // E. Other price, gratitude, and generic fallbacks
+  if (asksPrice) {
+    return {
+      courierStateLabel: "Local status only.",
+      reply: "I’ll keep pricing tied to the actual service records and receipts. Nothing is changing from this question.",
+      threadLabel: "Current plan",
+      triggersCourier: false,
+    };
+  }
+
+  if (gratitude) {
+    return {
+      courierStateLabel: "Local acknowledgement.",
+      reply: "Of course. I have the plan held and I’ll come back only when something needs your yes.",
+      threadLabel: "Current plan",
+      triggersCourier: false,
     };
   }
 
@@ -3318,7 +3334,7 @@ function buildReactivePhoneFollowup(
     return {
       courierStateLabel: "Awaiting outside reply.",
       reply: `Understood. I’m sending that to the ${threadLabel.toLowerCase()} thread now.`,
-      threadLabel,
+      threadLabel: threadLabel === "Laundry" ? "LAUNDRY BUTLER" : threadLabel,
       triggersCourier: true,
     };
   }

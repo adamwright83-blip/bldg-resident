@@ -12,13 +12,17 @@ export type HeldServiceBooking = {
 };
 
 export const LAUNDRY_BUTLER_KNOWLEDGE = {
-  canAnswerReturnQuestion: true,
-  canBookInternally: true,
-  deliveryWindowLabel: "same day, 7–9pm",
-  pickupWindowLabel: "tomorrow morning, 7–9am",
   serviceId: "laundry",
-  serviceLabel: "fluff and fold",
   vendorName: "LAUNDRY BUTLER",
+  serviceLabel: "fluff and fold",
+  pickupWindow: "tomorrow morning, 7–9am",
+  returnWindow: "same day, 7–9pm",
+  pickupWindowLabel: "tomorrow morning, 7–9am",
+  deliveryWindowLabel: "same day, 7–9pm",
+  canBookInternally: true,
+  canAnswerPickupQuestion: true,
+  canAnswerReturnQuestion: true,
+  canAnswerVendorQuestion: true,
 } as const;
 
 export const CAR_DETAIL_KNOWLEDGE = {
@@ -85,7 +89,7 @@ export function withCarDetailBooking<T extends HeldServiceBooking>(
 }
 
 export function buildLaundryBookedSentence() {
-  return `I have laundry booked for ${LAUNDRY_BUTLER_KNOWLEDGE.pickupWindowLabel} pickup window, with your favorite ${LAUNDRY_BUTLER_KNOWLEDGE.serviceLabel} service, ${LAUNDRY_BUTLER_KNOWLEDGE.vendorName}. Same-day return is expected between 7–9pm.`;
+  return `I have laundry booked with LAUNDRY BUTLER for tomorrow morning, 7–9am pickup, with same-day return expected between 7–9pm.`;
 }
 
 export function buildLaundryReturnAnswer() {

@@ -30,11 +30,114 @@ Rules:
 - Do not create a new booking, charge payment, mutate the plan, or claim external vendor confirmation. You can only acknowledge and say what you will hold or check.
 - Do not ask a follow-up unless the resident's message truly requires a yes/no or missing detail.
 - Keep the reply to 1-2 concise sentences.
-- Return plain text only.`;
+- Return plain text only.
+
+Vendor Knowledge:
+LAUNDRY BUTLER:
+- Pickup: tomorrow morning, 7–9am
+- Return: same day, 7–9pm
+- Service: fluff and fold / laundry service`;
+
+function getDeterministicReply(message: string, services: HeldPhoneFollowupService[]): string | null {
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+
+  // A. Known-answer questions (laundry)
+  const isWho = /\bwho\b.*\b(doing|handling|laundry|butler)\b/i.test(normalized) || /\bwho is doing my laundry\b/i.test(normalized);
+  const isReturn = (/\b(when|how)\b.*\b(get|receive|return|back|deliver)\b.*\blaundry\b/i.test(normalized)) ||
+                   (/\b(laundry|it|back)\b.*\b(return|get back|delivered)\b/i.test(normalized)) ||
+                   /\bget my laundry back\b/i.test(normalized);
+  const isPickup = /\b(what time|when|scheduled)\b.*\b(pickup|pick up)\b/i.test(normalized) ||
+                   /\b(laundry pickup time|time is laundry pickup|when is laundry pickup)\b/i.test(normalized);
+
+  if (isReturn) {
+    return "LAUNDRY BUTLER picks up tomorrow morning between 7–9am and returns same day between 7–9pm.";
+  }
+  if (isPickup) {
+    return "LAUNDRY BUTLER is booked for tomorrow morning, 7–9am.";
+  }
+  if (isWho) {
+    return "Your laundry is booked with LAUNDRY BUTLER.";
+  }
+
+  // B. Status recap
+  const asksStatus = /\b(what'?s already booked|what is already booked|what'?s booked|what is booked|already booked|status|recap|where (are|is) we|what do i have)\b/.test(
+    normalized,
+  );
+  if (asksStatus) {
+    return buildPlanStatusReplyFromServer(services);
+  }
+
+  const isLaundryScheduleChange =
+    (/\b(laundry|butler|they)\b/.test(normalized) || /\b(wash|dry clean|dry-clean|clothes|hamper)\b/.test(normalized)) &&
+    (/\b(earlier|sooner|later|move|change|switch|reschedule|adjust)\b/i.test(normalized) ||
+     (/\b(5\s*pm|5|8\s*am|8)\b/.test(normalized) && /\b(deliver|return|bring|get|pickup|pick up|need|have)\b/.test(normalized)));
+
+  if (isLaundryScheduleChange) {
+    if (/\b(5\s*pm|5)\b/.test(normalized)) {
+      return "Understood. I’m asking LAUNDRY BUTLER for a 5pm return instead of the standard 7–9pm window.";
+    }
+    if (/\b(8\s*am|8)\b/.test(normalized)) {
+      return "Understood. I’m asking LAUNDRY BUTLER for an 8am pickup instead of the standard 7–9am window.";
+    }
+    if (/\b(pickup|pick up)\b/.test(normalized)) {
+      return "Understood. I’m asking LAUNDRY BUTLER to adjust the pickup window.";
+    }
+    return "Understood. I’m asking LAUNDRY BUTLER for an earlier return window.";
+  }
+
+  return null;
+}
+
+function buildPlanStatusReplyFromServer(services: HeldPhoneFollowupService[]) {
+  const isBookedService = (service: HeldPhoneFollowupService) => {
+    const status = service.status?.toLowerCase();
+    return status === "booked" || status === "confirmed" || status === "booked_internal" || service.orderId != null;
+  };
+  const getServiceLabel = (type: string) => {
+    if (type === "laundry_pickup" || type === "laundry") return "Laundry";
+    if (type === "dog_grooming" || type === "grooming") return "Dog grooming";
+    if (type === "car_detail" || type === "detail") return "Car detail";
+    if (type === "ride_airport" || type === "transport") return "Airport pickup";
+    if (type === "haircut") return "Haircut";
+    return "Service";
+  };
+  const formatList = (items: string[]) => {
+    if (items.length <= 1) return items[0] ?? "";
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+  };
+
+  const booked = services
+    .filter(service => isBookedService(service))
+    .map(service => getServiceLabel(service.type).replace(" pickup", ""));
+  const pending = services
+    .filter(service => !isBookedService(service))
+    .map(service => getServiceLabel(service.type).replace(" pickup", ""));
+
+  if (booked.length && pending.length) {
+    return `${formatList(booked)} ${booked.length === 1 ? "is" : "are"} booked. ${formatList(pending)} ${
+      pending.length === 1 ? "is" : "are"
+    } still awaiting confirmation.`;
+  }
+  if (booked.length) {
+    return `${formatList(booked)} ${booked.length === 1 ? "is" : "are"} booked.`;
+  }
+  if (pending.length) {
+    return `I have the plan, but ${formatList(pending)} ${
+      pending.length === 1 ? "still needs" : "still need"
+    } confirmation before I can call it booked.`;
+  }
+  return "I have the plan, but nothing is marked booked yet.";
+}
 
 export async function buildHeldPhoneFollowupReply(input: HeldPhoneFollowupInput) {
   const message = input.message.replace(/\s+/g, " ").trim();
   if (!message) return "";
+
+  const deterministic = getDeterministicReply(message, input.services ?? []);
+  if (deterministic !== null) {
+    return deterministic;
+  }
 
   try {
     const response = await invokeLLM({
