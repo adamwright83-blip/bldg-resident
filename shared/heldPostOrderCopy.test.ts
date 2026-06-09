@@ -151,16 +151,19 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     expect(copy.serviceRows[0].body).toMatch(/confirmed/i);
   });
 
-  it("allows laundry confirmed only when a real order exists", () => {
+  it("allows laundry booked copy only when a real order exists", () => {
     const unconfirmed = buildPostOrderChiefOfStaffCopy({
       services: [{ type: "laundry_pickup" }],
     });
-    expect(unconfirmed.serviceRows[0].body).not.toMatch(/confirmed/i);
+    expect(unconfirmed.serviceRows[0].body).not.toMatch(/booked|LAUNDRY BUTLER/i);
 
     const confirmed = buildPostOrderChiefOfStaffCopy({
       services: [{ type: "laundry_pickup", orderId: 12345 }],
     });
-    expect(confirmed.serviceRows[0].body).toMatch(/confirmed/i);
+    expect(confirmed.serviceRows[0].body).toMatch(/booked/i);
+    expect(confirmed.serviceRows[0].body).toContain("LAUNDRY BUTLER");
+    expect(confirmed.serviceRows[0].body).toContain("7–9am");
+    expect(confirmed.serviceRows[0].body).toContain("7–9pm");
   });
 
   it("renders provider names and window ONLY from real candidate metadata", () => {

@@ -222,18 +222,18 @@ describe("HELD phone composer UI structure", () => {
     expect(penPull).toMatch(/onFocus=\{\(\) => setIsComposerFocused\(true\)\}/);
   });
 
-  // Test 7: protected files (phone follow-up path) route through the existing
-  // submitFollowupValue / fetchPhoneReply -> /api/held/phone-followup path and
-  // never the forbidden /api/held/text-command for follow-ups.
-  it("7) follow-up submits through fetchPhoneReply -> /api/held/phone-followup, not text-command", () => {
-    expect(penPull).toContain("const fetchPhoneReply");
-    expect(penPull).toContain('fetch("/api/held/phone-followup"');
+  // Test 7: protected files (phone follow-up path) stay local/reactive in the
+  // post-order demo and never call the forbidden /api/held/text-command route.
+  it("7) follow-up submits through local reactive plan logic, not text-command", () => {
+    expect(penPull).toContain("buildReactivePhoneFollowup");
+    expect(penPull).toContain("setPhoneReply(followup.reply)");
     expect(penPull).toContain("submitFollowupValue");
     // The follow-up submit handler must not call the text-command route.
     const followupRegion = penPull.slice(
-      penPull.indexOf("const fetchPhoneReply"),
+      penPull.indexOf("const submitFollowupValue"),
       penPull.indexOf("const startTokenPress")
     );
     expect(followupRegion).not.toContain("text-command");
+    expect(followupRegion).not.toContain("/api/held/phone-followup");
   });
 });

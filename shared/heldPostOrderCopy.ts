@@ -7,6 +7,11 @@
 //
 // This module is intentionally pure (no React, no DOM) so the truth rules can
 // be unit-tested directly. The UI renders whatever blocks this returns.
+import {
+  buildCarDetailBookedSentence,
+  buildLaundryBookedSentence,
+  isCarDetailService,
+} from "./heldVendorKnowledge";
 
 export type PostOrderServiceMeta = {
   type: string;
@@ -22,6 +27,12 @@ export type PostOrderServiceMeta = {
   // Provider candidates only exist when real coordination metadata supplies
   // them. Absent => the copy must never name a provider or a window.
   providerCandidates?: PostOrderProviderCandidate[] | null;
+  bookingDate?: string | null;
+  bookingWindow?: string | null;
+  pickupWindow?: string | null;
+  returnWindow?: string | null;
+  serviceLabel?: string | null;
+  vendorName?: string | null;
 };
 
 export type PostOrderProviderCandidate = {
@@ -167,10 +178,9 @@ function resolveGuestRelation(
 function laundryRow(service: PostOrderServiceMeta): PostOrderServiceRow {
   const timing = service.timing?.trim();
   if (laundryIsConfirmed(service)) {
-    const when = timing ? ` for ${timing}` : "";
     return {
       label: "LAUNDRY",
-      body: `I’ve got pickup confirmed${when} and I’m keeping the return protected.`,
+      body: buildLaundryBookedSentence(),
     };
   }
   if (timing) {
@@ -226,17 +236,21 @@ function coordinatedRow(
   service: PostOrderServiceMeta,
   label: string,
   noun: string,
+  request: string,
 ): PostOrderServiceRow {
   if (isDetail(normalizeType(service.type)) && service.status === "booked_internal") {
     return {
       label,
-      body: "I have car detail booked internally and queued for operator coordination.",
+      body: buildCarDetailBookedSentence(service, request),
     };
   }
 
   // Non-laundry coordinated services never claim booked/confirmed unless a real
   // provider confirmation exists in the plan/order state.
   if (hasRealConfirmation(service)) {
+    if (isCarDetailService(service.type)) {
+      return { label, body: buildCarDetailBookedSentence(service, request) };
+    }
     return { label, body: `I’ve got ${noun} confirmed and I’m holding the window.` };
   }
   return {
@@ -253,9 +267,9 @@ function buildRow(
   const type = normalizeType(service.type);
   if (isLaundry(type)) return laundryRow(service);
   if (isGrooming(type)) return groomingRow(service, request, plan);
-  if (isDetail(type)) return coordinatedRow(service, "DETAILING", "the detail");
-  if (isTransport(type)) return coordinatedRow(service, "TRANSPORT", "the ride");
-  if (isHaircut(type)) return coordinatedRow(service, "HAIRCUT", "the haircut");
+  if (isDetail(type)) return coordinatedRow(service, "DETAILING", "the detail", request);
+  if (isTransport(type)) return coordinatedRow(service, "TRANSPORT", "the ride", request);
+  if (isHaircut(type)) return coordinatedRow(service, "HAIRCUT", "the haircut", request);
   return {
     label: "REQUEST",
     body: "I’ve taken it in and I’m moving on it.",
