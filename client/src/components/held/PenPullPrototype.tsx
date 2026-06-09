@@ -45,6 +45,13 @@ type PenPullPrototypeProps = {
 const HELD_ASSETS = {
   composerTray: "/held/audiomode-nursery-tray.png",
   crest: "/held/crest-h-flat.png",
+  courierEnvelope: "/held/held_courier_envelope.png",
+  courierHorseOutbound: "/held/held_courier_horse_outbound.png",
+  courierHorseReturn: "/held/held_courier_horse_return.png",
+  courierNote: "/held/held_courier_note.png",
+  courierSatchel: "/held/held_courier_satchel.png",
+  courierTail: "/held/held_courier_tail.png",
+  courierTailGlow: "/held/held_courier_tail_glow.png",
   galleryBench: "/held/nursery-cradle.png",
   labyrinthBoard: "/held/held_labyrinth_board.png",
   labyrinthKnob: "/held/held_labyrinth_knob.png",
@@ -148,6 +155,8 @@ const PHONE_ENGAGED_Y = -68;
 const PHONE_ENGAGED_X = -22;
 
 type LabyrinthPanel = "receipts" | "payment" | null;
+type CourierStatus = "idle" | "dispatching" | "courier_out";
+type CourierSlipMode = "summary" | "detail";
 
 type LabyrinthCategory = {
   id: "receipts" | "payment" | "account" | "residence" | "preferences" | "profile";
@@ -167,6 +176,8 @@ const LABYRINTH_CATEGORIES: LabyrinthCategory[] = [
   { id: "preferences", label: "Preferences", left: 63.5, top: 65.3, width: 23.2, height: 18.8 },
   { id: "profile", label: "Profile", left: 46.2, top: 79.5, width: 14.9, height: 12.4 },
 ];
+
+const COURIER_DISPATCH_TEXT = "Understood. I’m sending word now.";
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -1726,6 +1737,262 @@ function HeldPhoneListeningGlyph() {
   );
 }
 
+function HeldCourierGesture({
+  message,
+  onCloseSlip,
+  onDispatchComplete,
+  onOpenSlip,
+  serviceLabel,
+  slipMode,
+  slipOpen,
+  status,
+}: {
+  message: string;
+  onCloseSlip: () => void;
+  onDispatchComplete: () => void;
+  onOpenSlip: (mode: CourierSlipMode) => void;
+  serviceLabel: string;
+  slipMode: CourierSlipMode;
+  slipOpen: boolean;
+  status: CourierStatus;
+}) {
+  const [tailDragX, setTailDragX] = useState(0);
+  const [tailPointerId, setTailPointerId] = useState<number | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const tailLongPressTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReducedMotion(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (tailLongPressTimerRef.current !== null) {
+        window.clearTimeout(tailLongPressTimerRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (status !== "dispatching" || !prefersReducedMotion) return undefined;
+    const timer = window.setTimeout(onDispatchComplete, 360);
+    return () => window.clearTimeout(timer);
+  }, [onDispatchComplete, prefersReducedMotion, status]);
+
+  useEffect(() => {
+    if (!slipOpen) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseSlip();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onCloseSlip, slipOpen]);
+
+  const startTailDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    setTailPointerId(event.pointerId);
+    setTailDragX(0);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (tailLongPressTimerRef.current !== null) {
+      window.clearTimeout(tailLongPressTimerRef.current);
+    }
+    tailLongPressTimerRef.current = window.setTimeout(() => {
+      onOpenSlip("detail");
+      tailLongPressTimerRef.current = null;
+    }, 520);
+  };
+
+  const moveTailDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (tailPointerId !== event.pointerId) return;
+    if (Math.abs(event.movementX) > 3 && tailLongPressTimerRef.current !== null) {
+      window.clearTimeout(tailLongPressTimerRef.current);
+      tailLongPressTimerRef.current = null;
+    }
+    const nextX = clampNumber(event.movementX + tailDragX, 0, 86);
+    setTailDragX(nextX);
+    if (nextX > 34) {
+      onOpenSlip("summary");
+    }
+  };
+
+  const finishTailDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (tailPointerId !== event.pointerId) return;
+    if (tailLongPressTimerRef.current !== null) {
+      window.clearTimeout(tailLongPressTimerRef.current);
+      tailLongPressTimerRef.current = null;
+    }
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // The pointer can already be released on a quick tap.
+    }
+    if (tailDragX > 28) {
+      onOpenSlip("summary");
+    }
+    setTailPointerId(null);
+    window.setTimeout(() => setTailDragX(0), 120);
+  };
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[84] overflow-hidden">
+      {status === "dispatching" && !prefersReducedMotion && (
+        <>
+          <motion.div
+            aria-hidden="true"
+            animate={{ x: ["118vw", "48vw", "-55vw"], opacity: [0, 0.28, 0] }}
+            className="absolute left-0 top-[42%] h-8 w-[46%] rounded-full bg-[#5f3a16]/22 blur-[10px]"
+            initial={{ x: "118vw", opacity: 0 }}
+            transition={{ duration: 2.75, ease: [0.42, 0, 0.25, 1] }}
+          />
+          <motion.button
+            aria-label="Open courier satchel note"
+            animate={{
+              x: ["118vw", "42vw", "-64vw"],
+              y: [14, 4, -10],
+              rotate: [0.7, -0.6, 0.5],
+            }}
+            className="pointer-events-auto absolute left-0 top-[25%] z-[2] h-[230px] w-[190px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            initial={{ x: "118vw", y: 14, rotate: 0.7 }}
+            onAnimationComplete={onDispatchComplete}
+            onClick={() => onOpenSlip("summary")}
+            transition={{
+              duration: 2.75,
+              ease: [0.42, 0, 0.25, 1],
+              times: [0, 0.56, 1],
+            }}
+            type="button"
+          >
+            <motion.img
+              alt=""
+              animate={{ y: [0, -3, 1, -2, 0] }}
+              className="h-full w-full object-contain drop-shadow-[0_18px_18px_rgba(52,31,12,0.18)]"
+              draggable={false}
+              src={HELD_ASSETS.courierHorseOutbound}
+              transition={{ duration: 0.9, ease: "easeInOut", repeat: Infinity }}
+            />
+          </motion.button>
+        </>
+      )}
+
+      {status === "courier_out" && (
+        <button
+          aria-label="Open courier dispatch slip"
+          className="pointer-events-auto absolute left-[-42px] top-[41%] z-[3] h-[96px] w-[118px] touch-none border-0 bg-transparent p-0 opacity-90 outline-none transition-[filter,opacity] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+          onClick={() => onOpenSlip("summary")}
+          onContextMenu={event => event.preventDefault()}
+          onPointerCancel={finishTailDrag}
+          onPointerDown={startTailDrag}
+          onPointerMove={moveTailDrag}
+          onPointerUp={finishTailDrag}
+          onPointerLeave={() => {
+            if (tailPointerId === null) return;
+            if (tailLongPressTimerRef.current !== null) {
+              window.clearTimeout(tailLongPressTimerRef.current);
+              tailLongPressTimerRef.current = null;
+            }
+            setTailPointerId(null);
+            setTailDragX(0);
+          }}
+          onTouchStart={() => window.navigator.vibrate?.(4)}
+          style={{ transform: `translateX(${tailDragX}px)` }}
+          type="button"
+        >
+          <img
+            alt=""
+            className="h-full w-full object-contain drop-shadow-[0_8px_10px_rgba(54,34,16,0.18)]"
+            draggable={false}
+            src={HELD_ASSETS.courierTail}
+          />
+        </button>
+      )}
+
+      {slipOpen && (
+        <motion.section
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          className="pointer-events-auto absolute left-[8%] right-[8%] top-[27%] z-[12] text-[#2a2520]"
+          exit={{ opacity: 0, x: -14 }}
+          initial={{ opacity: 0, x: -18, y: 4 }}
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="relative min-h-[252px] overflow-hidden rounded-[3px] border border-[#c39a54]/42 bg-[#fff8ea]/88 px-5 py-5 shadow-[0_18px_34px_rgba(52,33,15,0.18)] backdrop-blur-[1px]">
+            <img
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-16 -right-14 w-[220px] rotate-[-4deg] opacity-[0.08]"
+              draggable={false}
+              src={HELD_ASSETS.courierNote}
+            />
+            <img
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-10 -top-8 w-[148px] rotate-[8deg] opacity-20"
+              draggable={false}
+              src={HELD_ASSETS.courierEnvelope}
+            />
+            <img
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-8 right-2 w-[96px] rotate-[6deg] opacity-25"
+              draggable={false}
+              src={HELD_ASSETS.courierSatchel}
+            />
+            <div className="relative z-10">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-[#7a6d5f]">
+                Courier slip
+              </p>
+              <h2 className="mt-2 font-serif text-[25px] italic leading-tight text-[#2a2520]">
+                Word is out.
+              </h2>
+              <div className="mt-4 border-y border-[#b8893c]/24 py-3">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-[#6f6254]">
+                  Asked on your behalf
+                </p>
+                <p className="mt-2 font-serif text-[16px] italic leading-6 text-[#2f2923]">
+                  “{message}”
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-[34%_1fr] gap-3 text-[12px] leading-5 text-[#56483b]">
+                <span className="uppercase tracking-[0.16em] text-[#7a6d5f]">Thread</span>
+                <span className="font-serif text-[15px] italic text-[#2f2923]">{serviceLabel}</span>
+                <span className="uppercase tracking-[0.16em] text-[#7a6d5f]">State</span>
+                <span className="font-serif text-[15px] italic text-[#2f2923]">
+                  Awaiting outside reply.
+                </span>
+              </div>
+              {slipMode === "detail" && (
+                <p className="mt-4 border-t border-[#b8893c]/20 pt-3 font-serif text-[14px] italic leading-5 text-[#5c4c3e]">
+                  Held has not received a vendor or operator answer yet, so nothing is marked confirmed.
+                </p>
+              )}
+              <div className="mt-5 flex items-center justify-between gap-4">
+                <button
+                  className="font-serif text-[14px] italic text-[#8d6828] underline decoration-[#b8893c]/35 underline-offset-4"
+                  onClick={() => onOpenSlip(slipMode === "detail" ? "summary" : "detail")}
+                  type="button"
+                >
+                  {slipMode === "detail" ? "Less detail" : "Operational truth"}
+                </button>
+                <button
+                  className="font-serif text-[14px] italic text-[#8d6828]"
+                  onClick={onCloseSlip}
+                  type="button"
+                >
+                  Fold
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      )}
+    </div>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -1765,6 +2032,10 @@ function HeldTransformingState({
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [phoneReply, setPhoneReply] = useState("");
   const [phoneReplyStatus, setPhoneReplyStatus] = useState<"idle" | "thinking">("idle");
+  const [courierStatus, setCourierStatus] = useState<CourierStatus>("idle");
+  const [courierMessage, setCourierMessage] = useState("");
+  const [courierSlipOpen, setCourierSlipOpen] = useState(false);
+  const [courierSlipMode, setCourierSlipMode] = useState<CourierSlipMode>("summary");
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
@@ -1807,6 +2078,7 @@ function HeldTransformingState({
   );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
+  const courierServiceLabel = getCourierServiceLabel(services, displayRequest);
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -1929,6 +2201,19 @@ function HeldTransformingState({
 
     console.debug("[HELD] local phone follow-up captured", nextValue);
     setComposerValue("");
+    const needsCourierDispatch = shouldTriggerCourierDispatch(nextValue);
+
+    if (needsCourierDispatch) {
+      submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+      setCourierMessage(nextValue);
+      setCourierSlipOpen(false);
+      setCourierSlipMode("summary");
+      setCourierStatus("dispatching");
+      setPhoneReply(COURIER_DISPATCH_TEXT);
+      setPhoneReplyStatus("idle");
+      return;
+    }
+
     setPhoneReply("Held is listening.");
     setPhoneReplyStatus("thinking");
 
@@ -1986,6 +2271,11 @@ function HeldTransformingState({
     setSelectedToken({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
     onDebugLaundryVitrineOpened?.();
   }, [debugOpenLaundryVitrine, onDebugLaundryVitrineOpened]);
+
+  const openCourierSlip = (mode: CourierSlipMode) => {
+    setCourierSlipMode(mode);
+    setCourierSlipOpen(true);
+  };
 
   return (
     <div
@@ -2063,7 +2353,13 @@ function HeldTransformingState({
       {isSettled && (
         <section
           className={`pointer-events-none absolute left-1/2 top-[12.5%] z-20 flex h-[55%] w-[88%] -translate-x-1/2 flex-col items-center text-center text-[#2a2520] transition-opacity duration-200 ${
-            phoneReply ? "opacity-[0.08]" : isPhoneEngaged ? "opacity-[0.76]" : "opacity-100"
+            courierStatus === "dispatching"
+              ? "opacity-[0.62]"
+              : phoneReply
+                ? "opacity-[0.08]"
+                : isPhoneEngaged
+                  ? "opacity-[0.76]"
+                  : "opacity-100"
           }`}
         >
           <PlanLine
@@ -2103,6 +2399,19 @@ function HeldTransformingState({
             text={phoneReply}
           />
         </section>
+      )}
+
+      {isSettled && courierStatus !== "idle" && (
+        <HeldCourierGesture
+          message={courierMessage}
+          onDispatchComplete={() => setCourierStatus("courier_out")}
+          onOpenSlip={openCourierSlip}
+          serviceLabel={courierServiceLabel}
+          slipMode={courierSlipMode}
+          slipOpen={courierSlipOpen}
+          status={courierStatus}
+          onCloseSlip={() => setCourierSlipOpen(false)}
+        />
       )}
 
       {isSettled && (
@@ -2801,6 +3110,46 @@ function getServiceLabel(type: string) {
   if (type === "ride_airport") return "Airport pickup";
   if (type === "haircut") return "Haircut";
   return "Service";
+}
+
+function getCourierServiceLabel(services: HeldParsedService[], request: string) {
+  const serviceLabels = getTokenAssets(services, request)
+    .map(token => getServiceLabel(token.type))
+    .filter(Boolean);
+  const unique = Array.from(new Set(serviceLabels));
+  if (unique.length === 0) return "Current service thread";
+  if (unique.length === 1) return `${unique[0]} thread`;
+  return `${unique.slice(0, -1).join(", ")} and ${unique[unique.length - 1]} threads`;
+}
+
+function shouldTriggerCourierDispatch(message: string) {
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+
+  const localOnly =
+    /\b(status|already booked|what did i book|what's booked|what is booked|how much|price|cost|receipt|total)\b/.test(
+      normalized
+    ) ||
+    /\b(what time|when is|when's|pickup time|return time)\b/.test(normalized);
+  const explicitOutbound =
+    /\b(ask|tell|message|send|notify|let)\b.*\b(them|vendor|provider|driver|groomer|detailer|cleaner|laundry|maria|jordan|concierge)\b/.test(
+      normalized
+    );
+  const timingChange =
+    /\b(can|could|would|is it possible|please)\b.*\b(come|return|arrive|pickup|pick up|do|move|change|switch|make it)\b/.test(
+      normalized
+    ) &&
+    /\b(earlier|later|before|after|instead|morning|afternoon|evening|today|tomorrow|saturday|sunday|monday|tuesday|wednesday|thursday|friday|3|11)\b/.test(
+      normalized
+    );
+  const handoffNote =
+    /\b(leave|left|bag|keys|door|front desk|concierge|instructions?|note)\b/.test(normalized) &&
+    /\b(tell|let|driver|them|vendor|provider|laundry|groomer|detailer)\b/.test(normalized);
+  const namedProvider = /\b(maria|jordan|groomer|detailer|driver|provider|vendor)\b/.test(normalized);
+
+  if (explicitOutbound || timingChange || handoffNote) return true;
+  if (namedProvider && !localOnly) return true;
+  return false;
 }
 
 function inferServicesFromRequest(request: string): HeldParsedService[] {
