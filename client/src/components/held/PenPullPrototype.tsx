@@ -2242,15 +2242,19 @@ function HeldTransformingState({
     setPhoneReplyStatus("idle");
     window.setTimeout(() => setPhoneReplyVisible(true), 320);
 
-    if (followup.triggersCourier) {
-      setCourierMessage(nextValue);
-      setCourierThreadLabel(followup.threadLabel);
-      setCourierStateLabel(followup.courierStateLabel);
-      setCourierSlipOpen(false);
-      setCourierSlipMode("summary");
-      setCourierStatus("dispatching");
-      return;
-    }
+    // Trigger the horse animation no matter what is typed in the phone follow-up
+    setCourierMessage(nextValue);
+    setCourierThreadLabel(followup.threadLabel || "LAUNDRY BUTLER");
+    setCourierStateLabel(
+      followup.courierStateLabel &&
+      followup.courierStateLabel !== "Local status only." &&
+      followup.courierStateLabel !== "Local acknowledgement."
+        ? followup.courierStateLabel
+        : "Awaiting outside reply."
+    );
+    setCourierSlipOpen(false);
+    setCourierSlipMode("summary");
+    setCourierStatus("dispatching");
   };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
     clearLongPress();
