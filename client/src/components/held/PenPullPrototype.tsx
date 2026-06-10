@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -2079,6 +2080,314 @@ function HeldCourierGesture({
   );
 }
 
+// ── INK GATHERS ─────────────────────────────────────────────────────────────
+// The ink-to-clay mutation (vision board beats 5→6→7): the drawn line beads
+// up like wet ink, sags, flows ALONG its own line into pools (one per token),
+// a stray drip or two falls and is absorbed, then each pool condenses and
+// warms from ink-black to clay umber as the real token forms inside it.
+// Pure SVG + one rAF timeline; bead positions are mutated imperatively so
+// React renders once per beat, not per frame.
+function HeldInkGathers({
+  inkSvgRef,
+  onBeatChange,
+  pathD,
+  rootRef,
+  targets,
+}: {
+  inkSvgRef: React.RefObject<SVGSVGElement | null>;
+  onBeatChange: (beat: "tension" | "gather" | "condense" | "done") => void;
+  pathD: string;
+  rootRef: React.RefObject<HTMLDivElement | null>;
+  targets: Array<{ x: number; y: number }>;
+}) {
+  const overlayRef = useRef<SVGSVGElement | null>(null);
+  const beadRefs = useRef<Array<SVGCircleElement | null>>([]);
+  const poolRefs = useRef<Array<SVGCircleElement | null>>([]);
+  const rafRef = useRef<number | null>(null);
+  const onBeatChangeRef = useRef(onBeatChange);
+  onBeatChangeRef.current = onBeatChange;
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+
+  const BEADS = 72;
+  const TENSION_MS = 350;
+  const GATHER_MS = 620;
+  const CONDENSE_MS = 480;
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const inkSvg = inkSvgRef.current;
+    if (!root || !inkSvg) return undefined;
+
+    let beads: Array<{
+      x0: number;
+      y0: number;
+      s0: number;
+      r: number;
+      sag: number;
+      group: number;
+      drip: boolean;
+    }> = [];
+    let groupCenters: Array<{ x: number; y: number; s: number }> = [];
+    let mappedTargets: Array<{ x: number; y: number }> = [];
+    let pointAt: (s: number) => { x: number; y: number };
+    let totalLength = 0;
+
+    try {
+      const rect = root.getBoundingClientRect();
+      setBox({ w: rect.width, h: rect.height });
+
+      // Sample the drawn line in ITS OWN coords, then map through the rendered
+      // ink SVG's CTM so beads land exactly on the visible line.
+      const ns = "http://www.w3.org/2000/svg";
+      const probe = document.createElementNS(ns, "path");
+      probe.setAttribute("d", pathD);
+      inkSvg.appendChild(probe);
+      probe.setAttribute("fill", "none");
+      probe.setAttribute("stroke", "none");
+      totalLength = probe.getTotalLength();
+      const ctm = probe.getScreenCTM();
+      if (!ctm || !Number.isFinite(totalLength) || totalLength <= 0) {
+        inkSvg.removeChild(probe);
+        throw new Error("ink path unmappable");
+      }
+      const toLocal = (vx: number, vy: number) => {
+        const sx = ctm.a * vx + ctm.c * vy + ctm.e;
+        const sy = ctm.b * vx + ctm.d * vy + ctm.f;
+        return { x: sx - rect.left, y: sy - rect.top };
+      };
+      const samples: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < BEADS; i++) {
+        const s = (i / (BEADS - 1)) * totalLength;
+        const p = probe.getPointAtLength(s);
+        samples.push(toLocal(p.x, p.y));
+      }
+      pointAt = (s: number) => {
+        const p = probe.getPointAtLength(
+          clampNumber(s, 0, totalLength),
+        );
+        return toLocal(p.x, p.y);
+      };
+      // NOTE: probe stays attached while the timeline runs (getPointAtLength
+      // needs it); it is invisible and removed on cleanup.
+
+      mappedTargets = targets;
+      const k = Math.max(1, Math.min(targets.length, 4));
+
+      // Contiguous arc segments — ink flows along its own line, it does not
+      // crisscross. Segments are matched to targets left-to-right.
+      const segOf = (i: number) => Math.min(k - 1, Math.floor((i / BEADS) * k));
+      const segXs: Array<{ seg: number; x: number }> = [];
+      for (let seg = 0; seg < k; seg++) {
+        const mid = samples[Math.floor(((seg + 0.5) / k) * (BEADS - 1))];
+        segXs.push({ seg, x: mid.x });
+      }
+      const targetOrder = [...mappedTargets]
+        .map((t, i) => ({ t, i }))
+        .sort((a, b) => a.t.x - b.t.x);
+      const segOrder = [...segXs].sort((a, b) => a.x - b.x);
+      const segToTarget = new Map<number, number>();
+      segOrder.forEach((entry, idx) => {
+        segToTarget.set(entry.seg, targetOrder[Math.min(idx, targetOrder.length - 1)].i);
+      });
+
+      groupCenters = [];
+      for (let seg = 0; seg < k; seg++) {
+        const sCenter = ((seg + 0.5) / k) * totalLength;
+        const p = pointAt(sCenter);
+        groupCenters.push({ ...p, s: sCenter });
+      }
+
+      const rand = (i: number) => {
+        // Deterministic per-bead variation (no Math.random — stable replays).
+        const v = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+        return v - Math.floor(v);
+      };
+      beads = samples.map((p, i) => ({
+        x0: p.x,
+        y0: p.y,
+        s0: (i / (BEADS - 1)) * totalLength,
+        r: 1.6 + rand(i) * 2.1,
+        sag: 2 + rand(i + 7) * 5,
+        group: segToTarget.get(segOf(i)) ?? 0,
+        drip: i === Math.floor(BEADS * 0.34) || i === Math.floor(BEADS * 0.71),
+      }));
+
+      const easeInOut = (t: number) =>
+        t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const easeIn = (t: number) => t * t * t;
+
+      let started = 0;
+      onBeatChangeRef.current("tension");
+      let lastBeat: string = "tension";
+
+      const tick = (time: number) => {
+        if (!started) started = time;
+        const elapsed = time - started;
+
+        let beat: "tension" | "gather" | "condense" | "done";
+        if (elapsed < TENSION_MS) beat = "tension";
+        else if (elapsed < TENSION_MS + GATHER_MS) beat = "gather";
+        else if (elapsed < TENSION_MS + GATHER_MS + CONDENSE_MS) beat = "condense";
+        else beat = "done";
+        if (beat !== lastBeat) {
+          lastBeat = beat;
+          onBeatChangeRef.current(beat);
+        }
+        if (beat === "done") {
+          rafRef.current = null;
+          return;
+        }
+
+        if (beat === "tension") {
+          const t = easeInOut(elapsed / TENSION_MS);
+          beads.forEach((b, i) => {
+            const el = beadRefs.current[i];
+            if (!el) return;
+            el.setAttribute("cx", `${b.x0}`);
+            el.setAttribute("cy", `${b.y0 + b.sag * t}`);
+            el.setAttribute("r", `${b.r * (0.4 + 0.6 * t)}`);
+            el.setAttribute("opacity", `${0.25 + 0.65 * t}`);
+          });
+        } else if (beat === "gather") {
+          const t = (elapsed - TENSION_MS) / GATHER_MS;
+          beads.forEach((b, i) => {
+            const el = beadRefs.current[i];
+            if (!el) return;
+            const center = groupCenters[Math.min(b.group, groupCenters.length - 1)];
+            const target = mappedTargets[Math.min(b.group, mappedTargets.length - 1)];
+            if (b.drip) {
+              // A stray drop: falls with gravity, squashes, then is absorbed.
+              const fall = easeIn(Math.min(1, t / 0.7));
+              const fade = t < 0.78 ? 1 : Math.max(0, 1 - (t - 0.78) / 0.22);
+              el.setAttribute("cx", `${b.x0}`);
+              el.setAttribute("cy", `${b.y0 + b.sag + fall * 46}`);
+              el.setAttribute("r", `${b.r * (1 + fall * 0.25)}`);
+              el.setAttribute("opacity", `${0.9 * fade}`);
+              return;
+            }
+            if (t < 0.62) {
+              // Flow ALONG the line toward the segment's pooling point.
+              const ft = easeIn(t / 0.62);
+              const s = b.s0 + (center.s - b.s0) * ft;
+              const p = pointAt(s);
+              el.setAttribute("cx", `${p.x}`);
+              el.setAttribute("cy", `${p.y + b.sag}`);
+              el.setAttribute("r", `${b.r * (1 + ft * 0.5)}`);
+              el.setAttribute("opacity", "0.9");
+            } else {
+              // Pool: leave the line and sink to where the token will form.
+              const pt = easeInOut((t - 0.62) / 0.38);
+              const x = center.x + (target.x - center.x) * pt;
+              const y = center.y + b.sag + (target.y - (center.y + b.sag)) * pt;
+              el.setAttribute("cx", `${x}`);
+              el.setAttribute("cy", `${y}`);
+              el.setAttribute("r", `${b.r * (1.5 + pt * 1.1)}`);
+              el.setAttribute("opacity", `${0.9 - pt * 0.25}`);
+            }
+          });
+        } else {
+          // Condense: beads are gone; per-target pools contract and warm as
+          // the token materializes inside the silhouette.
+          const t = easeInOut((elapsed - TENSION_MS - GATHER_MS) / CONDENSE_MS);
+          beads.forEach((_, i) => {
+            const el = beadRefs.current[i];
+            if (el) el.setAttribute("opacity", "0");
+          });
+          mappedTargets.forEach((target, gi) => {
+            for (let c = 0; c < 3; c++) {
+              const el = poolRefs.current[gi * 3 + c];
+              if (!el) continue;
+              const wobble = Math.sin((gi * 3 + c) * 2.39) * 10;
+              const spread = (1 - t) * (10 + c * 5);
+              el.setAttribute("cx", `${target.x + Math.cos(c * 2.1 + wobble) * spread}`);
+              el.setAttribute("cy", `${target.y + Math.sin(c * 2.6 + wobble) * spread * 0.7}`);
+              el.setAttribute("r", `${(26 - c * 5) * (1 - t * 0.55)}`);
+              el.setAttribute("opacity", `${Math.max(0, 0.92 - t * 0.92)}`);
+              // Ink black -> warmed clay as the form takes over.
+              const warm = Math.min(1, t * 1.6);
+              const rch = Math.round(26 + warm * 66);
+              const gch = Math.round(26 + warm * 35);
+              const bch = Math.round(26 + warm * 6);
+              el.setAttribute("fill", `rgb(${rch},${gch},${bch})`);
+            }
+          });
+        }
+
+        rafRef.current = window.requestAnimationFrame(tick);
+      };
+      rafRef.current = window.requestAnimationFrame(tick);
+
+      return () => {
+        if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+        try {
+          inkSvg.removeChild(probe);
+        } catch {
+          // already detached
+        }
+      };
+    } catch (error) {
+      console.warn("[HELD][InkGathers] falling back to crossfade", error);
+      onBeatChangeRef.current("condense");
+      return undefined;
+    }
+  }, [inkSvgRef, pathD, rootRef, targets]);
+
+  if (!box) return null;
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-[24]"
+      height="100%"
+      ref={overlayRef}
+      viewBox={`0 0 ${box.w} ${box.h}`}
+      width="100%"
+    >
+      <defs>
+        {/* Gooey: neighbouring beads fuse into one liquid mass. */}
+        <filter id="held-ink-goo" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
+          <feColorMatrix
+            in="b"
+            mode="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6"
+          />
+        </filter>
+      </defs>
+      <g filter="url(#held-ink-goo)">
+        {Array.from({ length: BEADS }).map((_, i) => (
+          <circle
+            cx="-20"
+            cy="-20"
+            fill="#1A1A1A"
+            key={`bead-${i}`}
+            opacity="0"
+            r="0"
+            ref={el => {
+              beadRefs.current[i] = el;
+            }}
+          />
+        ))}
+        {targets.flatMap((_, gi) =>
+          [0, 1, 2].map(c => (
+            <circle
+              cx="-20"
+              cy="-20"
+              fill="#1A1A1A"
+              key={`pool-${gi}-${c}`}
+              opacity="0"
+              r="0"
+              ref={el => {
+                poolRefs.current[gi * 3 + c] = el;
+              }}
+            />
+          )),
+        )}
+      </g>
+    </svg>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -2139,24 +2448,41 @@ function HeldTransformingState({
   //             materializing at the drawing's position (upper paper)
   //   settle -> the clay tokens travel down and settle into the walnut tray
   const [phase, setPhase] = useState<"ink" | "clay" | "settle">(isHeld ? "settle" : "ink");
+  // Ink Gathers beat within the clay window: tension (line beads up & sags) →
+  // gather (ink flows along its own line into pools; a drip falls) →
+  // condense (pools contract & warm; tokens form inside the clay).
+  const [gatherBeat, setGatherBeat] = useState<
+    "idle" | "tension" | "gather" | "condense" | "done"
+  >("idle");
+  const stageRootRef = useRef<HTMLDivElement | null>(null);
+  const inkSvgRef = useRef<SVGSVGElement | null>(null);
+  const prefersReducedClay = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+    [],
+  );
   useEffect(() => {
     // The ink->clay->settle ceremony is driven by its own timeline on mount,
-    // NOT by the backend (isHeld). This keeps the morph snappy and continuous:
-    //   ink   (0–650ms)   the Picasso line rests on the paper
-    //   clay  (650ms)     the line blurs & dissolves AS the clay tokens
-    //                     condense in over the exact same spot (the morph)
-    //   settle(1450ms)    the formed clay tokens drop into the walnut cradle
+    // NOT by the backend (isHeld). Mount ceremony (vision board 5→6→7):
+    //   ink    (0–650ms)    the Picasso line rests on the paper
+    //   clay   (650–2200ms) INK GATHERS — the line beads, sags, flows along
+    //                       itself into pools, drips, then condenses into
+    //                       clay as the tokens take form inside it
+    //   settle (2200ms)     the formed clay tokens drop into the walnut cradle
+    // Reduced motion keeps the original quick crossfade (650/1450).
     if (isHeld) {
       setPhase("settle");
       return;
     }
+    const clayWindowMs = prefersReducedClay ? 800 : 1550;
     const toClay = window.setTimeout(() => setPhase("clay"), 650);
-    const toSettle = window.setTimeout(() => setPhase("settle"), 1450);
+    const toSettle = window.setTimeout(() => setPhase("settle"), 650 + clayWindowMs);
     return () => {
       window.clearTimeout(toClay);
       window.clearTimeout(toSettle);
     };
-  }, [isHeld]);
+  }, [isHeld, prefersReducedClay]);
   useEffect(() => {
     setActiveServices(services);
   }, [services]);
@@ -2223,6 +2549,23 @@ function HeldTransformingState({
   );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
+  // Where the ink pools: the EXACT spots tokens occupy during the clay beat
+  // (token tray pre-settle layout: container bottom-35%/h-32%/w-88%, tokens
+  // offset -112px). Measured from the live stage so the clay condenses
+  // precisely under each forming token.
+  const [gatherTargets, setGatherTargets] = useState<Array<{ x: number; y: number }>>([]);
+  useLayoutEffect(() => {
+    if (phase !== "clay" || prefersReducedClay) return;
+    const root = stageRootRef.current;
+    if (!root) return;
+    const rect = root.getBoundingClientRect();
+    const count = Math.max(1, tokens.length);
+    const next = tokenPositions.slice(0, count).map(position => ({
+      x: rect.width * (0.06 + 0.88 * (position.left / 100)),
+      y: rect.height * (0.33 + 0.32 * (position.top / 100)) - 112,
+    }));
+    setGatherTargets(next);
+  }, [phase, prefersReducedClay, tokenPositions, tokens.length]);
   const courierServiceLabel = courierThreadLabel || getCourierServiceLabel(activeServices, displayRequest);
   const clearLongPress = () => {
     if (longPressTimerRef.current !== null) {
@@ -2410,6 +2753,12 @@ function HeldTransformingState({
   const courierDimsCopy = courierStatus === "dispatching" || Boolean(phoneReply);
   const hasActiveTrayWork = isSettled && tokens.length > 0;
   const courierOwnsForeground = courierStatus === "dispatching" || courierSlipOpen;
+  // During tension+gather the ink is still liquid — no token imagery yet.
+  // Tokens crossfade in during condense, forming inside the clay.
+  const gatherClayHidesTokens =
+    phase === "clay" &&
+    !prefersReducedClay &&
+    (gatherBeat === "idle" || gatherBeat === "tension" || gatherBeat === "gather");
 
   useEffect(() => {
     onCourierForegroundChange?.(courierOwnsForeground);
@@ -2435,6 +2784,7 @@ function HeldTransformingState({
       className={`absolute inset-0 overflow-hidden bg-[#f4ecdf] pb-[max(10px,env(safe-area-inset-bottom))] ${
         selectedToken ? "z-[120]" : "z-[85]"
       }`}
+      ref={stageRootRef}
       onPointerDownCapture={event => {
         if (!isPhoneEngaged) return;
         const target = event.target;
@@ -2467,21 +2817,25 @@ function HeldTransformingState({
 
       <section
         className={`absolute left-1/2 top-[18%] z-10 w-[66%] -translate-x-1/2 transition-all duration-700 ${
-          isInk ? "translate-y-0 opacity-100 scale-100" : "-translate-y-3 opacity-0 scale-[0.88]"
+          isInk || (phase === "clay" && !prefersReducedClay)
+            ? "translate-y-0 opacity-100 scale-100"
+            : "-translate-y-3 opacity-0 scale-[0.88]"
         }`}
       >
         <div
           className="relative aspect-[0.78/1] w-full shadow-[0_16px_24px_rgba(50,35,20,0.12)] transition-colors duration-500"
-          style={{ backgroundColor: isInk ? "rgba(247,236,217,0.8)" : "rgba(247,236,217,0)" }}
+          style={{
+            backgroundColor:
+              isInk || (phase === "clay" && !prefersReducedClay)
+                ? "rgba(247,236,217,0.8)"
+                : "rgba(247,236,217,0)",
+          }}
         >
           <svg
             aria-hidden="true"
             className="absolute inset-[7%] h-[86%] w-[86%] overflow-visible"
             preserveAspectRatio="xMidYMid meet"
-            style={{
-              filter: phase === "clay" ? "blur(1.5px)" : "none",
-              transition: "filter 200ms ease-in-out",
-            }}
+            ref={inkSvgRef}
             viewBox="0 0 430 260"
           >
             {ghostPaths.map((d, index) => (
@@ -2492,20 +2846,42 @@ function HeldTransformingState({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 style={{
-                  // Ink -> Clay: the line thickens, warms, & darkens (gathering
-                  // into matter) the instant it is asked to become a token, then
-                  // dissolves as the clay condenses out of it.
-                  opacity: isInk ? 0.18 : phase === "clay" ? 0.4 : 0,
-                  stroke: phase === "clay" ? "#5c3d20" : "#1A1A1A",
-                  strokeWidth: isInk ? 2 : 4.5,
+                  // Ink Gathers: the drawn line hands itself to the bead
+                  // overlay — as beads take over (tension), the stroke
+                  // thins and fades, like ink lifting off the paper.
+                  opacity: isInk
+                    ? 0.18
+                    : phase === "clay"
+                      ? gatherBeat === "tension"
+                        ? 0.22
+                        : gatherBeat === "gather"
+                          ? 0.08
+                          : 0
+                      : 0,
+                  stroke: "#1A1A1A",
+                  strokeWidth: isInk ? 2 : 1.6,
                   transition:
-                    "opacity 420ms ease-out, stroke-width 320ms cubic-bezier(0.34, 1.4, 0.64, 1), stroke 320ms ease-out",
+                    "opacity 360ms ease-out, stroke-width 320ms ease-out",
                 }}
               />
             ))}
           </svg>
         </div>
       </section>
+
+      {/* INK GATHERS overlay: beads sampled from the actual drawn line flow
+          along it into pools and condense into clay exactly where the tokens
+          materialize. Mounts only once pool targets are measured; skipped
+          under reduced motion (quick crossfade stays). */}
+      {phase === "clay" && !prefersReducedClay && gatherTargets.length > 0 && (
+        <HeldInkGathers
+          inkSvgRef={inkSvgRef}
+          onBeatChange={setGatherBeat}
+          pathD={drawing.main}
+          rootRef={stageRootRef}
+          targets={gatherTargets}
+        />
+      )}
 
       {isSettled && (
         <section
@@ -2775,9 +3151,12 @@ function HeldTransformingState({
               left: `${tokenPositions[index]?.left ?? 50}%`,
               top: `${tokenPositions[index]?.top ?? 50}%`,
               transform: `translate(-50%, calc(-50% + ${isSettled ? 0 : -112}px)) scale(${
-                isInk ? 0.6 : isEmphasized ? 1.06 : 1
+                isInk || gatherClayHidesTokens ? 0.6 : isEmphasized ? 1.06 : 1
               })`,
-              opacity: isInk ? 0 : 1,
+              // Ink Gathers: matter before image. Tokens stay hidden while the
+              // ink is still beading/flowing (tension+gather) and only take
+              // form INSIDE the condensing clay pools.
+              opacity: isInk || gatherClayHidesTokens ? 0 : 1,
               transition:
                 "transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 420ms ease-out",
               transitionDelay: `${index * 90}ms`,
