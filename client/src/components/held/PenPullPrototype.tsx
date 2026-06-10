@@ -2099,13 +2099,26 @@ function HeldCourierGesture({
   );
 }
 
-// ── INK GATHERS ─────────────────────────────────────────────────────────────
-// The ink-to-clay mutation (vision board beats 5→6→7): the drawn line beads
-// up like wet ink, sags, flows ALONG its own line into pools (one per token),
-// a stray drip or two falls and is absorbed, then each pool condenses and
-// warms from ink-black to clay umber as the real token forms inside it.
-// Pure SVG + one rAF timeline; bead positions are mutated imperatively so
-// React renders once per beat, not per frame.
+// QA affordance (gated by query param, same spirit as postorder=*): multiply
+// the melt timings so the beats can be reviewed/captured in slow motion.
+function getCeremonySlowFactor(): number {
+  if (typeof window === "undefined") return 1;
+  return new URLSearchParams(window.location.search).get("ceremonySlow") === "1" ? 3 : 1;
+}
+
+// ── THE LINE MELTS ──────────────────────────────────────────────────────────
+// Ink-to-clay mutation (vision board beats 5→6→7). The atom is the LINE
+// ITSELF — no particles. Each drawn subpath becomes a deformable strand that
+// (1) thickens and sags under its own weight like warm wax, with a couple of
+// drips stretching off and falling, (2) slides off its own shape — gravity
+// first, then a pull along into one heap per token — piling into thick clay
+// masses fused by the goo filter, and (3) condenses: the heaps contract,
+// warm from ink-black to clay umber, and the real tokens take form INSIDE
+// the blob silhouettes. The drawing stays recognizably itself while it melts.
+//
+// Beat names stay "tension" | "gather" | "condense" so the parent's token
+// reveal and ink-stroke handoff logic are untouched. One rAF timeline; d
+// strings are rebuilt imperatively per frame (React renders once per beat).
 function HeldInkGathers({
   inkSvgRef,
   onBeatChange,
@@ -2119,134 +2132,188 @@ function HeldInkGathers({
   rootRef: React.RefObject<HTMLDivElement | null>;
   targets: Array<{ x: number; y: number }>;
 }) {
-  const overlayRef = useRef<SVGSVGElement | null>(null);
-  const beadRefs = useRef<Array<SVGCircleElement | null>>([]);
+  const strandRefs = useRef<Array<SVGPathElement | null>>([]);
+  const dripRefs = useRef<Array<SVGCircleElement | null>>([]);
   const poolRefs = useRef<Array<SVGCircleElement | null>>([]);
   const rafRef = useRef<number | null>(null);
   const onBeatChangeRef = useRef(onBeatChange);
   onBeatChangeRef.current = onBeatChange;
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
 
-  const BEADS = 72;
-  const TENSION_MS = 350;
-  const GATHER_MS = 620;
-  const CONDENSE_MS = 480;
+  const MAX_STRANDS = 12;
+  const DRIP_COUNT = 3;
 
   useLayoutEffect(() => {
     const root = rootRef.current;
     const inkSvg = inkSvgRef.current;
     if (!root || !inkSvg) return undefined;
 
-    let beads: Array<{
+    const slow = getCeremonySlowFactor();
+    const THICKEN_MS = 900 * slow;
+    const COLLAPSE_MS = 1100 * slow;
+    const CONDENSE_MS = 900 * slow;
+
+    type MeltPoint = {
       x0: number;
       y0: number;
-      s0: number;
-      r: number;
       sag: number;
-      group: number;
-      drip: boolean;
-    }> = [];
-    let groupCenters: Array<{ x: number; y: number; s: number }> = [];
-    let mappedTargets: Array<{ x: number; y: number }> = [];
-    let pointAt: (s: number) => { x: number; y: number };
-    let totalLength = 0;
+      px: number;
+      py: number;
+      x: number;
+      y: number;
+    };
+
+    const probes: SVGPathElement[] = [];
 
     try {
       const rect = root.getBoundingClientRect();
       setBox({ w: rect.width, h: rect.height });
 
-      // Sample the drawn line in ITS OWN coords, then map through the rendered
-      // ink SVG's CTM so beads land exactly on the visible line.
       const ns = "http://www.w3.org/2000/svg";
-      const probe = document.createElementNS(ns, "path");
-      probe.setAttribute("d", pathD);
-      inkSvg.appendChild(probe);
-      probe.setAttribute("fill", "none");
-      probe.setAttribute("stroke", "none");
-      totalLength = probe.getTotalLength();
-      const ctm = probe.getScreenCTM();
-      if (!ctm || !Number.isFinite(totalLength) || totalLength <= 0) {
-        inkSvg.removeChild(probe);
+      const segments = pathD.split(/(?=M)/).map(s => s.trim()).filter(Boolean);
+      const segLens: number[] = [];
+      let totalLen = 0;
+      for (const segment of segments) {
+        const probe = document.createElementNS(ns, "path");
+        probe.setAttribute("d", segment);
+        probe.setAttribute("fill", "none");
+        probe.setAttribute("stroke", "none");
+        inkSvg.appendChild(probe);
+        const length = probe.getTotalLength();
+        probes.push(probe);
+        segLens.push(length);
+        totalLen += length;
+      }
+      const ctm = probes[0]?.getScreenCTM();
+      if (!ctm || !Number.isFinite(totalLen) || totalLen <= 0) {
         throw new Error("ink path unmappable");
       }
-      const toLocal = (vx: number, vy: number) => {
-        const sx = ctm.a * vx + ctm.c * vy + ctm.e;
-        const sy = ctm.b * vx + ctm.d * vy + ctm.f;
-        return { x: sx - rect.left, y: sy - rect.top };
-      };
-      const samples: Array<{ x: number; y: number }> = [];
-      for (let i = 0; i < BEADS; i++) {
-        const s = (i / (BEADS - 1)) * totalLength;
-        const p = probe.getPointAtLength(s);
-        samples.push(toLocal(p.x, p.y));
-      }
-      pointAt = (s: number) => {
-        const p = probe.getPointAtLength(
-          clampNumber(s, 0, totalLength),
-        );
-        return toLocal(p.x, p.y);
-      };
-      // NOTE: probe stays attached while the timeline runs (getPointAtLength
-      // needs it); it is invisible and removed on cleanup.
-
-      mappedTargets = targets;
-      const k = Math.max(1, Math.min(targets.length, 4));
-
-      // Contiguous arc segments — ink flows along its own line, it does not
-      // crisscross. Segments are matched to targets left-to-right.
-      const segOf = (i: number) => Math.min(k - 1, Math.floor((i / BEADS) * k));
-      const segXs: Array<{ seg: number; x: number }> = [];
-      for (let seg = 0; seg < k; seg++) {
-        const mid = samples[Math.floor(((seg + 0.5) / k) * (BEADS - 1))];
-        segXs.push({ seg, x: mid.x });
-      }
-      const targetOrder = [...mappedTargets]
-        .map((t, i) => ({ t, i }))
-        .sort((a, b) => a.t.x - b.t.x);
-      const segOrder = [...segXs].sort((a, b) => a.x - b.x);
-      const segToTarget = new Map<number, number>();
-      segOrder.forEach((entry, idx) => {
-        segToTarget.set(entry.seg, targetOrder[Math.min(idx, targetOrder.length - 1)].i);
+      const toLocal = (vx: number, vy: number) => ({
+        x: ctm.a * vx + ctm.c * vy + ctm.e - rect.left,
+        y: ctm.b * vx + ctm.d * vy + ctm.f - rect.top,
       });
-
-      groupCenters = [];
-      for (let seg = 0; seg < k; seg++) {
-        const sCenter = ((seg + 0.5) / k) * totalLength;
-        const p = pointAt(sCenter);
-        groupCenters.push({ ...p, s: sCenter });
-      }
-
       const rand = (i: number) => {
-        // Deterministic per-bead variation (no Math.random — stable replays).
         const v = Math.sin(i * 127.1 + 311.7) * 43758.5453;
         return v - Math.floor(v);
       };
-      beads = samples.map((p, i) => ({
-        x0: p.x,
-        y0: p.y,
-        s0: (i / (BEADS - 1)) * totalLength,
-        r: 1.6 + rand(i) * 2.1,
-        sag: 2 + rand(i + 7) * 5,
-        group: segToTarget.get(segOf(i)) ?? 0,
-        drip: i === Math.floor(BEADS * 0.34) || i === Math.floor(BEADS * 0.71),
+
+      // Pool segmentation: k contiguous runs along the FULL drawn length,
+      // matched to token targets left-to-right (ink flows to its nearest
+      // forming token; runs never crisscross).
+      const k = Math.max(1, Math.min(targets.length, 4));
+      const pointOnFull = (sGlobal: number) => {
+        let acc = 0;
+        for (let j = 0; j < probes.length; j++) {
+          if (sGlobal <= acc + segLens[j] || j === probes.length - 1) {
+            const local = probes[j].getPointAtLength(
+              clampNumber(sGlobal - acc, 0, segLens[j]),
+            );
+            return toLocal(local.x, local.y);
+          }
+          acc += segLens[j];
+        }
+        const last = probes[probes.length - 1].getPointAtLength(
+          segLens[segLens.length - 1],
+        );
+        return toLocal(last.x, last.y);
+      };
+      const runMids = Array.from({ length: k }, (_, run) => ({
+        run,
+        x: pointOnFull(((run + 0.5) / k) * totalLen).x,
       }));
+      const targetOrder = targets
+        .map((t, i) => ({ t, i }))
+        .sort((a, b) => a.t.x - b.t.x);
+      const runToTarget = new Map<number, number>();
+      [...runMids]
+        .sort((a, b) => a.x - b.x)
+        .forEach((entry, idx) => {
+          runToTarget.set(
+            entry.run,
+            targetOrder[Math.min(idx, targetOrder.length - 1)].i,
+          );
+        });
+
+      // Sample each subpath into a melt strand. Point budget ~110 across the
+      // whole drawing, distributed by length; smoothing keeps curves liquid.
+      const strands: MeltPoint[][] = [];
+      let cumStart = 0;
+      segments.forEach((_, si) => {
+        const length = segLens[si];
+        const n = Math.max(10, Math.round((length / totalLen) * 110));
+        const points: MeltPoint[] = [];
+        for (let i = 0; i < n; i++) {
+          const sLocal = (i / (n - 1)) * length;
+          const raw = probes[si].getPointAtLength(sLocal);
+          const p = toLocal(raw.x, raw.y);
+          const sGlobal = cumStart + sLocal;
+          const run = Math.min(k - 1, Math.floor((sGlobal / totalLen) * k));
+          const target = targets[runToTarget.get(run) ?? 0];
+          // Structural droop: strand ends behave anchored (they sag least),
+          // open spans belly downward — melting wire, not translation.
+          const endAnchor = Math.min(1, Math.min(i, n - 1 - i) / 5);
+          const noise = 0.5 + 0.5 * Math.sin(i * 0.47 + si * 2.13);
+          // Heap body: each point lands at a jittered spot in the pile so the
+          // mass has volume instead of collapsing to one dot.
+          const angle = rand(si * 100 + i) * Math.PI * 2;
+          const radius = Math.sqrt(rand(si * 131 + i * 7)) * 13;
+          points.push({
+            x0: p.x,
+            y0: p.y,
+            sag: (7 + noise * 20) * (0.35 + 0.65 * endAnchor),
+            px: target.x + Math.cos(angle) * radius,
+            py: target.y + Math.sin(angle) * radius * 0.6,
+            x: p.x,
+            y: p.y,
+          });
+        }
+        strands.push(points);
+        cumStart += length;
+      });
+
+      // Drips ride the longest strand.
+      let longest = 0;
+      strands.forEach((pts, si) => {
+        if (pts.length > strands[longest].length) longest = si;
+      });
+      const dripAnchors = [0.3, 0.62, 0.84].map(f => {
+        const pts = strands[longest];
+        return pts[Math.min(pts.length - 1, Math.floor(pts.length * f))];
+      });
 
       const easeInOut = (t: number) =>
         t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
       const easeIn = (t: number) => t * t * t;
+      const warm = (w: number) => {
+        const ww = clampNumber(w, 0, 1.2);
+        return `rgb(${Math.round(26 + 81 * ww)},${Math.round(26 + 42 * ww)},${Math.round(26 + 9 * ww)})`;
+      };
+      const buildD = (pts: MeltPoint[]) => {
+        if (pts.length < 3) {
+          return `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)} L${pts[pts.length - 1].x.toFixed(1)} ${pts[pts.length - 1].y.toFixed(1)}`;
+        }
+        let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+        for (let i = 1; i < pts.length - 1; i++) {
+          const mx = (pts[i].x + pts[i + 1].x) / 2;
+          const my = (pts[i].y + pts[i + 1].y) / 2;
+          d += ` Q${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)}`;
+        }
+        const last = pts[pts.length - 1];
+        return `${d} L${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
+      };
 
       let started = 0;
+      let lastBeat = "tension";
       onBeatChangeRef.current("tension");
-      let lastBeat: string = "tension";
 
       const tick = (time: number) => {
         if (!started) started = time;
         const elapsed = time - started;
 
         let beat: "tension" | "gather" | "condense" | "done";
-        if (elapsed < TENSION_MS) beat = "tension";
-        else if (elapsed < TENSION_MS + GATHER_MS) beat = "gather";
-        else if (elapsed < TENSION_MS + GATHER_MS + CONDENSE_MS) beat = "condense";
+        if (elapsed < THICKEN_MS) beat = "tension";
+        else if (elapsed < THICKEN_MS + COLLAPSE_MS) beat = "gather";
+        else if (elapsed < THICKEN_MS + COLLAPSE_MS + CONDENSE_MS) beat = "condense";
         else beat = "done";
         if (beat !== lastBeat) {
           lastBeat = beat;
@@ -2258,76 +2325,120 @@ function HeldInkGathers({
         }
 
         if (beat === "tension") {
-          const t = easeInOut(elapsed / TENSION_MS);
-          beads.forEach((b, i) => {
-            const el = beadRefs.current[i];
+          // THICKEN & SAG — the line becomes warm matter without losing
+          // its shape: width 2→10, slight warming, structural droop.
+          const t = easeInOut(elapsed / THICKEN_MS);
+          strands.forEach((pts, si) => {
+            const el = strandRefs.current[si];
             if (!el) return;
-            el.setAttribute("cx", `${b.x0}`);
-            el.setAttribute("cy", `${b.y0 + b.sag * t}`);
-            el.setAttribute("r", `${b.r * (0.4 + 0.6 * t)}`);
-            el.setAttribute("opacity", `${0.25 + 0.65 * t}`);
+            for (const p of pts) {
+              p.x = p.x0;
+              p.y = p.y0 + p.sag * t;
+            }
+            el.setAttribute("d", buildD(pts));
+            el.setAttribute("stroke-width", `${(2.2 + 8 * t).toFixed(2)}`);
+            el.setAttribute("stroke", warm(0.25 * t));
+            el.setAttribute("opacity", "0.92");
+          });
+          // Drips stretch off the belly of the strand late in the beat.
+          dripAnchors.forEach((anchor, di) => {
+            const el = dripRefs.current[di];
+            if (!el) return;
+            const local = clampNumber((t - 0.5 - di * 0.08) / 0.5, 0, 1);
+            el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
+            el.setAttribute(
+              "cy",
+              `${(anchor.y0 + anchor.sag + local * 14).toFixed(1)}`,
+            );
+            el.setAttribute("r", `${(local * 4.6).toFixed(2)}`);
+            el.setAttribute("fill", warm(0.2));
+            el.setAttribute("opacity", `${local > 0 ? 0.9 : 0}`);
           });
         } else if (beat === "gather") {
-          const t = (elapsed - TENSION_MS) / GATHER_MS;
-          beads.forEach((b, i) => {
-            const el = beadRefs.current[i];
+          // COLLAPSE & POOL — gravity first, then the strand slides along
+          // into its heap; the goo filter fuses the converging line into
+          // thick clay exactly where the tokens will form.
+          const t = (elapsed - THICKEN_MS) / COLLAPSE_MS;
+          const fall = easeIn(Math.min(1, t / 0.45));
+          const pull = t < 0.3 ? 0 : easeInOut((t - 0.3) / 0.7);
+          const width = 10 + 12 * easeInOut(t);
+          const strandFade = t > 0.86 ? 1 - (t - 0.86) / 0.14 : 1;
+          strands.forEach((pts, si) => {
+            const el = strandRefs.current[si];
             if (!el) return;
-            const center = groupCenters[Math.min(b.group, groupCenters.length - 1)];
-            const target = mappedTargets[Math.min(b.group, mappedTargets.length - 1)];
-            if (b.drip) {
-              // A stray drop: falls with gravity, squashes, then is absorbed.
-              const fall = easeIn(Math.min(1, t / 0.7));
-              const fade = t < 0.78 ? 1 : Math.max(0, 1 - (t - 0.78) / 0.22);
-              el.setAttribute("cx", `${b.x0}`);
-              el.setAttribute("cy", `${b.y0 + b.sag + fall * 46}`);
-              el.setAttribute("r", `${b.r * (1 + fall * 0.25)}`);
-              el.setAttribute("opacity", `${0.9 * fade}`);
-              return;
+            for (const p of pts) {
+              const saggedY = p.y0 + p.sag;
+              const fallenY = saggedY + 34 * fall;
+              p.x = p.x0 + (p.px - p.x0) * pull;
+              p.y = fallenY + (p.py - fallenY) * pull;
             }
-            if (t < 0.62) {
-              // Flow ALONG the line toward the segment's pooling point.
-              const ft = easeIn(t / 0.62);
-              const s = b.s0 + (center.s - b.s0) * ft;
-              const p = pointAt(s);
-              el.setAttribute("cx", `${p.x}`);
-              el.setAttribute("cy", `${p.y + b.sag}`);
-              el.setAttribute("r", `${b.r * (1 + ft * 0.5)}`);
-              el.setAttribute("opacity", "0.9");
-            } else {
-              // Pool: leave the line and sink to where the token will form.
-              const pt = easeInOut((t - 0.62) / 0.38);
-              const x = center.x + (target.x - center.x) * pt;
-              const y = center.y + b.sag + (target.y - (center.y + b.sag)) * pt;
-              el.setAttribute("cx", `${x}`);
-              el.setAttribute("cy", `${y}`);
-              el.setAttribute("r", `${b.r * (1.5 + pt * 1.1)}`);
-              el.setAttribute("opacity", `${0.9 - pt * 0.25}`);
-            }
+            el.setAttribute("d", buildD(pts));
+            el.setAttribute("stroke-width", `${width.toFixed(2)}`);
+            el.setAttribute("stroke", warm(0.25 + 0.45 * t));
+            el.setAttribute("opacity", `${(0.92 * strandFade).toFixed(3)}`);
           });
-        } else {
-          // Condense: beads are gone; per-target pools contract and warm as
-          // the token materializes inside the silhouette.
-          const t = easeInOut((elapsed - TENSION_MS - GATHER_MS) / CONDENSE_MS);
-          beads.forEach((_, i) => {
-            const el = beadRefs.current[i];
-            if (el) el.setAttribute("opacity", "0");
+          // Drips fall and are absorbed into the rising heaps.
+          dripAnchors.forEach((anchor, di) => {
+            const el = dripRefs.current[di];
+            if (!el) return;
+            const drop = easeIn(Math.min(1, t / 0.55));
+            const fade = t > 0.6 ? Math.max(0, 1 - (t - 0.6) / 0.25) : 1;
+            el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
+            el.setAttribute(
+              "cy",
+              `${(anchor.y0 + anchor.sag + 14 + drop * 58).toFixed(1)}`,
+            );
+            el.setAttribute("r", `${(4.6 + drop * 1.2).toFixed(2)}`);
+            el.setAttribute("opacity", `${(0.9 * fade).toFixed(3)}`);
           });
-          mappedTargets.forEach((target, gi) => {
+          // Heaps rise underneath the converging strand so goo fuses them.
+          const rise = t > 0.7 ? easeInOut((t - 0.7) / 0.3) : 0;
+          targets.forEach((target, gi) => {
             for (let c = 0; c < 3; c++) {
               const el = poolRefs.current[gi * 3 + c];
               if (!el) continue;
-              const wobble = Math.sin((gi * 3 + c) * 2.39) * 10;
-              const spread = (1 - t) * (10 + c * 5);
-              el.setAttribute("cx", `${target.x + Math.cos(c * 2.1 + wobble) * spread}`);
-              el.setAttribute("cy", `${target.y + Math.sin(c * 2.6 + wobble) * spread * 0.7}`);
-              el.setAttribute("r", `${(26 - c * 5) * (1 - t * 0.55)}`);
-              el.setAttribute("opacity", `${Math.max(0, 0.92 - t * 0.92)}`);
-              // Ink black -> warmed clay as the form takes over.
-              const warm = Math.min(1, t * 1.6);
-              const rch = Math.round(26 + warm * 66);
-              const gch = Math.round(26 + warm * 35);
-              const bch = Math.round(26 + warm * 6);
-              el.setAttribute("fill", `rgb(${rch},${gch},${bch})`);
+              const spread = 9 + c * 5;
+              el.setAttribute(
+                "cx",
+                `${(target.x + Math.cos(gi * 2.1 + c * 2.4) * spread * 0.5).toFixed(1)}`,
+              );
+              el.setAttribute(
+                "cy",
+                `${(target.y + Math.sin(gi * 1.7 + c * 2.9) * spread * 0.35).toFixed(1)}`,
+              );
+              el.setAttribute("r", `${((30 - c * 6) * rise).toFixed(2)}`);
+              el.setAttribute("fill", warm(0.7));
+              el.setAttribute("opacity", `${(0.92 * rise).toFixed(3)}`);
+            }
+          });
+        } else {
+          // CONDENSE & FORM — the heaps breathe, contract, and finish
+          // warming to clay umber while the tokens take form inside them.
+          const t = easeInOut(
+            (elapsed - THICKEN_MS - COLLAPSE_MS) / CONDENSE_MS,
+          );
+          strands.forEach((_, si) => {
+            const el = strandRefs.current[si];
+            if (el) el.setAttribute("opacity", "0");
+          });
+          dripRefs.current.forEach(el => el?.setAttribute("opacity", "0"));
+          targets.forEach((target, gi) => {
+            for (let c = 0; c < 3; c++) {
+              const el = poolRefs.current[gi * 3 + c];
+              if (!el) continue;
+              const wobble = Math.sin((t * 6 + gi + c) * 2.2) * (1 - t) * 2.4;
+              const spread = (1 - t) * (9 + c * 5);
+              el.setAttribute(
+                "cx",
+                `${(target.x + Math.cos(gi * 2.1 + c * 2.4) * spread * 0.5 + wobble).toFixed(1)}`,
+              );
+              el.setAttribute(
+                "cy",
+                `${(target.y + Math.sin(gi * 1.7 + c * 2.9) * spread * 0.35).toFixed(1)}`,
+              );
+              el.setAttribute("r", `${((30 - c * 6) * (1 - t * 0.55)).toFixed(2)}`);
+              el.setAttribute("fill", warm(0.7 + 0.5 * t));
+              el.setAttribute("opacity", `${Math.max(0, 0.92 - t * 0.92).toFixed(3)}`);
             }
           });
         }
@@ -2338,14 +2449,23 @@ function HeldInkGathers({
 
       return () => {
         if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+        for (const probe of probes) {
+          try {
+            inkSvg.removeChild(probe);
+          } catch {
+            // already detached
+          }
+        }
+      };
+    } catch (error) {
+      console.warn("[HELD][LineMelts] falling back to crossfade", error);
+      for (const probe of probes) {
         try {
           inkSvg.removeChild(probe);
         } catch {
           // already detached
         }
-      };
-    } catch (error) {
-      console.warn("[HELD][InkGathers] falling back to crossfade", error);
+      }
       onBeatChangeRef.current("condense");
       return undefined;
     }
@@ -2358,12 +2478,12 @@ function HeldInkGathers({
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-[24]"
       height="100%"
-      ref={overlayRef}
       viewBox={`0 0 ${box.w} ${box.h}`}
       width="100%"
     >
       <defs>
-        {/* Gooey: neighbouring beads fuse into one liquid mass. */}
+        {/* Gooey: the converging strand and the rising heaps fuse into one
+            liquid mass instead of reading as separate shapes. */}
         <filter id="held-ink-goo" x="-30%" y="-30%" width="160%" height="160%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
           <feColorMatrix
@@ -2374,16 +2494,31 @@ function HeldInkGathers({
         </filter>
       </defs>
       <g filter="url(#held-ink-goo)">
-        {Array.from({ length: BEADS }).map((_, i) => (
+        {Array.from({ length: MAX_STRANDS }).map((_, i) => (
+          <path
+            d=""
+            fill="none"
+            key={`strand-${i}`}
+            opacity="0"
+            ref={el => {
+              strandRefs.current[i] = el;
+            }}
+            stroke="#1A1A1A"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.2"
+          />
+        ))}
+        {Array.from({ length: DRIP_COUNT }).map((_, i) => (
           <circle
             cx="-20"
             cy="-20"
             fill="#1A1A1A"
-            key={`bead-${i}`}
+            key={`drip-${i}`}
             opacity="0"
             r="0"
             ref={el => {
-              beadRefs.current[i] = el;
+              dripRefs.current[i] = el;
             }}
           />
         ))}
@@ -2485,16 +2620,18 @@ function HeldTransformingState({
     // The ink->clay->settle ceremony is driven by its own timeline on mount,
     // NOT by the backend (isHeld). Mount ceremony (vision board 5→6→7):
     //   ink    (0–650ms)    the Picasso line rests on the paper
-    //   clay   (650–2200ms) INK GATHERS — the line beads, sags, flows along
-    //                       itself into pools, drips, then condenses into
-    //                       clay as the tokens take form inside it
-    //   settle (2200ms)     the formed clay tokens drop into the walnut cradle
+    //   clay   (650–3600ms) THE LINE MELTS — the drawn line thickens & sags
+    //                       like warm wax (900ms), slides off its own shape
+    //                       and piles into clay heaps (1100ms), then the
+    //                       heaps condense as the tokens form inside (900ms)
+    //   settle (~3600ms)    the formed clay tokens drop into the walnut cradle
     // Reduced motion keeps the original quick crossfade (650/1450).
+    // ceremonySlow=1 stretches the melt 3x for review/QA.
     if (isHeld) {
       setPhase("settle");
       return;
     }
-    const clayWindowMs = prefersReducedClay ? 800 : 1550;
+    const clayWindowMs = prefersReducedClay ? 800 : 2950 * getCeremonySlowFactor();
     const toClay = window.setTimeout(() => setPhase("clay"), 650);
     const toSettle = window.setTimeout(() => setPhase("settle"), 650 + clayWindowMs);
     return () => {
@@ -2865,22 +3002,20 @@ function HeldTransformingState({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 style={{
-                  // Ink Gathers: the drawn line hands itself to the bead
-                  // overlay — as beads take over (tension), the stroke
-                  // thins and fades, like ink lifting off the paper.
+                  // The Line Melts: the melt strand replaces this stroke
+                  // 1:1 at full thickness, so the crisp original fades out
+                  // quickly under it the moment melting begins.
                   opacity: isInk
                     ? 0.18
                     : phase === "clay"
                       ? gatherBeat === "tension"
-                        ? 0.22
-                        : gatherBeat === "gather"
-                          ? 0.08
-                          : 0
+                        ? 0.1
+                        : 0
                       : 0,
                   stroke: "#1A1A1A",
-                  strokeWidth: isInk ? 2 : 1.6,
+                  strokeWidth: isInk ? 2 : 1.8,
                   transition:
-                    "opacity 360ms ease-out, stroke-width 320ms ease-out",
+                    "opacity 420ms ease-out, stroke-width 320ms ease-out",
                 }}
               />
             ))}
@@ -2888,10 +3023,10 @@ function HeldTransformingState({
         </div>
       </section>
 
-      {/* INK GATHERS overlay: beads sampled from the actual drawn line flow
-          along it into pools and condense into clay exactly where the tokens
-          materialize. Mounts only once pool targets are measured; skipped
-          under reduced motion (quick crossfade stays). */}
+      {/* THE LINE MELTS overlay: the drawn line itself thickens, sags,
+          slides off its own shape and piles into clay heaps that condense
+          into the tokens. Mounts only once pool targets are measured;
+          skipped under reduced motion (quick crossfade stays). */}
       {phase === "clay" && !prefersReducedClay && gatherTargets.length > 0 && (
         <HeldInkGathers
           inkSvgRef={inkSvgRef}
