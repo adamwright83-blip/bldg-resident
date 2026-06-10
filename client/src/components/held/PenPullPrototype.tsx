@@ -680,6 +680,25 @@ export default function PenPullPrototype({
       return;
     }
 
+    if (params.get("postorder") === "ceremony") {
+      // Ceremony QA path: land in `transforming` so the full mount ceremony
+      // (ink → INK GATHERS → settle) replays deterministically. The live flow
+      // only reaches this after a successful authenticated order, which QA
+      // sessions don't have.
+      const request = "Laundry pickup ASAP, dog grooming tomorrow, car detail before Friday.";
+      setConfirmedRequest(request);
+      setConfirmedServices(
+        markBookableDemoServices(
+          [{ type: "laundry_pickup" }, { type: "dog_grooming" }, { type: "car_detail" }],
+          request,
+          1,
+        ),
+      );
+      setLastOrderId(orderId => orderId ?? 1);
+      setMode("transforming");
+      return;
+    }
+
     if (params.get("postorder") === "courier" || params.get("courier") === "1") {
       // Courier QA path: a vendor-facing laundry schedule change as the active
       // request, so the Muybridge crossing fires deterministically on settle.
