@@ -679,6 +679,19 @@ export default function PenPullPrototype({
       return;
     }
 
+    if (params.get("postorder") === "courier" || params.get("courier") === "1") {
+      // Courier QA path: a vendor-facing laundry schedule change as the active
+      // request, so the Muybridge crossing fires deterministically on settle.
+      const request = "Can LAUNDRY BUTLER deliver at 5pm instead of 7–9pm?";
+      setConfirmedRequest(request);
+      setConfirmedServices(
+        markBookableDemoServices([{ type: "laundry_pickup" }], request, 1),
+      );
+      setLastOrderId(orderId => orderId ?? 1);
+      setMode("held");
+      return;
+    }
+
     if (params.get("postorder") === "demo") {
       // Rich demo path: provider-candidate metadata genuinely exists, so the
       // narration MAY name providers/windows. This is the only path allowed to.
@@ -1774,6 +1787,7 @@ function HeldCourierGesture({
   slipMode,
   slipOpen,
   status,
+  trotStripUrl,
 }: {
   message: string;
   onCloseSlip: () => void;
@@ -1784,6 +1798,9 @@ function HeldCourierGesture({
   slipMode: CourierSlipMode;
   slipOpen: boolean;
   status: CourierStatus;
+  // Muybridge trot strip (lazy data-URL). Null until its chunk resolves —
+  // the static outbound horse is the graceful fallback for that window.
+  trotStripUrl: string | null;
 }) {
   const [tailDragX, setTailDragX] = useState(0);
   const [tailPointerId, setTailPointerId] = useState<number | null>(null);
@@ -1881,23 +1898,29 @@ function HeldCourierGesture({
               frame (not vw): on desktop the app lives in a 430px presentation
               frame while vw tracks the monitor, which made the old horse
               sprint past in under a second. Percentages keep the crossing at
-              the same museum pace on real mobile and inside the desktop frame. */}
+              the same museum pace on real mobile and inside the desktop frame.
+
+              The horse itself is a living Muybridge plate — a 4-phase trot
+              cycle (sprite strip, steps(4)) so the legs genuinely articulate.
+              Its vertical motion is gait-locked (2 bobs per stride) and the
+              contact shadow pulses with the hooves: trotting, not floating. */}
           <motion.div
             aria-hidden="true"
-            animate={{ left: ["102%", "24%", "-12%", "-78%"], opacity: [0, 0.3, 0.3, 0] }}
-            className="absolute top-[56%] h-10 w-[64%] rounded-full bg-[#5f3a16]/24 blur-[12px]"
+            animate={{ left: ["102%", "24%", "-12%", "-78%"], opacity: [0, 1, 1, 0] }}
+            className="absolute top-[57%] h-8 w-[58%]"
             initial={{ left: "102%", opacity: 0 }}
             transition={{ duration: 5.2, times: [0, 0.26, 0.78, 1], ease: ["easeOut", "linear", "easeIn"] }}
-          />
+          >
+            <div className="held-courier-shadow h-full w-full rounded-full bg-[#5f3a16] blur-[12px]" />
+          </motion.div>
           <motion.button
             aria-label="Open courier satchel note"
             animate={{
               left: ["102%", "22%", "-14%", "-80%"],
-              y: [10, 2, -3, -8],
-              rotate: [0.8, 0.2, -0.3, 0.5],
+              rotate: [0.6, 0.1, -0.2, 0.4],
             }}
-            className="pointer-events-auto absolute top-[26%] z-[2] h-[min(34dvh,300px)] w-[72%] max-w-[330px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
-            initial={{ left: "102%", y: 10, rotate: 0.8 }}
+            className="pointer-events-auto absolute top-[30%] z-[2] aspect-[682/572] w-[72%] max-w-[340px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            initial={{ left: "102%", rotate: 0.6 }}
             onAnimationComplete={onDispatchComplete}
             onClick={() => onOpenSlip("summary")}
             transition={{
@@ -1907,14 +1930,20 @@ function HeldCourierGesture({
             }}
             type="button"
           >
-            <motion.img
-              alt=""
-              animate={{ y: [0, -3, 1, -2, 0] }}
-              className="h-full w-full object-contain opacity-100 drop-shadow-[0_22px_24px_rgba(52,31,12,0.24)]"
-              draggable={false}
-              src={HELD_ASSETS.courierHorseOutbound}
-              transition={{ duration: 1.1, ease: "easeInOut", repeat: Infinity }}
-            />
+            {trotStripUrl ? (
+              <div
+                aria-hidden="true"
+                className="held-courier-trot-sprite h-full w-full drop-shadow-[0_18px_20px_rgba(52,31,12,0.22)]"
+                style={{ backgroundImage: `url("${trotStripUrl}")` }}
+              />
+            ) : (
+              <img
+                alt=""
+                className="h-full w-full object-contain drop-shadow-[0_18px_20px_rgba(52,31,12,0.22)]"
+                draggable={false}
+                src={HELD_ASSETS.courierHorseOutbound}
+              />
+            )}
           </motion.button>
         </>
       )}
@@ -2134,6 +2163,22 @@ function HeldTransformingState({
   const isInk = phase === "ink";
   const isSettled = phase === "settle";
   const hasTriggeredInitialCourier = useRef(false);
+  // Load the Muybridge trot strip (its own lazy chunk) as soon as the
+  // post-order screen mounts: the courier's first crossing must begin
+  // mid-stride, never pop in late — and the home screen pays nothing for it.
+  const [trotStripUrl, setTrotStripUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void import("./courierTrotStrip").then(
+      module => {
+        if (active) setTrotStripUrl(module.COURIER_TROT_STRIP_DATA_URL);
+      },
+      error => console.warn("[HELD] courier trot strip failed to load", error),
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
   useEffect(() => {
     if (!isSettled) return;
     if (hasTriggeredInitialCourier.current) return;
@@ -2767,6 +2812,7 @@ function HeldTransformingState({
           slipMode={courierSlipMode}
           slipOpen={courierSlipOpen}
           status={courierStatus}
+          trotStripUrl={trotStripUrl}
         />
       )}
       <AnimatePresence>

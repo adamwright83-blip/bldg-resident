@@ -3970,3 +3970,43 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+/* ── HELD courier: Muybridge trot cycle ──────────────────────────────────
+   The courier horse is a 4-frame sprite strip (equal cells, shared hoof
+   baseline). steps(4) advances one gait phase per step; the gentle bob is
+   gait-locked (2 bobs per 4-phase stride) so motion reads as trotting on
+   ground, never floating. */
+@keyframes held-courier-trot {
+  /* 4 equal cells: with background-size 400%, the cells sit at
+     background-position-x 0 / 33.3333 / 66.6667 / 100%. steps(4) over a
+     0 -> 133.3333% range lands exactly on those four stops. */
+  from { background-position-x: 0%; }
+  to { background-position-x: 133.3333%; }
+}
+@keyframes held-courier-gait-bob {
+  0%, 50%, 100% { transform: translateY(0); }
+  25%, 75% { transform: translateY(-2.6%); }
+}
+.held-courier-trot-sprite {
+  /* background-image is provided inline (lazy-loaded data-URL module) */
+  background-repeat: repeat-x;
+  background-size: 400% 100%;
+  animation:
+    held-courier-trot 0.62s steps(4) infinite,
+    held-courier-gait-bob 0.62s ease-in-out infinite;
+  will-change: background-position-x, transform;
+}
+@keyframes held-courier-shadow-gait {
+  0%, 50%, 100% { transform: scaleX(1); opacity: 0.32; }
+  25%, 75% { transform: scaleX(0.9); opacity: 0.2; }
+}
+.held-courier-shadow {
+  animation: held-courier-shadow-gait 0.62s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .held-courier-trot-sprite,
+  .held-courier-shadow {
+    animation: none;
+  }
+}
