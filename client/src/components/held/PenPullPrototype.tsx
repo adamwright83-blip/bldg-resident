@@ -2106,19 +2106,23 @@ function getCeremonySlowFactor(): number {
   return new URLSearchParams(window.location.search).get("ceremonySlow") === "1" ? 3 : 1;
 }
 
-// ── THE LINE MELTS ──────────────────────────────────────────────────────────
-// Ink-to-clay mutation (vision board beats 5→6→7). The atom is the LINE
-// ITSELF — no particles. Each drawn subpath becomes a deformable strand that
-// (1) thickens and sags under its own weight like warm wax, with a couple of
-// drips stretching off and falling, (2) slides off its own shape — gravity
-// first, then a pull along into one heap per token — piling into thick clay
-// masses fused by the goo filter, and (3) condenses: the heaps contract,
-// warm from ink-black to clay umber, and the real tokens take form INSIDE
-// the blob silhouettes. The drawing stays recognizably itself while it melts.
+// ── THE LINE MELTS (gravity drain) ──────────────────────────────────────────
+// Ink-to-clay mutation (vision board 5→6→7), built on one physical truth:
+// melting material drains DOWNWARD. No mid-air gathering, no suction.
+//
+//   1. SOFTEN  — the drawn line thickens into warm matter and sags; lowest
+//                spans belly hardest. Drips swell at the underside.
+//   2. DRAIN   — the line pours down: every point falls toward a waterline
+//                under the drawing (lower material lands first), runs along
+//                it sideways into the nearest puddle, and the puddles GROW
+//                as the strand empties into them. Drips race ahead.
+//   3. RISE    — puddles draw up into rounded clay mounds (surface tension),
+//                wobble settling, warming complete; the tokens take form
+//                inside the mounds as they shrink to token size.
 //
 // Beat names stay "tension" | "gather" | "condense" so the parent's token
-// reveal and ink-stroke handoff logic are untouched. One rAF timeline; d
-// strings are rebuilt imperatively per frame (React renders once per beat).
+// reveal logic is untouched. One rAF timeline; path d-strings are rebuilt
+// imperatively per frame (React renders once per beat).
 function HeldInkGathers({
   inkSvgRef,
   onBeatChange,
@@ -2133,15 +2137,17 @@ function HeldInkGathers({
   targets: Array<{ x: number; y: number }>;
 }) {
   const strandRefs = useRef<Array<SVGPathElement | null>>([]);
-  const dripRefs = useRef<Array<SVGCircleElement | null>>([]);
-  const poolRefs = useRef<Array<SVGCircleElement | null>>([]);
+  const dripRefs = useRef<Array<SVGEllipseElement | null>>([]);
+  const poolRefs = useRef<Array<SVGEllipseElement | null>>([]);
+  const moundRefs = useRef<Array<SVGCircleElement | null>>([]);
   const rafRef = useRef<number | null>(null);
   const onBeatChangeRef = useRef(onBeatChange);
   onBeatChangeRef.current = onBeatChange;
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
 
   const MAX_STRANDS = 12;
-  const DRIP_COUNT = 3;
+  const DRIP_COUNT = 4;
+  const MOUNDS_PER_POOL = 3;
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -2149,16 +2155,16 @@ function HeldInkGathers({
     if (!root || !inkSvg) return undefined;
 
     const slow = getCeremonySlowFactor();
-    const THICKEN_MS = 900 * slow;
-    const COLLAPSE_MS = 1100 * slow;
-    const CONDENSE_MS = 900 * slow;
+    const SOFTEN_MS = 850 * slow;
+    const DRAIN_MS = 1150 * slow;
+    const RISE_MS = 950 * slow;
 
     type MeltPoint = {
       x0: number;
       y0: number;
-      sag: number;
-      px: number;
-      py: number;
+      sag: number;       // soften droop depth
+      fallDelay: number; // 0..0.55 — lower points drain first
+      runX: number;      // x it slides to along the waterline
       x: number;
       y: number;
     };
@@ -2197,93 +2203,83 @@ function HeldInkGathers({
         return v - Math.floor(v);
       };
 
-      // Pool segmentation: k contiguous runs along the FULL drawn length,
-      // matched to token targets left-to-right (ink flows to its nearest
-      // forming token; runs never crisscross).
-      const k = Math.max(1, Math.min(targets.length, 4));
-      const pointOnFull = (sGlobal: number) => {
-        let acc = 0;
-        for (let j = 0; j < probes.length; j++) {
-          if (sGlobal <= acc + segLens[j] || j === probes.length - 1) {
-            const local = probes[j].getPointAtLength(
-              clampNumber(sGlobal - acc, 0, segLens[j]),
-            );
-            return toLocal(local.x, local.y);
-          }
-          acc += segLens[j];
-        }
-        const last = probes[probes.length - 1].getPointAtLength(
-          segLens[segLens.length - 1],
-        );
-        return toLocal(last.x, last.y);
-      };
-      const runMids = Array.from({ length: k }, (_, run) => ({
-        run,
-        x: pointOnFull(((run + 0.5) / k) * totalLen).x,
-      }));
-      const targetOrder = targets
-        .map((t, i) => ({ t, i }))
-        .sort((a, b) => a.t.x - b.t.x);
-      const runToTarget = new Map<number, number>();
-      [...runMids]
-        .sort((a, b) => a.x - b.x)
-        .forEach((entry, idx) => {
-          runToTarget.set(
-            entry.run,
-            targetOrder[Math.min(idx, targetOrder.length - 1)].i,
-          );
-        });
-
-      // Sample each subpath into a melt strand. Point budget ~110 across the
-      // whole drawing, distributed by length; smoothing keeps curves liquid.
-      const strands: MeltPoint[][] = [];
-      let cumStart = 0;
+      // First pass: sample all points to learn the drawing's extent.
+      const rawStrands: Array<Array<{ x: number; y: number }>> = [];
+      let drawMinY = Infinity;
+      let drawMaxY = -Infinity;
       segments.forEach((_, si) => {
         const length = segLens[si];
-        const n = Math.max(10, Math.round((length / totalLen) * 110));
-        const points: MeltPoint[] = [];
+        const n = Math.max(10, Math.round((length / totalLen) * 116));
+        const pts: Array<{ x: number; y: number }> = [];
         for (let i = 0; i < n; i++) {
-          const sLocal = (i / (n - 1)) * length;
-          const raw = probes[si].getPointAtLength(sLocal);
+          const raw = probes[si].getPointAtLength((i / (n - 1)) * length);
           const p = toLocal(raw.x, raw.y);
-          const sGlobal = cumStart + sLocal;
-          const run = Math.min(k - 1, Math.floor((sGlobal / totalLen) * k));
-          const target = targets[runToTarget.get(run) ?? 0];
-          // Structural droop: strand ends behave anchored (they sag least),
-          // open spans belly downward — melting wire, not translation.
-          const endAnchor = Math.min(1, Math.min(i, n - 1 - i) / 5);
-          const noise = 0.5 + 0.5 * Math.sin(i * 0.47 + si * 2.13);
-          // Heap body: each point lands at a jittered spot in the pile so the
-          // mass has volume instead of collapsing to one dot.
-          const angle = rand(si * 100 + i) * Math.PI * 2;
-          const radius = Math.sqrt(rand(si * 131 + i * 7)) * 13;
-          points.push({
-            x0: p.x,
-            y0: p.y,
-            sag: (7 + noise * 20) * (0.35 + 0.65 * endAnchor),
-            px: target.x + Math.cos(angle) * radius,
-            py: target.y + Math.sin(angle) * radius * 0.6,
-            x: p.x,
-            y: p.y,
-          });
+          pts.push(p);
+          if (p.y < drawMinY) drawMinY = p.y;
+          if (p.y > drawMaxY) drawMaxY = p.y;
         }
-        strands.push(points);
-        cumStart += length;
+        rawStrands.push(pts);
       });
 
-      // Drips ride the longest strand.
-      let longest = 0;
-      strands.forEach((pts, si) => {
-        if (pts.length > strands[longest].length) longest = si;
-      });
-      const dripAnchors = [0.3, 0.62, 0.84].map(f => {
-        const pts = strands[longest];
-        return pts[Math.min(pts.length - 1, Math.floor(pts.length * f))];
-      });
+      // The waterline: where liquid lands and runs. Just under the drawing,
+      // safely above the token-formation row (targets), pinned between them.
+      const targetY = targets.reduce((s, t) => s + t.y, 0) / targets.length;
+      const waterline = Math.min(
+        targetY - 6,
+        drawMaxY + Math.min(46, Math.max(18, (targetY - drawMaxY) * 0.42)),
+      );
+
+      // Pool x-centers: token x positions (left→right), so liquid running
+      // along the waterline piles up exactly under where each token forms.
+      const poolXs = [...targets].sort((a, b) => a.x - b.x).map(t => t.x);
+      const nearestPool = (x: number) => {
+        let best = 0;
+        let bestDist = Infinity;
+        poolXs.forEach((px, pi) => {
+          const d = Math.abs(px - x);
+          if (d < bestDist) {
+            bestDist = d;
+            best = pi;
+          }
+        });
+        return best;
+      };
+      // Map sorted-pool index back to the original target order for mounds.
+      const sortedTargets = [...targets].sort((a, b) => a.x - b.x);
+
+      // Second pass: build melt points with gravity ordering — LOWER points
+      // (closer to the waterline) start falling FIRST, like a form draining.
+      const strands: MeltPoint[][] = rawStrands.map((pts, si) =>
+        pts.map((p, i) => {
+          const heightFrac = (p.y - drawMinY) / Math.max(1, drawMaxY - drawMinY);
+          const pool = nearestPool(p.x);
+          const jitter = (rand(si * 131 + i * 7) - 0.5) * 16;
+          return {
+            x0: p.x,
+            y0: p.y,
+            sag: 6 + (0.5 + 0.5 * Math.sin(i * 0.43 + si * 1.9)) * 16 * (0.45 + 0.55 * heightFrac),
+            fallDelay: (1 - heightFrac) * 0.55,
+            runX: poolXs[pool] + jitter,
+            x: p.x,
+            y: p.y,
+          };
+        }),
+      );
+
+      // Drips: hang from the lowest belly points of the longest strands.
+      const allPts = strands.flat();
+      const dripAnchors = [...allPts]
+        .sort((a, b) => b.y0 - a.y0)
+        .filter((_, idx) => idx % 7 === 0)
+        .slice(0, DRIP_COUNT);
 
       const easeInOut = (t: number) =>
         t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-      const easeIn = (t: number) => t * t * t;
+      const easeIn = (t: number) => t * t;
+      const easeOutBack = (t: number) => {
+        const c1 = 1.20158;
+        return 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      };
       const warm = (w: number) => {
         const ww = clampNumber(w, 0, 1.2);
         return `rgb(${Math.round(26 + 81 * ww)},${Math.round(26 + 42 * ww)},${Math.round(26 + 9 * ww)})`;
@@ -2302,6 +2298,9 @@ function HeldInkGathers({
         return `${d} L${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
       };
 
+      // Puddle fill fractions per pool (grow as material arrives).
+      const poolFill = new Array(poolXs.length).fill(0);
+
       let started = 0;
       let lastBeat = "tension";
       onBeatChangeRef.current("tension");
@@ -2311,9 +2310,9 @@ function HeldInkGathers({
         const elapsed = time - started;
 
         let beat: "tension" | "gather" | "condense" | "done";
-        if (elapsed < THICKEN_MS) beat = "tension";
-        else if (elapsed < THICKEN_MS + COLLAPSE_MS) beat = "gather";
-        else if (elapsed < THICKEN_MS + COLLAPSE_MS + CONDENSE_MS) beat = "condense";
+        if (elapsed < SOFTEN_MS) beat = "tension";
+        else if (elapsed < SOFTEN_MS + DRAIN_MS) beat = "gather";
+        else if (elapsed < SOFTEN_MS + DRAIN_MS + RISE_MS) beat = "condense";
         else beat = "done";
         if (beat !== lastBeat) {
           lastBeat = beat;
@@ -2325,9 +2324,8 @@ function HeldInkGathers({
         }
 
         if (beat === "tension") {
-          // THICKEN & SAG — the line becomes warm matter without losing
-          // its shape: width 2→10, slight warming, structural droop.
-          const t = easeInOut(elapsed / THICKEN_MS);
+          // SOFTEN — the line becomes warm matter: thickens, sags, drips swell.
+          const t = easeInOut(elapsed / SOFTEN_MS);
           strands.forEach((pts, si) => {
             const el = strandRefs.current[si];
             if (!el) return;
@@ -2336,109 +2334,113 @@ function HeldInkGathers({
               p.y = p.y0 + p.sag * t;
             }
             el.setAttribute("d", buildD(pts));
-            el.setAttribute("stroke-width", `${(2.2 + 8 * t).toFixed(2)}`);
-            el.setAttribute("stroke", warm(0.25 * t));
-            el.setAttribute("opacity", "0.92");
+            el.setAttribute("stroke-width", `${(2.2 + 8.5 * t).toFixed(2)}`);
+            el.setAttribute("stroke", warm(0.3 * t));
+            el.setAttribute("opacity", "0.93");
           });
-          // Drips stretch off the belly of the strand late in the beat.
           dripAnchors.forEach((anchor, di) => {
             const el = dripRefs.current[di];
             if (!el) return;
-            const local = clampNumber((t - 0.5 - di * 0.08) / 0.5, 0, 1);
+            const local = clampNumber((t - 0.35 - di * 0.06) / 0.6, 0, 1);
+            const stretch = local * local;
             el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
-            el.setAttribute(
-              "cy",
-              `${(anchor.y0 + anchor.sag + local * 14).toFixed(1)}`,
-            );
-            el.setAttribute("r", `${(local * 4.6).toFixed(2)}`);
-            el.setAttribute("fill", warm(0.2));
-            el.setAttribute("opacity", `${local > 0 ? 0.9 : 0}`);
+            el.setAttribute("cy", `${(anchor.y0 + anchor.sag + stretch * 16).toFixed(1)}`);
+            el.setAttribute("rx", `${(3.4 * local).toFixed(2)}`);
+            el.setAttribute("ry", `${(3.4 * local * (1 + stretch * 0.8)).toFixed(2)}`);
+            el.setAttribute("fill", warm(0.25));
+            el.setAttribute("opacity", `${local > 0 ? 0.92 : 0}`);
           });
         } else if (beat === "gather") {
-          // COLLAPSE & POOL — gravity first, then the strand slides along
-          // into its heap; the goo filter fuses the converging line into
-          // thick clay exactly where the tokens will form.
-          const t = (elapsed - THICKEN_MS) / COLLAPSE_MS;
-          const fall = easeIn(Math.min(1, t / 0.45));
-          const pull = t < 0.3 ? 0 : easeInOut((t - 0.3) / 0.7);
-          const width = 10 + 12 * easeInOut(t);
-          const strandFade = t > 0.86 ? 1 - (t - 0.86) / 0.14 : 1;
+          // DRAIN — the form empties downward. Lower material falls first,
+          // lands on the waterline, runs sideways into its puddle; puddles
+          // grow as the strand pours in. Pure gravity, no suction.
+          const t = (elapsed - SOFTEN_MS) / DRAIN_MS;
+          const width = 10.7 + 9 * easeInOut(Math.min(1, t * 1.4));
+          let arrived = 0;
           strands.forEach((pts, si) => {
             const el = strandRefs.current[si];
             if (!el) return;
             for (const p of pts) {
-              const saggedY = p.y0 + p.sag;
-              const fallenY = saggedY + 34 * fall;
-              p.x = p.x0 + (p.px - p.x0) * pull;
-              p.y = fallenY + (p.py - fallenY) * pull;
+              // Per-point local time: starts after fallDelay, fills the rest.
+              const lt = clampNumber((t - p.fallDelay) / (1 - p.fallDelay), 0, 1);
+              const fall = easeIn(Math.min(1, lt / 0.55));
+              const run = lt < 0.55 ? 0 : easeInOut((lt - 0.55) / 0.45);
+              const sagY = p.y0 + p.sag;
+              p.y = sagY + (waterline - sagY) * fall;
+              p.x = p.x0 + (p.runX - p.x0) * run;
+              if (lt >= 0.92) arrived++;
             }
             el.setAttribute("d", buildD(pts));
             el.setAttribute("stroke-width", `${width.toFixed(2)}`);
-            el.setAttribute("stroke", warm(0.25 + 0.45 * t));
-            el.setAttribute("opacity", `${(0.92 * strandFade).toFixed(3)}`);
+            el.setAttribute("stroke", warm(0.3 + 0.4 * t));
+            // The strand fades only at the very end, once nearly all of it
+            // has poured in — the puddles carry the mass from here.
+            const fade = t > 0.9 ? 1 - (t - 0.9) / 0.1 : 1;
+            el.setAttribute("opacity", `${(0.93 * fade).toFixed(3)}`);
           });
-          // Drips fall and are absorbed into the rising heaps.
+          // Puddles: lens-shaped, growing with arrival fraction.
+          const totalPts = allPts.length;
+          const arrivalFrac = clampNumber(arrived / Math.max(1, totalPts), 0, 1);
+          poolXs.forEach((px, pi) => {
+            poolFill[pi] = Math.max(poolFill[pi], arrivalFrac);
+            const el = poolRefs.current[pi];
+            if (!el) return;
+            const grow = easeInOut(clampNumber(arrivalFrac * 1.25, 0, 1));
+            el.setAttribute("cx", `${px.toFixed(1)}`);
+            el.setAttribute("cy", `${(waterline + 3).toFixed(1)}`);
+            el.setAttribute("rx", `${(8 + 30 * grow).toFixed(2)}`);
+            el.setAttribute("ry", `${(2.5 + 8.5 * grow).toFixed(2)}`);
+            el.setAttribute("fill", warm(0.55));
+            el.setAttribute("opacity", `${(0.94 * clampNumber(arrivalFrac * 2.4, 0, 1)).toFixed(3)}`);
+          });
+          // Drips race ahead of the drain and splash into the waterline.
           dripAnchors.forEach((anchor, di) => {
             const el = dripRefs.current[di];
             if (!el) return;
-            const drop = easeIn(Math.min(1, t / 0.55));
-            const fade = t > 0.6 ? Math.max(0, 1 - (t - 0.6) / 0.25) : 1;
+            const lt = clampNumber(t / 0.45 - di * 0.05, 0, 1);
+            const fall = easeIn(lt);
+            const y = anchor.y0 + anchor.sag + 16 + (waterline - anchor.y0 - anchor.sag - 16) * fall;
+            const fade = lt >= 1 ? 0 : 1;
             el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
-            el.setAttribute(
-              "cy",
-              `${(anchor.y0 + anchor.sag + 14 + drop * 58).toFixed(1)}`,
-            );
-            el.setAttribute("r", `${(4.6 + drop * 1.2).toFixed(2)}`);
-            el.setAttribute("opacity", `${(0.9 * fade).toFixed(3)}`);
-          });
-          // Heaps rise underneath the converging strand so goo fuses them.
-          const rise = t > 0.7 ? easeInOut((t - 0.7) / 0.3) : 0;
-          targets.forEach((target, gi) => {
-            for (let c = 0; c < 3; c++) {
-              const el = poolRefs.current[gi * 3 + c];
-              if (!el) continue;
-              const spread = 9 + c * 5;
-              el.setAttribute(
-                "cx",
-                `${(target.x + Math.cos(gi * 2.1 + c * 2.4) * spread * 0.5).toFixed(1)}`,
-              );
-              el.setAttribute(
-                "cy",
-                `${(target.y + Math.sin(gi * 1.7 + c * 2.9) * spread * 0.35).toFixed(1)}`,
-              );
-              el.setAttribute("r", `${((30 - c * 6) * rise).toFixed(2)}`);
-              el.setAttribute("fill", warm(0.7));
-              el.setAttribute("opacity", `${(0.92 * rise).toFixed(3)}`);
-            }
+            el.setAttribute("cy", `${y.toFixed(1)}`);
+            el.setAttribute("rx", "3.4");
+            el.setAttribute("ry", `${(3.4 * (1 + fall * 1.1)).toFixed(2)}`);
+            el.setAttribute("opacity", `${0.92 * fade}`);
           });
         } else {
-          // CONDENSE & FORM — the heaps breathe, contract, and finish
-          // warming to clay umber while the tokens take form inside them.
-          const t = easeInOut(
-            (elapsed - THICKEN_MS - COLLAPSE_MS) / CONDENSE_MS,
-          );
-          strands.forEach((_, si) => {
-            const el = strandRefs.current[si];
-            if (el) el.setAttribute("opacity", "0");
-          });
+          // RISE — surface tension pulls each puddle up into a rounded clay
+          // mound; wobble settles; tokens take form inside as it tightens.
+          const t = (elapsed - SOFTEN_MS - DRAIN_MS) / RISE_MS;
+          strands.forEach((_, si) => strandRefs.current[si]?.setAttribute("opacity", "0"));
           dripRefs.current.forEach(el => el?.setAttribute("opacity", "0"));
-          targets.forEach((target, gi) => {
-            for (let c = 0; c < 3; c++) {
-              const el = poolRefs.current[gi * 3 + c];
+          const riseT = easeOutBack(clampNumber(t * 1.15, 0, 1));
+          const fadeT = clampNumber((t - 0.55) / 0.45, 0, 1);
+          poolXs.forEach((px, pi) => {
+            const target = sortedTargets[pi] ?? { x: px, y: waterline };
+            // Puddle flattens away as the mound rises out of it.
+            const pool = poolRefs.current[pi];
+            if (pool) {
+              const shrink = 1 - easeInOut(clampNumber(t * 1.3, 0, 1)) * 0.8;
+              pool.setAttribute("rx", `${(38 * shrink).toFixed(2)}`);
+              pool.setAttribute("ry", `${(11 * shrink * (1 - t * 0.5)).toFixed(2)}`);
+              pool.setAttribute("fill", warm(0.55 + 0.4 * t));
+              pool.setAttribute("opacity", `${((1 - fadeT) * 0.9).toFixed(3)}`);
+            }
+            for (let c = 0; c < MOUNDS_PER_POOL; c++) {
+              const el = moundRefs.current[pi * MOUNDS_PER_POOL + c];
               if (!el) continue;
-              const wobble = Math.sin((t * 6 + gi + c) * 2.2) * (1 - t) * 2.4;
-              const spread = (1 - t) * (9 + c * 5);
-              el.setAttribute(
-                "cx",
-                `${(target.x + Math.cos(gi * 2.1 + c * 2.4) * spread * 0.5 + wobble).toFixed(1)}`,
-              );
-              el.setAttribute(
-                "cy",
-                `${(target.y + Math.sin(gi * 1.7 + c * 2.9) * spread * 0.35).toFixed(1)}`,
-              );
-              el.setAttribute("r", `${((30 - c * 6) * (1 - t * 0.55)).toFixed(2)}`);
-              el.setAttribute("fill", warm(0.7 + 0.5 * t));
-              el.setAttribute("opacity", `${Math.max(0, 0.92 - t * 0.92).toFixed(3)}`);
+              const wobble = Math.sin((t * 7 + pi * 1.3 + c * 2.1)) * (1 - t) * 2.2;
+              // Mound lifts from the waterline up to the token spot.
+              const lift = riseT;
+              const cx = px + Math.cos(c * 2.4 + pi) * (1 - t) * (5 + c * 3) + wobble;
+              const baseY = waterline + 2;
+              const cy = baseY + (target.y - baseY) * lift;
+              const r = (21 - c * 4.5) * (0.35 + 0.65 * lift) * (1 - fadeT * 0.5);
+              el.setAttribute("cx", `${cx.toFixed(1)}`);
+              el.setAttribute("cy", `${cy.toFixed(1)}`);
+              el.setAttribute("r", `${Math.max(0, r).toFixed(2)}`);
+              el.setAttribute("fill", warm(0.65 + 0.55 * t));
+              el.setAttribute("opacity", `${((1 - fadeT) * 0.93).toFixed(3)}`);
             }
           });
         }
@@ -2482,8 +2484,7 @@ function HeldInkGathers({
       width="100%"
     >
       <defs>
-        {/* Gooey: the converging strand and the rising heaps fuse into one
-            liquid mass instead of reading as separate shapes. */}
+        {/* Gooey: strand, drips, puddles and mounds fuse into one liquid. */}
         <filter id="held-ink-goo" x="-30%" y="-30%" width="160%" height="160%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
           <feColorMatrix
@@ -2510,29 +2511,44 @@ function HeldInkGathers({
           />
         ))}
         {Array.from({ length: DRIP_COUNT }).map((_, i) => (
-          <circle
+          <ellipse
             cx="-20"
             cy="-20"
             fill="#1A1A1A"
             key={`drip-${i}`}
             opacity="0"
-            r="0"
+            rx="0"
+            ry="0"
             ref={el => {
               dripRefs.current[i] = el;
             }}
           />
         ))}
-        {targets.flatMap((_, gi) =>
-          [0, 1, 2].map(c => (
+        {targets.map((_, pi) => (
+          <ellipse
+            cx="-20"
+            cy="-20"
+            fill="#1A1A1A"
+            key={`pool-${pi}`}
+            opacity="0"
+            rx="0"
+            ry="0"
+            ref={el => {
+              poolRefs.current[pi] = el;
+            }}
+          />
+        ))}
+        {targets.flatMap((_, pi) =>
+          Array.from({ length: MOUNDS_PER_POOL }).map((_, c) => (
             <circle
               cx="-20"
               cy="-20"
               fill="#1A1A1A"
-              key={`pool-${gi}-${c}`}
+              key={`mound-${pi}-${c}`}
               opacity="0"
               r="0"
               ref={el => {
-                poolRefs.current[gi * 3 + c] = el;
+                moundRefs.current[pi * MOUNDS_PER_POOL + c] = el;
               }}
             />
           )),
