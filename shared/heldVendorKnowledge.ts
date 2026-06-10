@@ -89,7 +89,9 @@ export function withCarDetailBooking<T extends HeldServiceBooking>(
 }
 
 export function buildLaundryBookedSentence() {
-  return `I have laundry booked with LAUNDRY BUTLER for tomorrow morning, 7–9am pickup, with same-day return expected between 7–9pm.`;
+  // Short headline by design: the hard pickup/return facts live in the
+  // operational service rows, not the headline, so the headline never clips.
+  return `I have laundry booked with LAUNDRY BUTLER.`;
 }
 
 export function buildLaundryReturnAnswer() {

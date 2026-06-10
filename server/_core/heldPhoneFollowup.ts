@@ -69,20 +69,23 @@ function getDeterministicReply(message: string, services: HeldPhoneFollowupServi
 
   const isLaundryScheduleChange =
     (/\b(laundry|butler|they)\b/.test(normalized) || /\b(wash|dry clean|dry-clean|clothes|hamper)\b/.test(normalized)) &&
-    (/\b(earlier|sooner|later|move|change|switch|reschedule|adjust)\b/i.test(normalized) ||
-     (/\b(5\s*pm|5|8\s*am|8)\b/.test(normalized) && /\b(deliver|return|bring|get|pickup|pick up|need|have)\b/.test(normalized)));
+    (/\b(earlier|sooner|later|move|change|switch|reschedule|adjust|instead)\b/i.test(normalized) ||
+     (/\b(5\s*pm|5|8\s*am|8)\b/.test(normalized) && /\b(deliver(?:ed|y)?|return|bring|get|pickup|pick up|need|have)\b/.test(normalized)));
 
+  // Vendor-facing schedule changes demonstrate intelligence BEFORE the courier
+  // moves: state the known policy, name the exception, then say HELD is asking.
+  // Never claim the change is confirmed.
   if (isLaundryScheduleChange) {
     if (/\b(5\s*pm|5)\b/.test(normalized)) {
-      return "Understood. I’m asking LAUNDRY BUTLER for a 5pm return instead of the standard 7–9pm window.";
+      return "LAUNDRY BUTLER currently returns laundry between 7–9pm. A 5pm return would require an exception from the vendor — I’m asking them now.";
     }
     if (/\b(8\s*am|8)\b/.test(normalized)) {
-      return "Understood. I’m asking LAUNDRY BUTLER for an 8am pickup instead of the standard 7–9am window.";
+      return "LAUNDRY BUTLER currently picks up between 7–9am. An 8am pickup would require an exception from the vendor — I’m asking them now.";
     }
     if (/\b(pickup|pick up)\b/.test(normalized)) {
-      return "Understood. I’m asking LAUNDRY BUTLER to adjust the pickup window.";
+      return "LAUNDRY BUTLER currently picks up between 7–9am. Moving that window needs the vendor’s word — I’m asking them now.";
     }
-    return "Understood. I’m asking LAUNDRY BUTLER for an earlier return window.";
+    return "LAUNDRY BUTLER currently returns laundry between 7–9pm. An earlier return would require an exception from the vendor — I’m asking them now.";
   }
 
   return null;

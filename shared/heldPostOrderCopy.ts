@@ -338,9 +338,11 @@ export function buildPostOrderChiefOfStaffCopy(
   }
 
   const hasLaundry = services.some(s => isLaundry(normalizeType(s.type)));
+  // Headline stays short by design — pickup/return windows live in the
+  // LAUNDRY service row where they are scannable and can never clip.
   const opening = hasLaundry
-    ? "I have laundry booked with LAUNDRY BUTLER for tomorrow morning, 7–9am pickup, with same-day return expected between 7–9pm."
-    : "I’ve taken in the request — I’m moving on it.";
+    ? "I have laundry booked with LAUNDRY BUTLER."
+    : "I’ve taken the request in hand.";
   const subhead =
     services.length > 1
       ? "Here’s where each piece sits — I’ll only come back to you when something needs a yes."

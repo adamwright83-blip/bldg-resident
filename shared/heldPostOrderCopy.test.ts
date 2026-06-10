@@ -78,7 +78,9 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
       { services: [{ type: "laundry_pickup" }] },
       "Pick up my laundry.",
     );
-    expect(copy.opening).toBe("I have laundry booked with LAUNDRY BUTLER for tomorrow morning, 7–9am pickup, with same-day return expected between 7–9pm.");
+    // Short headline by design — hard pickup/return windows live in the
+    // service rows so the headline can never clip under the header.
+    expect(copy.opening).toBe("I have laundry booked with LAUNDRY BUTLER.");
     expect(copy.serviceRows).toHaveLength(1);
     expect(copy.serviceRows[0].label).toBe("LAUNDRY");
     expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Status: In motion");

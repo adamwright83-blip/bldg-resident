@@ -245,6 +245,9 @@ export default function PenPullPrototype({
   const [speechTranscript, setSpeechTranscript] = useState("");
   const [labyrinthOpen, setLabyrinthOpen] = useState(false);
   const [labyrinthPanel, setLabyrinthPanel] = useState<LabyrinthPanel>(null);
+  // True while the courier horse is crossing or the dispatch slip is open —
+  // the Labyrinth knob yields the foreground during that ceremony only.
+  const [courierForeground, setCourierForeground] = useState(false);
   const [typedCommandStatus, setTypedCommandStatus] = useState<
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
@@ -1118,6 +1121,7 @@ export default function PenPullPrototype({
               debugOpenLaundryVitrine={debugOpenLaundryVitrine}
               displayRequest={confirmedRequest}
               isHeld={mode === "held"}
+              onCourierForegroundChange={setCourierForeground}
               onDebugLaundryVitrineOpened={() => setDebugOpenLaundryVitrine(false)}
               penAssetSrc={penAssetSrc}
               residenceLabel={residenceLabel}
@@ -1125,6 +1129,10 @@ export default function PenPullPrototype({
             />
           )}
 
+          {/* The Labyrinth knob stays reachable across idle home AND the
+              active service world (post-order, phone follow-up, courier
+              waiting). It yields only while the horse is mid-crossing or the
+              dispatch slip is open, so it never overlaps the ceremony. */}
           <HeldLabyrinthDrawer
             activePanel={labyrinthPanel}
             isOpen={labyrinthOpen}
@@ -1134,7 +1142,10 @@ export default function PenPullPrototype({
               setLabyrinthOpen(false);
               setLabyrinthPanel(panel);
             }}
-            visible={showHomeWorld || mode === "held" || mode === "transforming"}
+            visible={
+              (showHomeWorld || mode === "held" || mode === "transforming") &&
+              !courierForeground
+            }
           />
 
           <AnimatePresence>
@@ -1860,38 +1871,49 @@ function HeldCourierGesture({
     <div className="pointer-events-none absolute inset-0 z-[132] overflow-visible">
       {status === "dispatching" && !prefersReducedMotion && (
         <>
+          {/* The horse is NOT a loading indicator. It is the product's proof
+              that HELD sent word outside the app, and it gets ceremony:
+              ~1s identifiable entrance, a steady museum-paced crossing through
+              open paper space (middle band — never the header, rows rail,
+              cradle, or phone), and a slight acceleration off the left edge.
+              4s minimum, featured-exhibit scale. */}
+          {/* Path + pace are expressed in `left` percentages of the SCREEN
+              frame (not vw): on desktop the app lives in a 430px presentation
+              frame while vw tracks the monitor, which made the old horse
+              sprint past in under a second. Percentages keep the crossing at
+              the same museum pace on real mobile and inside the desktop frame. */}
           <motion.div
             aria-hidden="true"
-            animate={{ x: ["110vw", "44vw", "-58vw"], opacity: [0, 0.34, 0] }}
-            className="absolute left-0 top-[44%] h-10 w-[52%] rounded-full bg-[#5f3a16]/24 blur-[12px]"
-            initial={{ x: "110vw", opacity: 0 }}
-            transition={{ duration: 6.5, ease: [0.42, 0, 0.25, 1] }}
+            animate={{ left: ["102%", "24%", "-12%", "-78%"], opacity: [0, 0.3, 0.3, 0] }}
+            className="absolute top-[56%] h-10 w-[64%] rounded-full bg-[#5f3a16]/24 blur-[12px]"
+            initial={{ left: "102%", opacity: 0 }}
+            transition={{ duration: 5.2, times: [0, 0.26, 0.78, 1], ease: ["easeOut", "linear", "easeIn"] }}
           />
           <motion.button
             aria-label="Open courier satchel note"
             animate={{
-              x: ["110vw", "38vw", "-68vw"],
-              y: [16, 5, -12],
-              rotate: [0.8, -0.7, 0.6],
+              left: ["102%", "22%", "-14%", "-80%"],
+              y: [10, 2, -3, -8],
+              rotate: [0.8, 0.2, -0.3, 0.5],
             }}
-            className="pointer-events-auto absolute left-0 top-[20%] z-[2] h-[min(48dvh,340px)] w-[70vw] max-w-[330px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
-            initial={{ x: "110vw", y: 16, rotate: 0.8 }}
+            className="pointer-events-auto absolute top-[26%] z-[2] h-[min(34dvh,300px)] w-[72%] max-w-[330px] border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            initial={{ left: "102%", y: 10, rotate: 0.8 }}
             onAnimationComplete={onDispatchComplete}
             onClick={() => onOpenSlip("summary")}
             transition={{
-              duration: 6.5,
-              ease: [0.42, 0, 0.25, 1],
-              times: [0, 0.56, 1],
+              duration: 5.2,
+              times: [0, 0.26, 0.78, 1],
+              ease: ["easeOut", "linear", "easeIn"],
             }}
             type="button"
           >
             <motion.img
               alt=""
               animate={{ y: [0, -3, 1, -2, 0] }}
-              className="h-full w-full object-contain opacity-100 drop-shadow-[0_20px_22px_rgba(52,31,12,0.22)]"
+              className="h-full w-full object-contain opacity-100 drop-shadow-[0_22px_24px_rgba(52,31,12,0.24)]"
               draggable={false}
               src={HELD_ASSETS.courierHorseOutbound}
-              transition={{ duration: 0.9, ease: "easeInOut", repeat: Infinity }}
+              transition={{ duration: 1.1, ease: "easeInOut", repeat: Infinity }}
             />
           </motion.button>
         </>
@@ -1928,13 +1950,16 @@ function HeldCourierGesture({
             style={{ transform: `translateX(${tailDragX}px)` }}
             type="button"
           >
+            {/* The tassel is a deliberate "courier is away" marker — grounded
+                with a real shadow and lifted off the edge so it never reads as
+                something accidentally clipped. */}
             <span
               aria-hidden="true"
-              className="absolute -bottom-1 left-1/2 z-0 h-[5px] w-[72%] -translate-x-1/2 rounded-full bg-[#5f3a16]/16 blur-[4px]"
+              className="absolute -bottom-2 left-1/2 z-0 h-[7px] w-[88%] -translate-x-1/2 rounded-full bg-[#5f3a16]/30 blur-[5px]"
             />
             <img
               alt=""
-              className="relative z-[1] h-full w-full object-contain drop-shadow-[0_7px_9px_rgba(54,34,16,0.24)]"
+              className="relative z-[1] h-full w-full object-contain drop-shadow-[0_10px_14px_rgba(54,34,16,0.34)]"
               draggable={false}
               src={HELD_ASSETS.courierTail}
             />
@@ -1942,13 +1967,16 @@ function HeldCourierGesture({
         </>
       )}
 
+      {/* The slip emerges FROM the tassel (left rail anchor), not from
+          nowhere — it slides out rightward from the tassel's position. */}
       {slipOpen && (
         <motion.section
           animate={{ opacity: 1, x: 0, y: 0 }}
           className="pointer-events-auto absolute left-[8%] right-[8%] top-[27%] z-[12] text-[#2a2520]"
-          exit={{ opacity: 0, x: -14 }}
-          initial={{ opacity: 0, x: -18, y: 4 }}
-          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+          exit={{ opacity: 0, x: -22 }}
+          initial={{ opacity: 0, x: -34, y: 6 }}
+          style={{ transformOrigin: "left 40%" }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="relative min-h-[252px] overflow-hidden rounded-[3px] border border-[#c39a54]/42 bg-[#fff8ea]/88 px-5 py-5 shadow-[0_18px_34px_rgba(52,33,15,0.18)] backdrop-blur-[1px]">
             <img
@@ -2026,6 +2054,7 @@ function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
   isHeld,
+  onCourierForegroundChange,
   onDebugLaundryVitrineOpened,
   penAssetSrc,
   residenceLabel,
@@ -2034,6 +2063,9 @@ function HeldTransformingState({
   debugOpenLaundryVitrine?: boolean;
   displayRequest: string;
   isHeld: boolean;
+  // Reports when the courier crossing or the open slip owns the foreground,
+  // so the Labyrinth knob can step aside instead of overlapping the ceremony.
+  onCourierForegroundChange?: (busy: boolean) => void;
   onDebugLaundryVitrineOpened?: () => void;
   penAssetSrc: string;
   residenceLabel: string;
@@ -2121,7 +2153,13 @@ function HeldTransformingState({
         setCourierStateLabel("Awaiting outside reply.");
         setCourierSlipOpen(false);
         setCourierSlipMode("summary");
-        setCourierStatus("dispatching");
+        // Ceremony: let the chief-of-staff line land and the page settle
+        // before the courier enters — the horse must be understood, not flash.
+        const dispatchTimer = window.setTimeout(
+          () => setCourierStatus("dispatching"),
+          2600,
+        );
+        return () => window.clearTimeout(dispatchTimer);
       }
     }
   }, [isSettled, displayRequest]);
@@ -2237,24 +2275,31 @@ function HeldTransformingState({
       setActiveServices(followup.nextServices);
     }
 
+    // Sequencing contract: the existing chief/status copy dims FIRST (the
+    // post-order section fades on isPhoneEngaged / dispatching states), and
+    // only after a 150–250ms beat does the new reply appear in its own clean
+    // band. Two readable prose layers never occupy the same space at once.
     setPhoneReplyVisible(false);
     setPhoneReply(followup.reply);
     setPhoneReplyStatus("idle");
-    window.setTimeout(() => setPhoneReplyVisible(true), 320);
+    window.setTimeout(() => setPhoneReplyVisible(true), 220);
 
-    // Trigger the horse animation no matter what is typed in the phone follow-up
-    setCourierMessage(nextValue);
-    setCourierThreadLabel(followup.threadLabel || "LAUNDRY BUTLER");
-    setCourierStateLabel(
-      followup.courierStateLabel &&
-      followup.courierStateLabel !== "Local status only." &&
-      followup.courierStateLabel !== "Local acknowledgement."
-        ? followup.courierStateLabel
-        : "Awaiting outside reply."
-    );
-    setCourierSlipOpen(false);
-    setCourierSlipMode("summary");
-    setCourierStatus("dispatching");
+    if (followup.triggersCourier) {
+      // The horse is proof that HELD sent word OUTSIDE the app. It rides only
+      // for vendor-facing asks (schedule changes, exceptions, outside
+      // coordination) — never for questions HELD can already answer.
+      setCourierMessage(nextValue);
+      setCourierThreadLabel(followup.threadLabel || "LAUNDRY BUTLER");
+      setCourierStateLabel(followup.courierStateLabel || "Awaiting outside reply.");
+      setCourierSlipOpen(false);
+      setCourierSlipMode("summary");
+      // The reply IS the pre-horse intelligence ("…I’m asking them now").
+      // Hold the courier until the reply has streamed and been read, so the
+      // user understands WHY the horse rides before it appears.
+      const replyReadMs = 340 + followup.reply.length * 20 + 650;
+      const horseDelay = Math.min(4200, Math.max(1800, replyReadMs));
+      window.setTimeout(() => setCourierStatus("dispatching"), horseDelay);
+    }
   };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
     clearLongPress();
@@ -2314,7 +2359,22 @@ function HeldTransformingState({
     }, 920);
   };
   const courierRailActive = courierStatus === "courier_out";
+  // While the courier is dispatching (and once a phone reply owns the page),
+  // the older chief/status copy must already be receded — the horse never
+  // crosses over full-opacity prose, and no two readable layers ever stack.
+  const courierDimsCopy = courierStatus === "dispatching" || Boolean(phoneReply);
   const hasActiveTrayWork = isSettled && tokens.length > 0;
+  const courierOwnsForeground = courierStatus === "dispatching" || courierSlipOpen;
+
+  useEffect(() => {
+    onCourierForegroundChange?.(courierOwnsForeground);
+  }, [courierOwnsForeground, onCourierForegroundChange]);
+  useEffect(
+    () => () => {
+      onCourierForegroundChange?.(false);
+    },
+    [onCourierForegroundChange],
+  );
 
   useEffect(
     () => () => {
@@ -2404,38 +2464,47 @@ function HeldTransformingState({
 
       {isSettled && (
         <section
-          className={`pointer-events-auto absolute top-[11%] bottom-[38%] z-20 flex flex-col text-[#2a2520] transition-all duration-200 overflow-y-auto no-scrollbar ${
+          className={`pointer-events-auto absolute top-[11%] bottom-[44%] z-20 flex flex-col text-[#2a2520] transition-all duration-[350ms] ease-out overflow-y-auto no-scrollbar ${
             courierRailActive
               ? "left-[54px] right-[8%] items-start text-left"
               : "left-1/2 w-[84%] -translate-x-1/2 items-center text-center"
           } ${
-            courierStatus === "dispatching"
-              ? "opacity-[0.62]"
-              : isPhoneEngaged
-                ? "opacity-0 blur-[8px] pointer-events-none"
+            isPhoneEngaged
+              ? "opacity-0 blur-[8px] pointer-events-none"
+              : courierDimsCopy
+                ? "pointer-events-none"
                 : "opacity-100"
           }`}
         >
+          {/* Courier ceremony: chief-of-staff prose recedes to 20%, operational
+              rows stay faintly legible at 40% — the horse crosses an already
+              quieted page, never over full-opacity copy. */}
+          {/* Headline is short by contract (hard facts live in the rows) and
+              sized so it can never clip under the header or crowd the rows. */}
           <PlanLine
-            className={`max-w-full font-serif text-[30px] italic leading-[1.22] text-[#2a2520] ${
+            className={`max-w-full font-serif text-[clamp(20px,6vw,27px)] italic leading-[1.24] text-[#2a2520] transition-opacity duration-[350ms] ease-out ${
               courierRailActive ? "pr-2" : ""
-            }`}
+            } ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}
             delay={900}
             text={postOrderCopy.opening}
           />
           <PlanLine
-            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520] ${
+            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520] transition-opacity duration-[350ms] ease-out ${
               courierRailActive ? "pr-2" : ""
-            }`}
-            delay={4300}
+            } ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}
+            delay={3000}
             text={postOrderCopy.subhead}
           />
-          <div className="pointer-events-auto mt-5 w-full text-left">
+          <div
+            className={`pointer-events-auto mt-5 w-full text-left transition-opacity duration-[350ms] ease-out ${
+              courierDimsCopy ? "opacity-40" : "opacity-100"
+            }`}
+          >
             {postOrderCopy.serviceRows.map((row, index) => (
               <PlanServiceRow
                 details={row.details}
                 key={`${row.label}-${index}`}
-                delay={8500 + index * 4800}
+                delay={5200 + index * 2600}
                 label={row.label}
                 onHighlight={emphasizeServiceType}
                 serviceType={row.serviceType}
@@ -2443,23 +2512,32 @@ function HeldTransformingState({
             ))}
           </div>
           <PlanLine
-            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b] ${
+            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b] transition-opacity duration-[350ms] ease-out ${
               courierRailActive ? "pr-2 text-left" : ""
-            }`}
-            delay={8500 + postOrderCopy.serviceRows.length * 4800 + 1200}
+            } ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}
+            delay={5200 + postOrderCopy.serviceRows.length * 2600 + 1200}
             text={postOrderCopy.closing}
           />
         </section>
       )}
 
+      {/* Phone reply owns a dedicated clean band: the chief/status copy has
+          already dimmed/blurred away before this fades in (150–250ms beat), so
+          two readable prose layers never occupy the same location. While the
+          horse crosses, the reply itself recedes too — the courier crosses a
+          quieted page. */}
       {isSettled && phoneReply && (
         <section
-          className={`pointer-events-none absolute left-1/2 top-[31%] z-[65] w-[82%] -translate-x-1/2 text-center transition-opacity duration-200 ${
-            phoneReplyVisible ? "opacity-100" : "opacity-0"
+          className={`pointer-events-none absolute left-1/2 top-[28%] z-[65] w-[82%] -translate-x-1/2 text-center transition-opacity duration-[350ms] ease-out ${
+            phoneReplyVisible
+              ? courierStatus === "dispatching"
+                ? "opacity-20"
+                : "opacity-100"
+              : "opacity-0"
           }`}
         >
           <PlanLine
-            className="font-serif text-[16.5px] italic leading-[1.32] text-[#2a2520]"
+            className="font-serif text-[17px] italic leading-[1.4] text-[#2a2520]"
             delay={120}
             msPerChar={20}
             text={phoneReply}
@@ -2467,9 +2545,11 @@ function HeldTransformingState({
         </section>
       )}
 
+      {/* The Ask Held composer gets its own clean band, clearly above the
+          divider/cradle so it never feels squeezed against the physical layer. */}
       {isSettled && (
         <form
-          className={`absolute bottom-[calc(22px+27.2%+env(safe-area-inset-bottom))] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
+          className={`absolute bottom-[calc(22px+31.5%+env(safe-area-inset-bottom))] left-1/2 z-[90] w-[84%] -translate-x-1/2 transition-all duration-200 ${
             isPhoneEngaged
               ? "translate-y-0 opacity-100"
               : "pointer-events-none translate-y-[6px] opacity-0"
@@ -2513,10 +2593,13 @@ function HeldTransformingState({
         </form>
       )}
 
+      {/* The full physical object layer (divider, cradle, pen, tokens, phone)
+          is lifted together so the walnut cradle always sits fully visible
+          with breathing room — never cut off at the frame's bottom edge. */}
       {isSettled && (
         <div
           aria-hidden="true"
-          className="absolute bottom-[calc(22px+24.5%+env(safe-area-inset-bottom))] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
+          className="absolute bottom-[calc(36px+24.5%+env(safe-area-inset-bottom))] left-1/2 z-20 h-px w-[85%] -translate-x-1/2 bg-[#b8893c]"
         />
       )}
 
@@ -2524,7 +2607,7 @@ function HeldTransformingState({
         alt=""
         className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 select-none transition-all duration-700 ${
           !isInk
-            ? "bottom-[calc(32px+env(safe-area-inset-bottom))] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
+            ? "bottom-[calc(46px+env(safe-area-inset-bottom))] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
             : "bottom-[-6%] w-[108%] opacity-80 drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)]"
         }`}
         data-held-home-cradle="true"
@@ -2535,13 +2618,13 @@ function HeldTransformingState({
         <>
           <div
             aria-hidden="true"
-            className="absolute bottom-[calc(22px+6.5%+env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
+            className="absolute bottom-[calc(36px+6.5%+env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
           >
             H
           </div>
           <img
             alt=""
-            className="pointer-events-none absolute bottom-[calc(22px+5.7%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
+            className="pointer-events-none absolute bottom-[calc(36px+5.7%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
             draggable={false}
             src={penAssetSrc}
           />
@@ -2552,7 +2635,7 @@ function HeldTransformingState({
           <img
             alt=""
             aria-hidden="true"
-            className={`pointer-events-none absolute bottom-[calc(34px+env(safe-area-inset-bottom))] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
+            className={`pointer-events-none absolute bottom-[calc(48px+env(safe-area-inset-bottom))] right-[10px] z-[124] h-[clamp(176px,23dvh,202px)] w-auto max-w-none select-none drop-shadow-[0_9px_10px_rgba(38,24,13,0.20)] transition-all duration-300 ease-out ${
               isPhoneEngaged ? "opacity-90" : "opacity-0"
             }`}
             draggable={false}
@@ -2566,7 +2649,7 @@ function HeldTransformingState({
           />
           <button
             aria-label="Lift phone to speak to Held"
-            className={`group absolute bottom-[calc(32px+env(safe-area-inset-bottom))] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
+            className={`group absolute bottom-[calc(46px+env(safe-area-inset-bottom))] right-[14px] z-[130] h-[clamp(188px,24dvh,208px)] w-[118px] touch-none border-0 bg-transparent p-0 outline-none transition-[filter,transform] duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#b8893c]/60 ${
               isPhoneEngaged
                 ? "drop-shadow-[0_12px_14px_rgba(44,28,14,0.24)]"
                 : hasActiveTrayWork
@@ -2614,7 +2697,7 @@ function HeldTransformingState({
       <div
         className={`absolute left-1/2 -translate-x-1/2 ${
           isSettled
-            ? "bottom-[calc(22px+3.8%+env(safe-area-inset-bottom))] z-[115] h-[13%] w-[43%]"
+            ? "bottom-[calc(36px+3.8%+env(safe-area-inset-bottom))] z-[115] h-[13%] w-[43%]"
             : "bottom-[35%] z-20 h-[32%] w-[88%]"
         }`}
       >
@@ -3317,15 +3400,22 @@ function buildReactivePhoneFollowup(
     };
   }
 
-  // D. Laundry schedule change request
+  // D. Laundry schedule change request — vendor-facing, so the courier rides.
+  // The reply must demonstrate intelligence BEFORE the horse appears: state the
+  // known vendor policy, name the exception being requested, then say HELD is
+  // asking. Never claim the change is confirmed.
   if (isLaundryScheduleChange) {
-    let reply = "Understood. I’m asking LAUNDRY BUTLER for an earlier return window.";
+    let reply =
+      "LAUNDRY BUTLER currently returns laundry between 7–9pm. An earlier return would require an exception from the vendor — I’m asking them now.";
     if (/\b(5\s*pm|5)\b/.test(normalized)) {
-      reply = "Understood. I’m asking LAUNDRY BUTLER for a 5pm return instead of the standard 7–9pm window.";
+      reply =
+        "LAUNDRY BUTLER currently returns laundry between 7–9pm. A 5pm return would require an exception from the vendor — I’m asking them now.";
     } else if (/\b(8\s*am|8)\b/.test(normalized)) {
-      reply = "Understood. I’m asking LAUNDRY BUTLER for an 8am pickup instead of the standard 7–9am window.";
+      reply =
+        "LAUNDRY BUTLER currently picks up between 7–9am. An 8am pickup would require an exception from the vendor — I’m asking them now.";
     } else if (/\b(pickup|pick up)\b/.test(normalized)) {
-      reply = "Understood. I’m asking LAUNDRY BUTLER to adjust the pickup window.";
+      reply =
+        "LAUNDRY BUTLER currently picks up between 7–9am. Moving that window needs the vendor’s word — I’m asking them now.";
     }
 
     return {

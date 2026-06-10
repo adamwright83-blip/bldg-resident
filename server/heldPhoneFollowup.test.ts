@@ -76,11 +76,16 @@ describe("buildHeldPhoneFollowupReply — v1 reply-only phone follow-up", () => 
       message: "Can laundry come earlier?",
     });
 
-    // Promises to check/ask, does not assert the time is already changed.
+    // Demonstrates intelligence first (states the KNOWN vendor window), then
+    // promises to ask — never asserts the time is already changed.
     expect(reply).toMatch(/ask|check|let you know|won.t change/i);
     expect(reply).not.toMatch(BOOKED_OR_CONFIRMED);
-    // No fabricated concrete new pickup time.
-    expect(reply).not.toMatch(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/i);
+    // The known vendor windows (7–9am / 7–9pm) are allowed — they are grounded
+    // vendor knowledge, not fabrication. What must never appear is a NEW
+    // concrete time presented as if it were already arranged.
+    const knownWindows = /7–9\s*(am|pm)/gi;
+    const otherTimes = reply.replace(knownWindows, "").match(/\b\d{1,2}(:\d{2})?\s*(am|pm)\b/i);
+    expect(otherTimes).toBeNull();
   });
 
   // Test 4: "Do I need to do anything?" -> reassurance grounded in current plan.
