@@ -86,6 +86,48 @@ const HELD_ASSETS = {
   tray: "/held/nursery-heldscreen.png",
 };
 
+function useHeldVisualViewport() {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("held-app-mounted");
+
+    const syncViewport = () => {
+      const viewport = window.visualViewport;
+      const viewportWidth = viewport?.width ?? window.innerWidth;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const screenWidth =
+        window.screen?.width && Number.isFinite(window.screen.width)
+          ? window.screen.width
+          : viewportWidth;
+
+      root.style.setProperty(
+        "--held-viewport-width",
+        `${Math.max(1, Math.floor(Math.min(viewportWidth, screenWidth, window.innerWidth)))}px`,
+      );
+      root.style.setProperty(
+        "--held-viewport-height",
+        `${Math.max(1, Math.floor(viewportHeight))}px`,
+      );
+    };
+
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    window.addEventListener("orientationchange", syncViewport);
+    window.visualViewport?.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("scroll", syncViewport);
+
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+      window.removeEventListener("orientationchange", syncViewport);
+      window.visualViewport?.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("scroll", syncViewport);
+      root.classList.remove("held-app-mounted");
+      root.style.removeProperty("--held-viewport-width");
+      root.style.removeProperty("--held-viewport-height");
+    };
+  }, []);
+}
+
 const COMPOSER_KEY_ROWS = [
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "⌫"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
@@ -207,6 +249,8 @@ export default function PenPullPrototype({
   showDebugControls = false,
   tuning,
 }: PenPullPrototypeProps) {
+  useHeldVisualViewport();
+
   const stageRef = useRef<HTMLDivElement | null>(null);
   const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -778,7 +822,7 @@ export default function PenPullPrototype({
             />
           )}
 
-          {showHomeWorld && <header className="pointer-events-none absolute left-[8%] top-[8%] z-20">
+          {showHomeWorld && <header className="held-home-header pointer-events-none absolute left-[8%] top-[8%] z-20">
             <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
             <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
               Residence 1807 · 12A
@@ -810,7 +854,7 @@ export default function PenPullPrototype({
             )
           )}
 
-          {showHomeWorld && <section className="pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
+          {showHomeWorld && <section className="held-home-copy pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
             <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
               Held.
             </h1>
@@ -830,7 +874,7 @@ export default function PenPullPrototype({
           {showHomeWorld && (
             <img
               alt=""
-              className={`pointer-events-none absolute bottom-[-34px] left-1/2 z-10 w-[130%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
+              className={`held-home-rest-tray pointer-events-none absolute bottom-[-34px] left-1/2 z-10 w-[130%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
                 composerTrayVisible ||
                 mode === "speech" ||
                 mode === "collectName" ||
@@ -847,7 +891,7 @@ export default function PenPullPrototype({
 
           <div
             aria-hidden="true"
-            className={`pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
+            className={`held-home-divider pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
               composerTrayVisible ||
               mode === "speech" ||
               mode === "collectName" ||
