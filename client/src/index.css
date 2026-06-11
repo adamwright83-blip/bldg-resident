@@ -4039,37 +4039,43 @@
   .held-app-mounted,
   .held-app-mounted body,
   .held-app-mounted #root {
-    min-height: 100%;
-    min-height: var(--held-viewport-height, 100svh);
+    width: 100%;
+    min-width: 100%;
+    min-height: 100svh;
     background: #f4ecdf;
     overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .held-app-stage {
     position: fixed !important;
-    inset: 0 auto auto 0 !important;
+    inset: 0 !important;
     display: block !important;
-    width: var(--held-viewport-width, 100svw) !important;
+    width: 100% !important;
+    width: 100dvw !important;
     max-width: none !important;
-    min-height: var(--held-viewport-height, 100svh) !important;
-    height: var(--held-viewport-height, 100svh) !important;
+    min-height: 100svh !important;
+    height: 100dvh !important;
     padding: 0 !important;
     background: #f4ecdf !important;
     overflow: hidden !important;
+    contain: layout paint size !important;
   }
 
   .held-app-frame {
     position: relative !important;
-    width: var(--held-viewport-width, 100svw) !important;
+    width: 100% !important;
+    width: 100dvw !important;
     max-width: none !important;
-    height: var(--held-viewport-height, 100svh) !important;
-    min-height: var(--held-viewport-height, 100svh) !important;
+    height: 100dvh !important;
+    min-height: 100svh !important;
     margin: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     transform: none !important;
     box-shadow: none !important;
     overflow: hidden !important;
+    contain: layout paint size !important;
   }
 
   .held-device-notch {
@@ -4095,7 +4101,7 @@
   }
 
   .held-home-rest-tray {
-    bottom: max(-34px, calc(var(--held-viewport-height, 100svh) * -0.052)) !important;
+    bottom: max(-34px, -5.2dvh) !important;
     width: min(124%, 450px) !important;
   }
 

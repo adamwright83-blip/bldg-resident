@@ -86,44 +86,13 @@ const HELD_ASSETS = {
   tray: "/held/nursery-heldscreen.png",
 };
 
-function useHeldVisualViewport() {
+function useHeldMountedClass() {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add("held-app-mounted");
 
-    const syncViewport = () => {
-      const viewport = window.visualViewport;
-      const viewportWidth = viewport?.width ?? window.innerWidth;
-      const viewportHeight = viewport?.height ?? window.innerHeight;
-      const screenWidth =
-        window.screen?.width && Number.isFinite(window.screen.width)
-          ? window.screen.width
-          : viewportWidth;
-
-      root.style.setProperty(
-        "--held-viewport-width",
-        `${Math.max(1, Math.floor(Math.min(viewportWidth, screenWidth, window.innerWidth)))}px`,
-      );
-      root.style.setProperty(
-        "--held-viewport-height",
-        `${Math.max(1, Math.floor(viewportHeight))}px`,
-      );
-    };
-
-    syncViewport();
-    window.addEventListener("resize", syncViewport);
-    window.addEventListener("orientationchange", syncViewport);
-    window.visualViewport?.addEventListener("resize", syncViewport);
-    window.visualViewport?.addEventListener("scroll", syncViewport);
-
     return () => {
-      window.removeEventListener("resize", syncViewport);
-      window.removeEventListener("orientationchange", syncViewport);
-      window.visualViewport?.removeEventListener("resize", syncViewport);
-      window.visualViewport?.removeEventListener("scroll", syncViewport);
       root.classList.remove("held-app-mounted");
-      root.style.removeProperty("--held-viewport-width");
-      root.style.removeProperty("--held-viewport-height");
     };
   }, []);
 }
@@ -249,7 +218,7 @@ export default function PenPullPrototype({
   showDebugControls = false,
   tuning,
 }: PenPullPrototypeProps) {
-  useHeldVisualViewport();
+  useHeldMountedClass();
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
