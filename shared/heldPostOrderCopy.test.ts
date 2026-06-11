@@ -107,6 +107,37 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     expect(row).not.toContain("Pending");
   });
 
+  // 6d — REGRESSION (state handoff): the exact confirmed service object the
+  // booking response must produce. Once the service carries booking state, the
+  // copy builder must render truth and never the pending/in-motion language.
+  it("renders booked truth for a fully-confirmed laundry service object", () => {
+    const copy = buildPostOrderChiefOfStaffCopy({
+      services: [
+        {
+          type: "laundry_pickup",
+          status: "booked",
+          orderId: 123,
+          vendorName: "LAUNDRY BUTLER",
+          pickupWindow: "Tomorrow, 7–9am",
+          returnWindow: "Tomorrow, 7–9pm",
+        },
+      ],
+    });
+    const rendered = [
+      copy.opening,
+      copy.subhead,
+      ...copy.serviceRows.flatMap(r => formatPostOrderServiceRow(r).split("\n")),
+      copy.closing,
+    ].join("\n");
+    expect(rendered).not.toMatch(/setting the pickup/i);
+    expect(rendered).not.toContain("In motion");
+    expect(rendered).not.toContain("Pickup scheduling");
+    expect(rendered).toContain("Booked");
+    expect(rendered).toContain("LAUNDRY BUTLER");
+    expect(rendered).toContain("Tomorrow, 7–9am");
+    expect(rendered).toContain("Tomorrow, 7–9pm");
+  });
+
   // 6c — invariant: a "booked" headline can NEVER sit above a pending row.
   // This is the exact contradiction from the bug report.
   it("never shows a booked headline above a pending laundry row", () => {

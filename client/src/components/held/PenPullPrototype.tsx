@@ -467,17 +467,30 @@ export default function PenPullPrototype({
       return;
     }
 
-    const orderId = Number(response.booking?.orderId ?? NaN);
-    if (response.booking && Number.isFinite(orderId) && orderId > 0) {
+    // Booking-id resolver: accept EITHER a real admin order id OR the local
+    // service-request id as proof the booking exists. The backend returns
+    // serviceRequestId for a captured request even when the admin orderId
+    // round-trip is flaky; requiring orderId alone left the resident stuck on
+    // "pending / In motion" for a request that was actually booked.
+    const bookingId = Number(
+      response.booking?.orderId ?? response.booking?.serviceRequestId ?? NaN,
+    );
+    // QA log: the exact booking truth the server returned + the resolved id.
+    console.log("[HELD][booking] server response", {
+      booking: response.booking,
+      resolvedBookingId: bookingId,
+      collectStep: response.collectStep,
+    });
+    if (response.booking && Number.isFinite(bookingId) && bookingId > 0) {
       const nextServices = services.length
         ? services
         : inferServicesFromRequest(`${request} ${response.booking.service ?? ""}`);
-      const bookedServices = markBookableDemoServices(nextServices, request, orderId);
+      const bookedServices = markBookableDemoServices(nextServices, request, bookingId);
       setConfirmedRequest(request);
       setConfirmedServices(bookedServices);
       setPendingOrderRequest("");
       setPendingOrderServices([]);
-      setLastOrderId(orderId);
+      setLastOrderId(bookingId);
       setHeldAgentStatus("confirmed");
       setHeldAgentMessage(response.content || "Taking custody.");
       setMode("takingCustody");
@@ -2746,12 +2759,24 @@ function HeldTransformingState({
   // never show "In motion / Pending: Pickup scheduling" for an order that
   // actually exists. The headline + row both read from this same enriched state.
   const servicesForCopy = useMemo<HeldParsedService[]>(() => {
-    if (lastOrderId == null) return activeServices;
-    return activeServices.map(service =>
-      isLaundryService(service.type) && service.orderId == null
-        ? { ...service, orderId: lastOrderId, status: service.status ?? "booked" }
-        : service,
+    const resolved =
+      lastOrderId == null
+        ? activeServices
+        : activeServices.map(service =>
+            isLaundryService(service.type) && service.orderId == null
+              ? { ...service, orderId: lastOrderId, status: service.status ?? "booked" }
+              : service,
+          );
+    // QA log: the exact service objects entering the post-order copy builder.
+    // For a successful laundry booking these MUST carry status:"booked" and an
+    // orderId/serviceRequestId — if they don't, the bug is upstream (booking
+    // response / state handoff), NOT the copy builder.
+    console.log(
+      "[HELD][copy] services → buildPostOrderChiefOfStaffCopy",
+      resolved.map(s => ({ type: s.type, status: s.status ?? null, orderId: s.orderId ?? null })),
+      { lastOrderId },
     );
+    return resolved;
   }, [activeServices, lastOrderId]);
   const postOrderCopy = useMemo(
     () =>
