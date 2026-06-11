@@ -758,7 +758,7 @@ export default function PenPullPrototype({
             WebkitUserSelect: "none",
           }}
         >
-          <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black md:block" />
+          <div className="held-device-notch pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black md:block" />
 
           {showHomeWorld && (
             <img
