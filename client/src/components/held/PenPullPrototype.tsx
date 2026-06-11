@@ -742,8 +742,8 @@ export default function PenPullPrototype({
   }, [showDebugControls]);
 
   return (
-    <main className="h-dvh min-h-dvh overflow-hidden bg-[#f4ecdf] text-[#2C2824] md:flex md:items-start md:justify-center md:bg-[#151311] md:px-4 md:py-2">
-      <section className="relative h-dvh w-screen max-w-none md:h-[min(844px,calc(100dvh-16px))] md:w-full md:max-w-[430px] md:overflow-hidden md:rounded-[48px] md:border-[10px] md:border-[#11100e] md:shadow-[0_24px_80px_rgba(0,0,0,0.44)]">
+    <main className="held-app-stage h-dvh min-h-dvh overflow-hidden bg-[#f4ecdf] text-[#2C2824] md:flex md:items-start md:justify-center md:bg-[#151311] md:px-4 md:py-2">
+      <section className="held-app-frame relative h-dvh w-screen max-w-none md:h-[min(844px,calc(100dvh-16px))] md:w-full md:max-w-[430px] md:overflow-hidden md:rounded-[48px] md:border-[10px] md:border-[#11100e] md:shadow-[0_24px_80px_rgba(0,0,0,0.44)]">
         <div
           ref={stageRef}
           className="relative h-full w-full overflow-hidden bg-[#f4ecdf]"

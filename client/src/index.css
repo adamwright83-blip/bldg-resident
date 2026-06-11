@@ -4010,3 +4010,34 @@
     animation: none;
   }
 }
+
+/* ─── HELD shell: two layout modes ───────────────────────────────────────
+   Desktop (>=768px) MAY present HELD inside a phone-style frame on a dark
+   stage (handled by the md: utilities on .held-app-stage / .held-app-frame).
+   Real phones (<768px) ARE the app: force the stage + frame to full-bleed so
+   the desktop presentation frame can NEVER leak onto mobile — no black stage,
+   no centered miniature phone, no fake device frame, no transform scale, no
+   max-width wrapper, no outer border-radius. Unlayered so it always wins over
+   Tailwind utilities even if a stale/edge build reorders them. */
+@media (max-width: 767px) {
+  .held-app-stage {
+    display: block;
+    width: 100vw;
+    min-height: 100svh;
+    padding: 0;
+    background: #f4ecdf;
+  }
+  .held-app-frame {
+    position: relative;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    min-height: 100svh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    transform: none;
+    box-shadow: none;
+    overflow: hidden;
+  }
+}
