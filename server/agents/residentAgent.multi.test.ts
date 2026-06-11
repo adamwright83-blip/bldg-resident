@@ -126,7 +126,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(result.content).toBe("I have laundry booked with LAUNDRY BUTLER.");
+    expect(result.content).toBe("I booked your laundry pickup with LAUNDRY BUTLER.");
     expect(bookingMocks.findDuplicateBooking).not.toHaveBeenCalled();
     expect(dbMocks.createServiceRequest).toHaveBeenCalledWith(
       expect.objectContaining({

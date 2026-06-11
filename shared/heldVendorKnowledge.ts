@@ -11,14 +11,37 @@ export type HeldServiceBooking = {
   vendorName?: string | null;
 };
 
+// Customer-facing Laundry Butler service windows — operational truth, never
+// "asked" of the LLM. The app KNOWS these; the model only phrases them.
+//
+// THIS PASS: pickup 7–9am / return 7–9pm. These intentionally match what the
+// admin order actually stores — ops mapTimeWindow normalizes every bldg window
+// to 7:00am–9:00am — so the resident screen and the admin record agree exactly.
+//
+// FUTURE: when the vendor/admin scheduling system promotes the customer-facing
+// pickup window to 7:30–9:30am (over a 7–9am internal bucket), change ONLY the
+// two *_CLOCK constants below and every surface (headline subcopy, operational
+// rows, demo state) follows. Do NOT show 7:30–9:30am to the resident until the
+// admin order stores it too — never a resident/admin mismatch.
+const LAUNDRY_PICKUP_CLOCK = "7–9am";
+const LAUNDRY_RETURN_CLOCK = "7–9pm";
+
 export const LAUNDRY_BUTLER_KNOWLEDGE = {
   serviceId: "laundry",
   vendorName: "LAUNDRY BUTLER",
   serviceLabel: "fluff and fold",
-  pickupWindow: "tomorrow morning, 7–9am",
-  returnWindow: "same day, 7–9pm",
-  pickupWindowLabel: "tomorrow morning, 7–9am",
-  deliveryWindowLabel: "same day, 7–9pm",
+  // Single source of truth for the window times (see *_CLOCK above).
+  pickupClock: LAUNDRY_PICKUP_CLOCK,
+  returnClock: LAUNDRY_RETURN_CLOCK,
+  // Sentence forms — used in the chief-of-staff subcopy.
+  pickupSentence: `tomorrow morning, ${LAUNDRY_PICKUP_CLOCK}`,
+  returnSentence: `tomorrow evening, ${LAUNDRY_RETURN_CLOCK}`,
+  // Sentence-form windows (kept for back-compat consumers).
+  pickupWindow: `tomorrow morning, ${LAUNDRY_PICKUP_CLOCK}`,
+  returnWindow: `tomorrow evening, ${LAUNDRY_RETURN_CLOCK}`,
+  // Compact operational-row forms — render as "Tomorrow, 7–9am".
+  pickupWindowLabel: `Tomorrow, ${LAUNDRY_PICKUP_CLOCK}`,
+  deliveryWindowLabel: `Tomorrow, ${LAUNDRY_RETURN_CLOCK}`,
   canBookInternally: true,
   canAnswerPickupQuestion: true,
   canAnswerReturnQuestion: true,
@@ -89,9 +112,9 @@ export function withCarDetailBooking<T extends HeldServiceBooking>(
 }
 
 export function buildLaundryBookedSentence() {
-  // Short headline by design: the hard pickup/return facts live in the
-  // operational service rows, not the headline, so the headline never clips.
-  return `I have laundry booked with LAUNDRY BUTLER.`;
+  // Operator-not-narrator: a plain statement of the action just completed.
+  // The hard pickup/return facts live in the subcopy + operational rows.
+  return `I booked your laundry pickup with LAUNDRY BUTLER.`;
 }
 
 export function buildLaundryReturnAnswer() {

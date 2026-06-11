@@ -72,20 +72,51 @@ describe("buildPostOrderChiefOfStaffCopy — truth contract", () => {
     expect(rendered).not.toMatch(/Jordan/);
   });
 
-  // 6
-  it("produces safe generic laundry copy for a laundry-only request", () => {
+  // 6 — UNCONFIRMED laundry (no order yet): the row may read pending, but the
+  // headline must NEVER claim a booking. Operational truth, single source.
+  it("never claims a booking for laundry without a real order", () => {
     const copy = buildPostOrderChiefOfStaffCopy(
       { services: [{ type: "laundry_pickup" }] },
       "Pick up my laundry.",
     );
-    // Short headline by design — hard pickup/return windows live in the
-    // service rows so the headline can never clip under the header.
-    expect(copy.opening).toBe("I have laundry booked with LAUNDRY BUTLER.");
+    expect(copy.opening).not.toMatch(/\bbooked\b/i);
     expect(copy.serviceRows).toHaveLength(1);
     expect(copy.serviceRows[0].label).toBe("LAUNDRY");
-    expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Status: In motion");
-    expect(formatPostOrderServiceRow(copy.serviceRows[0])).toContain("Pending: Pickup scheduling");
+    const row = formatPostOrderServiceRow(copy.serviceRows[0]);
+    expect(row).toContain("Status: In motion");
+    expect(row).toContain("Pending: Pickup scheduling");
     expect(copy.closing).toBe("Nothing else needed right now.");
+  });
+
+  // 6b — CONFIRMED laundry (real order id): a complete booked confirmation that
+  // matches what the admin order stores exactly (7–9am pickup, 7–9pm return).
+  it("renders a complete booked confirmation when a real laundry order exists", () => {
+    const copy = buildPostOrderChiefOfStaffCopy(
+      { services: [{ type: "laundry_pickup", orderId: 70231 }] },
+      "laundry",
+    );
+    expect(copy.opening).toBe("I booked your laundry pickup with LAUNDRY BUTLER.");
+    expect(copy.subhead).toContain("tomorrow morning, 7–9am");
+    expect(copy.subhead).toContain("tomorrow evening, 7–9pm");
+    const row = formatPostOrderServiceRow(copy.serviceRows[0]);
+    expect(row).toContain("Status: Booked");
+    expect(row).toContain("Vendor: LAUNDRY BUTLER");
+    expect(row).toContain("Pickup: Tomorrow, 7–9am");
+    expect(row).toContain("Return: Tomorrow, 7–9pm");
+    expect(row).not.toContain("In motion");
+    expect(row).not.toContain("Pending");
+  });
+
+  // 6c — invariant: a "booked" headline can NEVER sit above a pending row.
+  // This is the exact contradiction from the bug report.
+  it("never shows a booked headline above a pending laundry row", () => {
+    const unconfirmed = buildPostOrderChiefOfStaffCopy({
+      services: [{ type: "laundry_pickup" }],
+    });
+    const rowText = formatPostOrderServiceRow(unconfirmed.serviceRows[0]);
+    if (/In motion|Pending/.test(rowText)) {
+      expect(unconfirmed.opening).not.toMatch(/\bbooked\b/i);
+    }
   });
 
   it("uses real laundry timing when metadata provides it", () => {

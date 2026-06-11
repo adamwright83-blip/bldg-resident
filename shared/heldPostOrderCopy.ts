@@ -337,16 +337,24 @@ export function buildPostOrderChiefOfStaffCopy(
     services = inferServicesFromText(request);
   }
 
-  const hasLaundry = services.some(s => isLaundry(normalizeType(s.type)));
-  // Headline stays short by design — pickup/return windows live in the
-  // LAUNDRY service row where they are scannable and can never clip.
-  const opening = hasLaundry
-    ? "I have laundry booked with LAUNDRY BUTLER."
-    : "I’ve taken the request in hand.";
+  const laundryServices = services.filter(s => isLaundry(normalizeType(s.type)));
+  const hasLaundry = laundryServices.length > 0;
+  // Single source of truth: the headline may CLAIM a booking only when a real
+  // order backs it (laundryIsConfirmed — the same check the LAUNDRY row uses).
+  // This is what prevents a "booked" headline above an "In motion / Pending"
+  // row: both the headline and the row read from one confirmation signal.
+  const laundryConfirmed = laundryServices.some(laundryIsConfirmed);
+  const opening = laundryConfirmed
+    ? "I booked your laundry pickup with LAUNDRY BUTLER."
+    : hasLaundry
+      ? "I’ve got your laundry request — setting the pickup now."
+      : "I’ve taken the request in hand.";
   const subhead =
-    services.length > 1
-      ? "Here’s where each piece sits — I’ll only come back to you when something needs a yes."
-      : "Here’s where it sits — I’ll only come back to you when something needs a yes.";
+    laundryConfirmed && services.length === 1
+      ? `Pickup is set for ${LAUNDRY_BUTLER_KNOWLEDGE.pickupSentence}. Your clean laundry will come back ${LAUNDRY_BUTLER_KNOWLEDGE.returnSentence}.`
+      : services.length > 1
+        ? "Here’s where each piece sits — I’ll only come back to you when something needs a yes."
+        : "Here’s where it sits — I’ll only come back to you when something needs a yes.";
 
   const serviceRows = services.map(service => buildRow(service, request, safePlan));
 

@@ -37,6 +37,7 @@ import {
   buildCarDetailBookedSentence,
   buildLaundryReturnAnswer,
   CAR_DETAIL_KNOWLEDGE,
+  isLaundryService,
   LAUNDRY_BUTLER_KNOWLEDGE,
   withCarDetailBooking,
   withDemoVendorBookingState,
@@ -1154,6 +1155,7 @@ export default function PenPullPrototype({
               debugOpenLaundryVitrine={debugOpenLaundryVitrine}
               displayRequest={confirmedRequest}
               isHeld={mode === "held"}
+              lastOrderId={lastOrderId}
               onCourierForegroundChange={setCourierForeground}
               onDebugLaundryVitrineOpened={() => setDebugOpenLaundryVitrine(false)}
               penAssetSrc={penAssetSrc}
@@ -2562,6 +2564,7 @@ function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
   isHeld,
+  lastOrderId,
   onCourierForegroundChange,
   onDebugLaundryVitrineOpened,
   penAssetSrc,
@@ -2571,6 +2574,10 @@ function HeldTransformingState({
   debugOpenLaundryVitrine?: boolean;
   displayRequest: string;
   isHeld: boolean;
+  // The real admin order id once the booking succeeded. When present, the
+  // post-order copy MUST render laundry as Booked — the screen reflects the
+  // admin order state, never a stale "pending" left over from pre-booking.
+  lastOrderId: number | null;
   // Reports when the courier crossing or the open slip owns the foreground,
   // so the Labyrinth knob can step aside instead of overlapping the ceremony.
   onCourierForegroundChange?: (busy: boolean) => void;
@@ -2711,13 +2718,27 @@ function HeldTransformingState({
   // Post-order narration is built entirely from the active request + parsed
   // service metadata — no scripted scenario copy. Every fact comes from real
   // plan state or safe generic fallback language.
+  // Operational truth: once a real admin order id exists, the laundry service
+  // IS booked — even if the array that reached this screen predates the booking
+  // (some entry paths set confirmedServices before the orderId is known). Stamp
+  // the confirmed order id onto laundry rows here so the post-order copy can
+  // never show "In motion / Pending: Pickup scheduling" for an order that
+  // actually exists. The headline + row both read from this same enriched state.
+  const servicesForCopy = useMemo<HeldParsedService[]>(() => {
+    if (lastOrderId == null) return activeServices;
+    return activeServices.map(service =>
+      isLaundryService(service.type) && service.orderId == null
+        ? { ...service, orderId: lastOrderId, status: service.status ?? "booked" }
+        : service,
+    );
+  }, [activeServices, lastOrderId]);
   const postOrderCopy = useMemo(
     () =>
       buildPostOrderChiefOfStaffCopy(
-        { displayRequest, services: activeServices as PostOrderServiceMeta[] },
+        { displayRequest, services: servicesForCopy as PostOrderServiceMeta[] },
         displayRequest,
       ),
-    [activeServices, displayRequest],
+    [servicesForCopy, displayRequest],
   );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
