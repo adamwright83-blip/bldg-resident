@@ -4101,7 +4101,7 @@
   }
 
   .held-home-rest-tray {
-    bottom: max(-34px, -5.2dvh) !important;
+    bottom: max(14px, calc(env(safe-area-inset-bottom) + 12px)) !important;
     width: min(124%, 450px) !important;
   }
 
@@ -4116,7 +4116,7 @@
   }
 
   .held-home-rest-tray {
-    bottom: -24px !important;
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 8px)) !important;
     width: min(112%, 404px) !important;
   }
 }
