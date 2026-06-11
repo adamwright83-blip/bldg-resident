@@ -1311,90 +1311,76 @@ function HeldLabyrinthDrawer({
         )}
       </AnimatePresence>
 
-      {/* CLOSED (home): ONLY the brass knob peeks from the right-middle edge.
-          The maze settings board must NEVER appear on the home screen — its
-          wood mount is pushed off the right edge so only the brass knob shows.
-          Tap or drag the knob left to open the labyrinth. */}
-      {!isOpen && (
-        <button
-          aria-label="Open labyrinth drawer"
-          className="absolute right-0 top-[46%] z-[122] h-[120px] w-[120px] -translate-y-1/2 translate-x-[50%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
-          onPointerDown={startDrag}
-          onPointerUp={finishDrag}
-          type="button"
+      {/* The labyrinth is ONE physical object that lives just off-screen to the
+          right; only its own built-in brass knob peeks on the home screen.
+          Tapping the knob slides the WHOLE board in like a drawer — a single
+          persistent element animated with pure transform (NO opacity fade, NO
+          mount/unmount), so it always reads as one continuous object and never
+          as a separate asset appearing. Closed x parks it far enough right that
+          only the knob shows (was 42%, which revealed the wooden frame edge);
+          this value can be nudged a few % to fine-tune the peek per device. */}
+      <motion.div
+        animate={
+          isOpen
+            ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
+            : { x: "102%", y: "-50%", rotateX: 0, scale: 0.94 }
+        }
+        className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
+        initial={false}
+        style={{ perspective: 1200 }}
+        transition={{
+          type: "spring",
+          stiffness: 116,
+          damping: 24,
+          mass: 1.25,
+        }}
+      >
+        <div
+          className="relative aspect-[1448/1086] w-full"
+          style={{
+            filter: "drop-shadow(0 30px 34px rgba(36, 22, 10, 0.28))",
+          }}
         >
           <img
             alt=""
-            className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_14px_22px_rgba(36,22,10,0.30)]"
+            className="pointer-events-none h-full w-full select-none object-contain"
             draggable={false}
-            src={HELD_ASSETS.labyrinthKnob}
+            src={HELD_ASSETS.labyrinthBoard}
           />
-        </button>
-      )}
 
-      {/* OPEN: the full labyrinth board slides in from the right to center. */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            animate={{ x: "-50%", y: "-50%", rotateX: 3, scale: 1, opacity: 1 }}
-            className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
-            exit={{ x: "55%", y: "-50%", opacity: 0, scale: 0.94 }}
-            initial={{ x: "55%", y: "-50%", opacity: 0, scale: 0.94 }}
-            style={{ perspective: 1200 }}
-            transition={{
-              type: "spring",
-              stiffness: 116,
-              damping: 24,
-              mass: 1.25,
-            }}
-          >
-            <div
-              className="relative aspect-[1448/1086] w-full"
-              style={{
-                filter: "drop-shadow(0 30px 34px rgba(36, 22, 10, 0.28))",
-              }}
-            >
-              <img
-                alt=""
-                className="pointer-events-none h-full w-full select-none object-contain"
-                draggable={false}
-                src={HELD_ASSETS.labyrinthBoard}
-              />
+          <button
+            aria-label={isOpen ? "Close labyrinth drawer" : "Open labyrinth drawer"}
+            className="absolute left-[-7.2%] top-[38.5%] h-[24%] w-[18%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
+            onPointerDown={startDrag}
+            onPointerUp={finishDrag}
+            type="button"
+          />
 
+          {isOpen &&
+            LABYRINTH_CATEGORIES.map(category => (
               <button
-                aria-label="Close labyrinth drawer"
-                className="absolute left-[-7.2%] top-[38.5%] h-[24%] w-[18%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
-                onPointerDown={startDrag}
-                onPointerUp={finishDrag}
+                aria-label={category.active ? `Open ${category.label}` : category.label}
+                className="absolute rounded-[6px] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/55"
+                key={category.id}
+                onClick={() => handleCategorySelect(category)}
+                onPointerDown={() => setPressedCategory(category.id)}
+                onPointerLeave={() => setPressedCategory(null)}
+                onPointerUp={() => window.setTimeout(() => setPressedCategory(null), 120)}
+                style={{
+                  left: `${category.left}%`,
+                  top: `${category.top}%`,
+                  width: `${category.width}%`,
+                  height: `${category.height}%`,
+                  transform:
+                    pressedCategory === category.id
+                      ? "translateY(2px) scale(0.985)"
+                      : "translateY(0) scale(1)",
+                }}
                 type="button"
               />
-
-              {LABYRINTH_CATEGORIES.map(category => (
-                <button
-                  aria-label={category.active ? `Open ${category.label}` : category.label}
-                  className="absolute rounded-[6px] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/55"
-                  key={category.id}
-                  onClick={() => handleCategorySelect(category)}
-                  onPointerDown={() => setPressedCategory(category.id)}
-                  onPointerLeave={() => setPressedCategory(null)}
-                  onPointerUp={() => window.setTimeout(() => setPressedCategory(null), 120)}
-                  style={{
-                    left: `${category.left}%`,
-                    top: `${category.top}%`,
-                    width: `${category.width}%`,
-                    height: `${category.height}%`,
-                    transform:
-                      pressedCategory === category.id
-                        ? "translateY(2px) scale(0.985)"
-                        : "translateY(0) scale(1)",
-                  }}
-                  type="button"
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            ))}
+        </div>
+      </motion.div>
     </>
   );
 }
