@@ -86,17 +86,6 @@ const HELD_ASSETS = {
   tray: "/held/nursery-heldscreen.png",
 };
 
-function useHeldMountedClass() {
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.add("held-app-mounted");
-
-    return () => {
-      root.classList.remove("held-app-mounted");
-    };
-  }, []);
-}
-
 const COMPOSER_KEY_ROWS = [
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "⌫"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
@@ -218,8 +207,6 @@ export default function PenPullPrototype({
   showDebugControls = false,
   tuning,
 }: PenPullPrototypeProps) {
-  useHeldMountedClass();
-
   const stageRef = useRef<HTMLDivElement | null>(null);
   const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -771,7 +758,7 @@ export default function PenPullPrototype({
             WebkitUserSelect: "none",
           }}
         >
-          <div className="held-device-notch pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black md:block" />
+          <div className="pointer-events-none absolute left-1/2 top-4 z-20 hidden h-9 w-28 -translate-x-1/2 rounded-full bg-black md:block" />
 
           {showHomeWorld && (
             <img
@@ -791,7 +778,7 @@ export default function PenPullPrototype({
             />
           )}
 
-          {showHomeWorld && <header className="held-home-header pointer-events-none absolute left-[8%] top-[8%] z-20">
+          {showHomeWorld && <header className="pointer-events-none absolute left-[8%] top-[8%] z-20">
             <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
             <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
               Residence 1807 · 12A
@@ -823,7 +810,7 @@ export default function PenPullPrototype({
             )
           )}
 
-          {showHomeWorld && <section className="held-home-copy pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
+          {showHomeWorld && <section className="pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
             <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
               Held.
             </h1>
@@ -843,7 +830,7 @@ export default function PenPullPrototype({
           {showHomeWorld && (
             <img
               alt=""
-              className={`held-home-rest-tray pointer-events-none absolute bottom-[-34px] left-1/2 z-10 w-[130%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
+              className={`pointer-events-none absolute left-1/2 z-10 w-[94%] -translate-x-1/2 select-none drop-shadow-[0_18px_24px_rgba(45,29,16,0.20)] transition-opacity duration-[420ms] ${
                 composerTrayVisible ||
                 mode === "speech" ||
                 mode === "collectName" ||
@@ -855,12 +842,13 @@ export default function PenPullPrototype({
               }`}
               draggable={false}
               src={HELD_ASSETS.tray}
+              style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)" }}
             />
           )}
 
           <div
             aria-hidden="true"
-            className={`held-home-divider pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
+            className={`pointer-events-none absolute bottom-[72px] left-[9%] right-[9%] z-20 h-px bg-[#b78a38] transition-opacity duration-200 ${
               composerTrayVisible ||
               mode === "speech" ||
               mode === "collectName" ||
@@ -1311,68 +1299,90 @@ function HeldLabyrinthDrawer({
         )}
       </AnimatePresence>
 
-      <motion.div
-        animate={
-          isOpen
-            ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
-            : { x: "42%", y: "-50%", rotateX: 0, scale: 0.94 }
-        }
-        className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
-        initial={false}
-        style={{ perspective: 1200 }}
-        transition={{
-          type: "spring",
-          stiffness: 116,
-          damping: 24,
-          mass: 1.25,
-        }}
-      >
-        <div
-          className="relative aspect-[1448/1086] w-full"
-          style={{
-            filter: "drop-shadow(0 30px 34px rgba(36, 22, 10, 0.28))",
-          }}
+      {/* CLOSED (home): ONLY the brass knob peeks from the right-middle edge.
+          The maze settings board must NEVER appear on the home screen — its
+          wood mount is pushed off the right edge so only the brass knob shows.
+          Tap or drag the knob left to open the labyrinth. */}
+      {!isOpen && (
+        <button
+          aria-label="Open labyrinth drawer"
+          className="absolute right-0 top-[46%] z-[122] h-[120px] w-[120px] -translate-y-1/2 translate-x-[50%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
+          onPointerDown={startDrag}
+          onPointerUp={finishDrag}
+          type="button"
         >
           <img
             alt=""
-            className="pointer-events-none h-full w-full select-none object-contain"
+            className="pointer-events-none h-full w-full select-none object-contain drop-shadow-[0_14px_22px_rgba(36,22,10,0.30)]"
             draggable={false}
-            src={HELD_ASSETS.labyrinthBoard}
+            src={HELD_ASSETS.labyrinthKnob}
           />
+        </button>
+      )}
 
-          <button
-            aria-label={isOpen ? "Close labyrinth drawer" : "Open labyrinth drawer"}
-            className="absolute left-[-7.2%] top-[38.5%] h-[24%] w-[18%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
-            onPointerDown={startDrag}
-            onPointerUp={finishDrag}
-            type="button"
-          />
+      {/* OPEN: the full labyrinth board slides in from the right to center. */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            animate={{ x: "-50%", y: "-50%", rotateX: 3, scale: 1, opacity: 1 }}
+            className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
+            exit={{ x: "55%", y: "-50%", opacity: 0, scale: 0.94 }}
+            initial={{ x: "55%", y: "-50%", opacity: 0, scale: 0.94 }}
+            style={{ perspective: 1200 }}
+            transition={{
+              type: "spring",
+              stiffness: 116,
+              damping: 24,
+              mass: 1.25,
+            }}
+          >
+            <div
+              className="relative aspect-[1448/1086] w-full"
+              style={{
+                filter: "drop-shadow(0 30px 34px rgba(36, 22, 10, 0.28))",
+              }}
+            >
+              <img
+                alt=""
+                className="pointer-events-none h-full w-full select-none object-contain"
+                draggable={false}
+                src={HELD_ASSETS.labyrinthBoard}
+              />
 
-          {isOpen &&
-            LABYRINTH_CATEGORIES.map(category => (
               <button
-                aria-label={category.active ? `Open ${category.label}` : category.label}
-                className="absolute rounded-[6px] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/55"
-                key={category.id}
-                onClick={() => handleCategorySelect(category)}
-                onPointerDown={() => setPressedCategory(category.id)}
-                onPointerLeave={() => setPressedCategory(null)}
-                onPointerUp={() => window.setTimeout(() => setPressedCategory(null), 120)}
-                style={{
-                  left: `${category.left}%`,
-                  top: `${category.top}%`,
-                  width: `${category.width}%`,
-                  height: `${category.height}%`,
-                  transform:
-                    pressedCategory === category.id
-                      ? "translateY(2px) scale(0.985)"
-                      : "translateY(0) scale(1)",
-                }}
+                aria-label="Close labyrinth drawer"
+                className="absolute left-[-7.2%] top-[38.5%] h-[24%] w-[18%] touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
+                onPointerDown={startDrag}
+                onPointerUp={finishDrag}
                 type="button"
               />
-            ))}
-        </div>
-      </motion.div>
+
+              {LABYRINTH_CATEGORIES.map(category => (
+                <button
+                  aria-label={category.active ? `Open ${category.label}` : category.label}
+                  className="absolute rounded-[6px] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/55"
+                  key={category.id}
+                  onClick={() => handleCategorySelect(category)}
+                  onPointerDown={() => setPressedCategory(category.id)}
+                  onPointerLeave={() => setPressedCategory(null)}
+                  onPointerUp={() => window.setTimeout(() => setPressedCategory(null), 120)}
+                  style={{
+                    left: `${category.left}%`,
+                    top: `${category.top}%`,
+                    width: `${category.width}%`,
+                    height: `${category.height}%`,
+                    transform:
+                      pressedCategory === category.id
+                        ? "translateY(2px) scale(0.985)"
+                        : "translateY(0) scale(1)",
+                  }}
+                  type="button"
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
