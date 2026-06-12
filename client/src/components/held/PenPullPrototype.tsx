@@ -1316,40 +1316,43 @@ export default function PenPullPrototype({
             </div>
           )}
 
-          {/* The Labyrinth knob stays reachable across idle home AND the
-              active service world (post-order, phone follow-up, courier
-              waiting). It yields only while the horse is mid-crossing or the
-              dispatch slip is open, so it never overlaps the ceremony. */}
-          <HeldLabyrinthDrawer
-            activePanel={labyrinthPanel}
-            isOpen={labyrinthOpen}
-            onClose={() => setLabyrinthOpen(false)}
-            onOpenChange={setLabyrinthOpen}
-            onSelectPanel={(panel) => {
-              setLabyrinthOpen(false);
-              setLabyrinthPanel(panel);
-            }}
-            visible={
-              (showHomeWorld || mode === "held" || mode === "transforming") &&
-              !courierForeground
-            }
-          />
-
-          <AnimatePresence>
-            {labyrinthPanel === "receipts" && (
-              <HeldLabyrinthReceiptsLayer
-                key="labyrinth-receipts"
-                onClose={() => setLabyrinthPanel(null)}
-              />
-            )}
-            {labyrinthPanel === "payment" && (
-              <HeldLabyrinthPaymentLayer
-                key="labyrinth-payment"
-                onClose={() => setLabyrinthPanel(null)}
-              />
-            )}
-          </AnimatePresence>
         </div>
+
+        {/* The Labyrinth knob + board live OUTSIDE the overflow-hidden stage
+            div and directly inside the relative held-app-frame section.
+            When the board is closed it parks at x:102% — if it were inside
+            overflow-hidden it would be clipped and the knob invisible. The
+            frame is relative but NOT overflow-hidden, so the board can extend
+            just off-screen-right while the built-in brass knob peeks. */}
+        <HeldLabyrinthDrawer
+          activePanel={labyrinthPanel}
+          isOpen={labyrinthOpen}
+          onClose={() => setLabyrinthOpen(false)}
+          onOpenChange={setLabyrinthOpen}
+          onSelectPanel={(panel) => {
+            setLabyrinthOpen(false);
+            setLabyrinthPanel(panel);
+          }}
+          visible={
+            (showHomeWorld || mode === "held" || mode === "transforming") &&
+            !courierForeground
+          }
+        />
+
+        <AnimatePresence>
+          {labyrinthPanel === "receipts" && (
+            <HeldLabyrinthReceiptsLayer
+              key="labyrinth-receipts"
+              onClose={() => setLabyrinthPanel(null)}
+            />
+          )}
+          {labyrinthPanel === "payment" && (
+            <HeldLabyrinthPaymentLayer
+              key="labyrinth-payment"
+              onClose={() => setLabyrinthPanel(null)}
+            />
+          )}
+        </AnimatePresence>
       </section>
     </main>
   );
