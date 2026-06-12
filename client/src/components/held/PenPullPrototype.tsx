@@ -2436,9 +2436,37 @@ function HeldInkGathers({
         const c1 = 1.20158;
         return 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
       };
+      // ── CLAY FIRING COLOR JOURNEY ─────────────────────────────────────
+      // Real clay changes color as it fires — THAT is the transformation's
+      // magic. One piecewise gradient tells the material story; every strand,
+      // drip, pool and mound already samples it via warm(w), w rising 0→1.2
+      // across the ceremony:
+      //   0.00  ink black      (26,26,26)    — the drawn line
+      //   0.30  warming umber  (74,44,30)    — the ink remembers it's earth
+      //   0.55  WET SLIP       (148,75,42)   — saturated burnt sienna, liquid
+      //   0.80  ember warmth   (172,92,48)   — inner heat as the mounds rise
+      //   1.00  quench cooling (163,122,96)  — the heat leaving the clay
+      //   1.20  FIRED GREIGE   (161,144,126) — the resting token clay color
+      // The FINAL stop matches the token PNGs (car/scissors greige) so the
+      // mound→token crossfade is seamless. If the token assets ever change
+      // color, tune ONLY that last stop.
+      const CLAY_STOPS: Array<[number, [number, number, number]]> = [
+        [0.0, [26, 26, 26]],
+        [0.3, [74, 44, 30]],
+        [0.55, [148, 75, 42]],
+        [0.8, [172, 92, 48]],
+        [1.0, [163, 122, 96]],
+        [1.2, [161, 144, 126]],
+      ];
       const warm = (w: number) => {
         const ww = clampNumber(w, 0, 1.2);
-        return `rgb(${Math.round(26 + 81 * ww)},${Math.round(26 + 42 * ww)},${Math.round(26 + 9 * ww)})`;
+        let i = 0;
+        while (i < CLAY_STOPS.length - 2 && ww > CLAY_STOPS[i + 1][0]) i++;
+        const [w0, c0] = CLAY_STOPS[i];
+        const [w1, c1] = CLAY_STOPS[i + 1];
+        const t = w1 === w0 ? 0 : clampNumber((ww - w0) / (w1 - w0), 0, 1);
+        const ch = (a: number, b: number) => Math.round(a + (b - a) * t);
+        return `rgb(${ch(c0[0], c1[0])},${ch(c0[1], c1[1])},${ch(c0[2], c1[2])})`;
       };
       const buildD = (pts: MeltPoint[]) => {
         if (pts.length < 3) {
