@@ -2318,6 +2318,222 @@ function getCeremonySlowFactor(): number {
 // Beat names stay "tension" | "gather" | "condense" so the parent's token
 // reveal logic is untouched. One rAF timeline; path d-strings are rebuilt
 // imperatively per frame (React renders once per beat).
+// ── CLAY FIRING COLOR JOURNEY (single source of truth) ─────────────────────
+// Real clay changes color as it fires — THAT is the transformation's magic.
+// Both the SVG fallback's warm(w) AND the WebGL shader's clayColor(w) are
+// generated from these stops, so the journey can never diverge between
+// renderers:
+//   0.00  ink black      (26,26,26)    — the drawn line
+//   0.30  warming umber  (74,44,30)    — the ink remembers it's earth
+//   0.55  WET SLIP       (148,75,42)   — saturated burnt sienna, liquid
+//   0.80  ember warmth   (172,92,48)   — inner heat as the mounds rise
+//   1.00  quench cooling (163,122,96)  — the heat leaving the clay
+//   1.20  FIRED GREIGE   (161,144,126) — the resting token clay color
+// The FINAL stop matches the token PNGs (car/scissors greige) so the
+// mound→token crossfade is seamless. If the token assets ever change color,
+// tune ONLY that last stop.
+const CLAY_STOPS: Array<[number, [number, number, number]]> = [
+  [0.0, [26, 26, 26]],
+  [0.3, [74, 44, 30]],
+  [0.55, [148, 75, 42]],
+  [0.8, [172, 92, 48]],
+  [1.0, [163, 122, 96]],
+  [1.2, [161, 144, 126]],
+];
+
+// ── WEBGL METABALL FLUID RENDERER ───────────────────────────────────────────
+// The melt's PHYSICS (sampling, waterline, drips, beats) stays untouched —
+// this swaps only the PAINT. The same animated points the SVG renderer
+// positions are packed as metaball sources each frame; the fragment shader
+// fuses them into one liquid field and lights it like real material:
+// analytic surface normals from the field gradient, one warm key light
+// (upper-left, matching the app), specular that PEAKS while the clay is wet
+// and dies to matte as it fires to greige, fresnel rim sheen, and contact
+// occlusion at the field's edge. This is what makes the clay read as
+// 3-dimensional wet material instead of flat strokes.
+// Returns null (→ SVG fallback) when WebGL is unavailable, the device's
+// uniform budget is too small, or the shader fails to compile.
+const MELT_MAX_BALLS = 112;
+
+function buildClayColorGlsl(): string {
+  // Piecewise-mix chain generated from CLAY_STOPS — single source of truth.
+  const v = (c: [number, number, number]) =>
+    `vec3(${(c[0] / 255).toFixed(4)},${(c[1] / 255).toFixed(4)},${(c[2] / 255).toFixed(4)})`;
+  let body = "";
+  for (let i = 0; i < CLAY_STOPS.length - 1; i++) {
+    const [w0, c0] = CLAY_STOPS[i];
+    const [w1, c1] = CLAY_STOPS[i + 1];
+    const cond = i < CLAY_STOPS.length - 2 ? `if (w < ${w1.toFixed(4)}) ` : "";
+    body += `  ${cond}return mix(${v(c0)}, ${v(c1)}, clamp((w - ${w0.toFixed(4)}) / ${(w1 - w0).toFixed(4)}, 0.0, 1.0));\n`;
+  }
+  return `vec3 clayColor(float w) {\n  w = clamp(w, 0.0, 1.2);\n${body}}\n`;
+}
+
+type MeltGlRenderer = {
+  draw: (balls: Float32Array, ws: Float32Array, count: number, fade: number) => void;
+  dispose: () => void;
+};
+
+function createMeltGlRenderer(
+  canvas: HTMLCanvasElement,
+  cssW: number,
+  cssH: number,
+): MeltGlRenderer | null {
+  try {
+    const gl = canvas.getContext("webgl", {
+      alpha: true,
+      premultipliedAlpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+    }) as WebGLRenderingContext | null;
+    if (!gl) {
+      console.warn("[HELD][LineMelts] WebGL unavailable — SVG fallback");
+      return null;
+    }
+    const maxVecs = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) as number;
+    // uB consumes MELT_MAX_BALLS vec4 + uW MELT_MAX_BALLS/4 vec4 + headroom.
+    if (maxVecs < MELT_MAX_BALLS + MELT_MAX_BALLS / 4 + 16) {
+      console.warn(
+        `[HELD][LineMelts] device uniform budget too small (${maxVecs}) — SVG fallback`,
+      );
+      return null;
+    }
+
+    // Render at reduced backing resolution: liquid is soft by nature, the
+    // upscale is free smoothing, and the per-pixel ball loop cost drops ~60%.
+    const scale = Math.min(window.devicePixelRatio || 1, 1.6) * 0.66;
+    canvas.width = Math.max(2, Math.round(cssW * scale));
+    canvas.height = Math.max(2, Math.round(cssH * scale));
+
+    const vsSrc = "attribute vec2 aP; void main(){ gl_Position = vec4(aP, 0.0, 1.0); }";
+    const fsSrc = `precision highp float;
+uniform vec2 uResCss;
+uniform float uScale;
+uniform int uCount;
+uniform float uFade;
+uniform vec4 uB[${MELT_MAX_BALLS}];
+uniform float uW[${MELT_MAX_BALLS}];
+${buildClayColorGlsl()}
+void main() {
+  // gl_FragCoord is backing-pixels, y-up. Ball coords are CSS px, y-down.
+  vec2 p = vec2(gl_FragCoord.x / uScale, uResCss.y - gl_FragCoord.y / uScale);
+  float F = 0.0;
+  vec2 g = vec2(0.0);
+  vec3 col = vec3(0.0);
+  float wsum = 0.0;
+  float wAvg = 0.0;
+  for (int i = 0; i < ${MELT_MAX_BALLS}; i++) {
+    if (i >= uCount) break;
+    vec4 b = uB[i];
+    vec2 d = (p - b.xy) / b.zw;
+    float s = dot(d, d);
+    float c = 1.0 / (s * s + 1.0);
+    F += c;
+    float dcds = -2.0 * s * c * c;
+    g += dcds * 2.0 * d / b.zw;
+    col += clayColor(uW[i]) * c;
+    wsum += c;
+    wAvg += uW[i] * c;
+  }
+  if (wsum < 1e-4) { gl_FragColor = vec4(0.0); return; }
+  col /= wsum;
+  wAvg /= wsum;
+  float T = 0.5;
+  float alpha = smoothstep(T - 0.07, T + 0.09, F) * 0.97 * uFade;
+  if (alpha <= 0.004) { gl_FragColor = vec4(0.0); return; }
+  // Surface normal from the analytic field gradient — the 3D illusion.
+  vec3 n = normalize(vec3(-g * 14.0, 1.0));
+  vec3 L = normalize(vec3(-0.5, -0.62, 0.62));
+  float diff = max(dot(n, L), 0.0);
+  // Wet clay shines; fired clay is matte. dryness follows the color journey.
+  float dry = smoothstep(0.85, 1.18, wAvg);
+  float gloss = mix(90.0, 10.0, dry);
+  float specStr = mix(1.05, 0.06, dry);
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  float spec = pow(max(dot(n, H), 0.0), gloss) * specStr;
+  float rim = pow(1.0 - clamp(n.z, 0.0, 1.0), 2.0) * 0.30 * (1.0 - dry);
+  float edge = smoothstep(T, T + 0.45, F);
+  float occl = mix(0.74, 1.0, edge);
+  float under = 1.0 - 0.18 * clamp(n.y, 0.0, 1.0) * (1.0 - dry * 0.5);
+  vec3 c3 = col * (0.50 + 0.55 * diff) * occl * under
+          + vec3(1.0, 0.96, 0.88) * spec
+          + col * rim;
+  gl_FragColor = vec4(c3, alpha);
+}`;
+
+    const compile = (type: number, src: string) => {
+      const sh = gl.createShader(type);
+      if (!sh) throw new Error("createShader failed");
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(sh);
+        console.error("[HELD][LineMelts] shader compile failed:", log);
+        throw new Error(`shader compile: ${log}`);
+      }
+      return sh;
+    };
+    const prog = gl.createProgram();
+    if (!prog) throw new Error("createProgram failed");
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      const log = gl.getProgramInfoLog(prog);
+      console.error("[HELD][LineMelts] program link failed:", log);
+      throw new Error(`program link: ${log}`);
+    }
+    gl.useProgram(prog);
+
+    const quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 3, -1, -1, 3]),
+      gl.STATIC_DRAW,
+    );
+    const aP = gl.getAttribLocation(prog, "aP");
+    gl.enableVertexAttribArray(aP);
+    gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 0, 0);
+
+    const uResCss = gl.getUniformLocation(prog, "uResCss");
+    const uScale = gl.getUniformLocation(prog, "uScale");
+    const uCount = gl.getUniformLocation(prog, "uCount");
+    const uFade = gl.getUniformLocation(prog, "uFade");
+    const uB = gl.getUniformLocation(prog, "uB[0]");
+    const uW = gl.getUniformLocation(prog, "uW[0]");
+    gl.uniform2f(uResCss, cssW, cssH);
+    gl.uniform1f(uScale, scale);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.clearColor(0, 0, 0, 0);
+
+    return {
+      draw(balls, ws, count, fade) {
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        if (count <= 0) return;
+        gl.uniform1i(uCount, Math.min(count, MELT_MAX_BALLS));
+        gl.uniform1f(uFade, fade);
+        gl.uniform4fv(uB, balls);
+        gl.uniform1fv(uW, ws);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      },
+      dispose() {
+        try {
+          (gl.getExtension("WEBGL_lose_context") as { loseContext(): void } | null)?.loseContext();
+        } catch {
+          // context already lost
+        }
+      },
+    };
+  } catch (error) {
+    console.warn("[HELD][LineMelts] WebGL init failed — SVG fallback", error);
+    return null;
+  }
+}
+
 function HeldInkGathers({
   inkSvgRef,
   onBeatChange,
@@ -2339,6 +2555,12 @@ function HeldInkGathers({
   const onBeatChangeRef = useRef(onBeatChange);
   onBeatChangeRef.current = onBeatChange;
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  // WebGL metaball renderer (primary). "pending" until the canvas mounts and
+  // init runs on the first animation tick; "svg" = graceful fallback.
+  const meltCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const glRendererRef = useRef<MeltGlRenderer | null>(null);
+  const glModeRef = useRef<"pending" | "gl" | "svg">("pending");
+  const [glMode, setGlMode] = useState<"pending" | "gl" | "svg">("pending");
 
   const MAX_STRANDS = 12;
   const DRIP_COUNT = 4;
@@ -2475,28 +2697,6 @@ function HeldInkGathers({
         const c1 = 1.20158;
         return 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
       };
-      // ── CLAY FIRING COLOR JOURNEY ─────────────────────────────────────
-      // Real clay changes color as it fires — THAT is the transformation's
-      // magic. One piecewise gradient tells the material story; every strand,
-      // drip, pool and mound already samples it via warm(w), w rising 0→1.2
-      // across the ceremony:
-      //   0.00  ink black      (26,26,26)    — the drawn line
-      //   0.30  warming umber  (74,44,30)    — the ink remembers it's earth
-      //   0.55  WET SLIP       (148,75,42)   — saturated burnt sienna, liquid
-      //   0.80  ember warmth   (172,92,48)   — inner heat as the mounds rise
-      //   1.00  quench cooling (163,122,96)  — the heat leaving the clay
-      //   1.20  FIRED GREIGE   (161,144,126) — the resting token clay color
-      // The FINAL stop matches the token PNGs (car/scissors greige) so the
-      // mound→token crossfade is seamless. If the token assets ever change
-      // color, tune ONLY that last stop.
-      const CLAY_STOPS: Array<[number, [number, number, number]]> = [
-        [0.0, [26, 26, 26]],
-        [0.3, [74, 44, 30]],
-        [0.55, [148, 75, 42]],
-        [0.8, [172, 92, 48]],
-        [1.0, [163, 122, 96]],
-        [1.2, [161, 144, 126]],
-      ];
       const warm = (w: number) => {
         const ww = clampNumber(w, 0, 1.2);
         let i = 0;
@@ -2531,9 +2731,56 @@ function HeldInkGathers({
       let lastBeat = "tension";
       onBeatChangeRef.current("tension");
 
+      // GL ball buffers (reused every frame — zero allocation in the loop).
+      const ballBuf = new Float32Array(MELT_MAX_BALLS * 4);
+      const wBuf = new Float32Array(MELT_MAX_BALLS);
+      let ballCount = 0;
+      const pushBall = (x: number, y: number, rx: number, ry: number, w: number) => {
+        if (ballCount >= MELT_MAX_BALLS) return;
+        const o = ballCount * 4;
+        ballBuf[o] = x;
+        ballBuf[o + 1] = y;
+        ballBuf[o + 2] = Math.max(rx, 0.01);
+        ballBuf[o + 3] = Math.max(ry, 0.01);
+        wBuf[ballCount] = w;
+        ballCount++;
+      };
+      // Decimate strand points into the ball budget: ~72 strand balls max,
+      // leaving headroom for drips + pools + mounds. The metaball field fuses
+      // neighbors, so a stride > 1 still reads as one continuous liquid line.
+      const strandStride = Math.max(1, Math.ceil(allPts.length / 72));
+
       const tick = (time: number) => {
         if (!started) started = time;
         const elapsed = time - started;
+
+        // Lazy GL init on the first ticks (the canvas mounts right after the
+        // measuring render). After 300ms without a canvas, commit to SVG.
+        if (glModeRef.current === "pending") {
+          const cv = meltCanvasRef.current;
+          if (cv) {
+            const rectNow = root.getBoundingClientRect();
+            const renderer = createMeltGlRenderer(cv, rectNow.width, rectNow.height);
+            if (renderer) {
+              glRendererRef.current = renderer;
+              glModeRef.current = "gl";
+              setGlMode("gl");
+              console.log(
+                `[HELD][LineMelts] renderer: WebGL metaball fluid (${MELT_MAX_BALLS}-ball budget, lit + specular)`,
+              );
+            } else {
+              glModeRef.current = "svg";
+              setGlMode("svg");
+            }
+          } else if (elapsed > 300) {
+            glModeRef.current = "svg";
+            setGlMode("svg");
+            console.warn("[HELD][LineMelts] melt canvas never mounted — SVG fallback");
+          }
+        }
+        const glr = glModeRef.current === "gl" ? glRendererRef.current : null;
+        ballCount = 0;
+        let glFade = 1;
 
         let beat: "tension" | "gather" | "condense" | "done";
         if (elapsed < SOFTEN_MS) beat = "tension";
@@ -2545,6 +2792,7 @@ function HeldInkGathers({
           onBeatChangeRef.current(beat);
         }
         if (beat === "done") {
+          glr?.draw(ballBuf, wBuf, 0, 0);
           rafRef.current = null;
           return;
         }
@@ -2552,29 +2800,45 @@ function HeldInkGathers({
         if (beat === "tension") {
           // SOFTEN — the line becomes warm matter: thickens, sags, drips swell.
           const t = easeInOut(elapsed / SOFTEN_MS);
+          const strokeW = 2.2 + 8.5 * t;
           strands.forEach((pts, si) => {
-            const el = strandRefs.current[si];
-            if (!el) return;
             for (const p of pts) {
               p.x = p.x0;
               p.y = p.y0 + p.sag * t;
             }
-            el.setAttribute("d", buildD(pts));
-            el.setAttribute("stroke-width", `${(2.2 + 8.5 * t).toFixed(2)}`);
-            el.setAttribute("stroke", warm(0.3 * t));
-            el.setAttribute("opacity", "0.93");
+            if (glr) {
+              for (let i = 0; i < pts.length; i += strandStride) {
+                const r = strokeW * 0.55 + 1.4;
+                pushBall(pts[i].x, pts[i].y, r, r, 0.3 * t);
+              }
+            } else {
+              const el = strandRefs.current[si];
+              if (!el) return;
+              el.setAttribute("d", buildD(pts));
+              el.setAttribute("stroke-width", `${strokeW.toFixed(2)}`);
+              el.setAttribute("stroke", warm(0.3 * t));
+              el.setAttribute("opacity", "0.93");
+            }
           });
           dripAnchors.forEach((anchor, di) => {
-            const el = dripRefs.current[di];
-            if (!el) return;
             const local = clampNumber((t - 0.35 - di * 0.06) / 0.6, 0, 1);
             const stretch = local * local;
-            el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
-            el.setAttribute("cy", `${(anchor.y0 + anchor.sag + stretch * 16).toFixed(1)}`);
-            el.setAttribute("rx", `${(3.4 * local).toFixed(2)}`);
-            el.setAttribute("ry", `${(3.4 * local * (1 + stretch * 0.8)).toFixed(2)}`);
-            el.setAttribute("fill", warm(0.25));
-            el.setAttribute("opacity", `${local > 0 ? 0.92 : 0}`);
+            const cx = anchor.x0;
+            const cy = anchor.y0 + anchor.sag + stretch * 16;
+            const rx = 3.4 * local;
+            const ry = 3.4 * local * (1 + stretch * 0.8);
+            if (glr) {
+              if (local > 0) pushBall(cx, cy, rx + 1.1, ry + 1.1, 0.25);
+            } else {
+              const el = dripRefs.current[di];
+              if (!el) return;
+              el.setAttribute("cx", `${cx.toFixed(1)}`);
+              el.setAttribute("cy", `${cy.toFixed(1)}`);
+              el.setAttribute("rx", `${rx.toFixed(2)}`);
+              el.setAttribute("ry", `${ry.toFixed(2)}`);
+              el.setAttribute("fill", warm(0.25));
+              el.setAttribute("opacity", `${local > 0 ? 0.92 : 0}`);
+            }
           });
         } else if (beat === "gather") {
           // DRAIN — the form empties downward. Lower material falls first,
@@ -2582,10 +2846,9 @@ function HeldInkGathers({
           // grow as the strand pours in. Pure gravity, no suction.
           const t = (elapsed - SOFTEN_MS) / DRAIN_MS;
           const width = 10.7 + 9 * easeInOut(Math.min(1, t * 1.4));
+          const strandFade = t > 0.9 ? 1 - (t - 0.9) / 0.1 : 1;
           let arrived = 0;
           strands.forEach((pts, si) => {
-            const el = strandRefs.current[si];
-            if (!el) return;
             for (const p of pts) {
               // Per-point local time: starts after fallDelay, fills the rest.
               const lt = clampNumber((t - p.fallDelay) / (1 - p.fallDelay), 0, 1);
@@ -2596,87 +2859,125 @@ function HeldInkGathers({
               p.x = p.x0 + (p.runX - p.x0) * run;
               if (lt >= 0.92) arrived++;
             }
-            el.setAttribute("d", buildD(pts));
-            el.setAttribute("stroke-width", `${width.toFixed(2)}`);
-            el.setAttribute("stroke", warm(0.3 + 0.4 * t));
-            // The strand fades only at the very end, once nearly all of it
-            // has poured in — the puddles carry the mass from here.
-            const fade = t > 0.9 ? 1 - (t - 0.9) / 0.1 : 1;
-            el.setAttribute("opacity", `${(0.93 * fade).toFixed(3)}`);
+            if (glr) {
+              const r = (width * 0.55 + 1.4) * Math.sqrt(Math.max(strandFade, 0));
+              for (let i = 0; i < pts.length; i += strandStride) {
+                pushBall(pts[i].x, pts[i].y, r, r, 0.3 + 0.4 * t);
+              }
+            } else {
+              const el = strandRefs.current[si];
+              if (!el) return;
+              el.setAttribute("d", buildD(pts));
+              el.setAttribute("stroke-width", `${width.toFixed(2)}`);
+              el.setAttribute("stroke", warm(0.3 + 0.4 * t));
+              // The strand fades only at the very end, once nearly all of it
+              // has poured in — the puddles carry the mass from here.
+              el.setAttribute("opacity", `${(0.93 * strandFade).toFixed(3)}`);
+            }
           });
           // Puddles: lens-shaped, growing with arrival fraction.
           const totalPts = allPts.length;
           const arrivalFrac = clampNumber(arrived / Math.max(1, totalPts), 0, 1);
           poolXs.forEach((px, pi) => {
             poolFill[pi] = Math.max(poolFill[pi], arrivalFrac);
-            const el = poolRefs.current[pi];
-            if (!el) return;
             const grow = easeInOut(clampNumber(arrivalFrac * 1.25, 0, 1));
-            el.setAttribute("cx", `${px.toFixed(1)}`);
-            el.setAttribute("cy", `${(waterline + 3).toFixed(1)}`);
-            el.setAttribute("rx", `${(8 + 30 * grow).toFixed(2)}`);
-            el.setAttribute("ry", `${(2.5 + 8.5 * grow).toFixed(2)}`);
-            el.setAttribute("fill", warm(0.55));
-            el.setAttribute("opacity", `${(0.94 * clampNumber(arrivalFrac * 2.4, 0, 1)).toFixed(3)}`);
+            const rx = 8 + 30 * grow;
+            const ry = 2.5 + 8.5 * grow;
+            const poolAlpha = clampNumber(arrivalFrac * 2.4, 0, 1);
+            if (glr) {
+              if (poolAlpha > 0.02) {
+                const sc = Math.sqrt(poolAlpha);
+                pushBall(px, waterline + 3, rx * sc, ry * sc, 0.55);
+              }
+            } else {
+              const el = poolRefs.current[pi];
+              if (!el) return;
+              el.setAttribute("cx", `${px.toFixed(1)}`);
+              el.setAttribute("cy", `${(waterline + 3).toFixed(1)}`);
+              el.setAttribute("rx", `${rx.toFixed(2)}`);
+              el.setAttribute("ry", `${ry.toFixed(2)}`);
+              el.setAttribute("fill", warm(0.55));
+              el.setAttribute("opacity", `${(0.94 * poolAlpha).toFixed(3)}`);
+            }
           });
           // Drips race ahead of the drain and splash into the waterline.
           dripAnchors.forEach((anchor, di) => {
-            const el = dripRefs.current[di];
-            if (!el) return;
             const lt = clampNumber(t / 0.45 - di * 0.05, 0, 1);
             const fall = easeIn(lt);
             const y = anchor.y0 + anchor.sag + 16 + (waterline - anchor.y0 - anchor.sag - 16) * fall;
-            const fade = lt >= 1 ? 0 : 1;
-            el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
-            el.setAttribute("cy", `${y.toFixed(1)}`);
-            el.setAttribute("rx", "3.4");
-            el.setAttribute("ry", `${(3.4 * (1 + fall * 1.1)).toFixed(2)}`);
-            el.setAttribute("opacity", `${0.92 * fade}`);
+            const visible = lt < 1;
+            if (glr) {
+              if (visible) pushBall(anchor.x0, y, 4.5, 3.4 * (1 + fall * 1.1) + 1.1, 0.55);
+            } else {
+              const el = dripRefs.current[di];
+              if (!el) return;
+              el.setAttribute("cx", `${anchor.x0.toFixed(1)}`);
+              el.setAttribute("cy", `${y.toFixed(1)}`);
+              el.setAttribute("rx", "3.4");
+              el.setAttribute("ry", `${(3.4 * (1 + fall * 1.1)).toFixed(2)}`);
+              el.setAttribute("opacity", `${visible ? 0.92 : 0}`);
+            }
           });
         } else {
           // RISE — surface tension pulls each puddle up into a rounded clay
           // mound; wobble settles; tokens take form inside as it tightens.
           const t = (elapsed - SOFTEN_MS - DRAIN_MS) / RISE_MS;
-          strands.forEach((_, si) => strandRefs.current[si]?.setAttribute("opacity", "0"));
-          dripRefs.current.forEach(el => el?.setAttribute("opacity", "0"));
           const riseT = easeOutBack(clampNumber(t * 1.15, 0, 1));
           const fadeT = clampNumber((t - 0.55) / 0.45, 0, 1);
+          glFade = 1 - fadeT;
+          if (!glr) {
+            strands.forEach((_, si) => strandRefs.current[si]?.setAttribute("opacity", "0"));
+            dripRefs.current.forEach(el => el?.setAttribute("opacity", "0"));
+          }
           poolXs.forEach((px, pi) => {
             const target = sortedTargets[pi] ?? { x: px, y: waterline };
             // Puddle flattens away as the mound rises out of it.
-            const pool = poolRefs.current[pi];
-            if (pool) {
-              const shrink = 1 - easeInOut(clampNumber(t * 1.3, 0, 1)) * 0.8;
-              pool.setAttribute("rx", `${(38 * shrink).toFixed(2)}`);
-              pool.setAttribute("ry", `${(11 * shrink * (1 - t * 0.5)).toFixed(2)}`);
-              pool.setAttribute("fill", warm(0.55 + 0.4 * t));
-              pool.setAttribute("opacity", `${((1 - fadeT) * 0.9).toFixed(3)}`);
+            const shrink = 1 - easeInOut(clampNumber(t * 1.3, 0, 1)) * 0.8;
+            const poolRx = 38 * shrink;
+            const poolRy = 11 * shrink * (1 - t * 0.5);
+            if (glr) {
+              pushBall(px, waterline + 3, poolRx, poolRy, 0.55 + 0.4 * t);
+            } else {
+              const pool = poolRefs.current[pi];
+              if (pool) {
+                pool.setAttribute("rx", `${poolRx.toFixed(2)}`);
+                pool.setAttribute("ry", `${poolRy.toFixed(2)}`);
+                pool.setAttribute("fill", warm(0.55 + 0.4 * t));
+                pool.setAttribute("opacity", `${((1 - fadeT) * 0.9).toFixed(3)}`);
+              }
             }
             for (let c = 0; c < MOUNDS_PER_POOL; c++) {
-              const el = moundRefs.current[pi * MOUNDS_PER_POOL + c];
-              if (!el) continue;
               const wobble = Math.sin((t * 7 + pi * 1.3 + c * 2.1)) * (1 - t) * 2.2;
               // Mound lifts from the waterline up to the token spot.
               const lift = riseT;
               const cx = px + Math.cos(c * 2.4 + pi) * (1 - t) * (5 + c * 3) + wobble;
               const baseY = waterline + 2;
               const cy = baseY + (target.y - baseY) * lift;
-              const r = (21 - c * 4.5) * (0.35 + 0.65 * lift) * (1 - fadeT * 0.5);
-              el.setAttribute("cx", `${cx.toFixed(1)}`);
-              el.setAttribute("cy", `${cy.toFixed(1)}`);
-              el.setAttribute("r", `${Math.max(0, r).toFixed(2)}`);
-              el.setAttribute("fill", warm(0.65 + 0.55 * t));
-              el.setAttribute("opacity", `${((1 - fadeT) * 0.93).toFixed(3)}`);
+              const r = Math.max(0, (21 - c * 4.5) * (0.35 + 0.65 * lift) * (1 - fadeT * 0.5));
+              if (glr) {
+                if (r > 0.2) pushBall(cx, cy, r, r, 0.65 + 0.55 * t);
+              } else {
+                const el = moundRefs.current[pi * MOUNDS_PER_POOL + c];
+                if (!el) continue;
+                el.setAttribute("cx", `${cx.toFixed(1)}`);
+                el.setAttribute("cy", `${cy.toFixed(1)}`);
+                el.setAttribute("r", `${r.toFixed(2)}`);
+                el.setAttribute("fill", warm(0.65 + 0.55 * t));
+                el.setAttribute("opacity", `${((1 - fadeT) * 0.93).toFixed(3)}`);
+              }
             }
           });
         }
 
+        glr?.draw(ballBuf, wBuf, ballCount, glFade);
         rafRef.current = window.requestAnimationFrame(tick);
       };
       rafRef.current = window.requestAnimationFrame(tick);
 
       return () => {
         if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+        glRendererRef.current?.dispose();
+        glRendererRef.current = null;
         for (const probe of probes) {
           try {
             inkSvg.removeChild(probe);
@@ -2702,6 +3003,22 @@ function HeldInkGathers({
   if (!box) return null;
 
   return (
+    <>
+      {/* PRIMARY: WebGL metaball fluid — fused liquid with real lighting
+          (analytic normals, warm key light, wet specular that dies to matte
+          as the clay fires). The SVG below renders ONLY when GL is
+          unavailable or init failed. */}
+      <canvas
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[24]"
+        ref={meltCanvasRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          display: glMode === "svg" ? "none" : "block",
+        }}
+      />
+      {glMode !== "gl" && (
     <svg
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-[24]"
@@ -2781,6 +3098,8 @@ function HeldInkGathers({
         )}
       </g>
     </svg>
+      )}
+    </>
   );
 }
 
