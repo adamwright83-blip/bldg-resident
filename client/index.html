@@ -3,10 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="theme-color" content="#f4ecdf" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>BLDG.chat</title>
+    <!-- First-paint insurance: the screen must NEVER hit unstyled white — not
+         at boot, not between bundle loads. Branded warm cream paints before
+         any stylesheet or JS arrives. -->
+    <style>
+      html, body, #root { background: #f4ecdf; margin: 0; }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -1277,6 +1277,25 @@ export default function PenPullPrototype({
             />
           )}
 
+          {/* Ceremony letterhead — the screen is NEVER a blank bright page.
+              While the artist draws (pen-approach delay included), the
+              wordmark + a quiet count line anchor the composition, exactly
+              like a letterpress page heading. Sits above HeldArtistDrawing
+              (z-80) and disappears when the transforming screen brings its
+              own header. */}
+          {mode === "drawing" && (
+            <div className="pointer-events-none absolute left-[8%] right-[8%] top-[7%] z-[86]">
+              <p className="font-serif text-[30px] leading-none text-[#2a2520]">Held.</p>
+              <p className="mt-2 font-serif text-[13px] italic text-[#6f6254]">
+                {(() => {
+                  const n = Math.max(1, confirmedServices.length);
+                  const words = ["", "One thing is", "Two things are", "Three things are", "Four things are", "Five things are"];
+                  return `${words[Math.min(n, 5)] ?? `${n} things are`} being held.`;
+                })()}
+              </p>
+            </div>
+          )}
+
           {(mode === "transforming" || mode === "held") && (
             <HeldTransformingState
               debugOpenLaundryVitrine={debugOpenLaundryVitrine}
