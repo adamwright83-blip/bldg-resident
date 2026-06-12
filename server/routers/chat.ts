@@ -3089,6 +3089,112 @@ export const chatRouter = router({
     }),
 
   /**
+   * Unseen operator replies for the current resident (the returning courier).
+   * The admin app writes replies onto requestJson.followups via
+   * /api/held/followup-reply; the client polls this and rides the horse
+   * LEFT→RIGHT when something new arrived — SMS optional by design.
+   */
+  getFollowupReplies: publicProcedure.query(async ({ ctx }) => {
+    const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+    if (!bldgUserId) return { replies: [] };
+
+    const requests = await getServiceRequests(bldgUserId, 50);
+    const replies: Array<{
+      serviceRequestId: number;
+      orderId: number | null;
+      operatorTaskId: string | null;
+      type: string | null;
+      requestedWindow: string | null;
+      message: string;
+      decision: string | null;
+      newPickupTimeWindow: string | null;
+      newDeliveryTimeWindow: string | null;
+      repliedAt: string | null;
+    }> = [];
+
+    for (const r of requests) {
+      const raw = (r as { requestJson?: unknown }).requestJson;
+      let json: Record<string, unknown> = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) json = raw as Record<string, unknown>;
+      else if (typeof raw === "string") {
+        try {
+          json = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          json = {};
+        }
+      }
+      const followups = Array.isArray(json.followups)
+        ? (json.followups as Array<Record<string, unknown>>)
+        : [];
+      for (const f of followups) {
+        if (!f || f.state !== "answered") continue;
+        const reply = (f.reply ?? {}) as Record<string, unknown>;
+        const message = typeof reply.message === "string" ? reply.message : "";
+        if (!message) continue;
+        replies.push({
+          serviceRequestId: r.id,
+          orderId: (r as { orderId?: number | null }).orderId ?? null,
+          operatorTaskId: f.operatorTaskId != null ? String(f.operatorTaskId) : null,
+          type: typeof f.type === "string" ? f.type : null,
+          requestedWindow: typeof f.requestedWindow === "string" ? f.requestedWindow : null,
+          message,
+          decision: typeof reply.decision === "string" ? reply.decision : null,
+          newPickupTimeWindow:
+            typeof reply.newPickupTimeWindow === "string" ? reply.newPickupTimeWindow : null,
+          newDeliveryTimeWindow:
+            typeof reply.newDeliveryTimeWindow === "string" ? reply.newDeliveryTimeWindow : null,
+          repliedAt: typeof reply.repliedAt === "string" ? reply.repliedAt : null,
+        });
+      }
+    }
+    replies.sort((a, b) => String(b.repliedAt ?? "").localeCompare(String(a.repliedAt ?? "")));
+    return { replies };
+  }),
+
+  /**
+   * Mark an operator reply as seen (the courier delivered the note) so the
+   * returning horse doesn't replay forever.
+   */
+  markFollowupReplySeen: publicProcedure
+    .input(
+      z.object({
+        serviceRequestId: z.number().int().positive(),
+        operatorTaskId: z.string().max(64).nullable().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "No active session" });
+      }
+      const requests = await getServiceRequests(bldgUserId, 50);
+      const target = requests.find((r) => r.id === input.serviceRequestId);
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Service request not found" });
+      }
+      const raw = (target as { requestJson?: unknown }).requestJson;
+      let json: Record<string, unknown> = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) json = raw as Record<string, unknown>;
+      else if (typeof raw === "string") {
+        try {
+          json = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          json = {};
+        }
+      }
+      const followups = Array.isArray(json.followups)
+        ? (json.followups as Array<Record<string, unknown>>)
+        : [];
+      const next = followups.map((f) => {
+        if (!f || f.state !== "answered") return f;
+        if (input.operatorTaskId && String(f.operatorTaskId ?? "") !== input.operatorTaskId) return f;
+        return { ...f, state: "seen", seenAt: new Date().toISOString() };
+      });
+      await updateServiceRequest(target.id, { requestJson: { ...json, followups: next } });
+      return { success: true };
+    }),
+
+  /**
    * Get service requests for the current user.
    */
   getRequests: publicProcedure.query(async ({ ctx }) => {

@@ -7,6 +7,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerWelcomeRoutes } from "../welcomeRoutes";
 import { registerHeldVoiceRoutes } from "../heldVoiceRoutes";
+import { registerHeldFollowupRoutes } from "../heldFollowupRoutes";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -78,6 +79,8 @@ async function startServer() {
   registerWelcomeRoutes(app);
   // HELD prototype voice command route.
   registerHeldVoiceRoutes(app);
+  // Operator-reply write-back from the admin app (drives the returning courier).
+  registerHeldFollowupRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
