@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPostOrderMessage } from "./heldPostOrderClassifier";
+import { classifyPostOrderMessage, isAffirmation } from "./heldPostOrderClassifier";
 
 describe("classifyPostOrderMessage — post-order intent routing", () => {
   it("Case 1: 'cancel' → cancel", () => {
@@ -64,5 +64,19 @@ describe("classifyPostOrderMessage — post-order intent routing", () => {
   it("empty / whitespace → free_chat (safe default)", () => {
     expect(classifyPostOrderMessage("").intent).toBe("free_chat");
     expect(classifyPostOrderMessage("   ").intent).toBe("free_chat");
+  });
+});
+
+describe("isAffirmation — 'yes' after 'Want me to book one?'", () => {
+  it("accepts bare agreement", () => {
+    for (const msg of ["yes", "Yes", "yeah", "yep", "sure", "ok", "okay", "yes please", "do it", "go ahead", "book it"]) {
+      expect(isAffirmation(msg)).toBe(true);
+    }
+  });
+
+  it("rejects anything that carries its own intent", () => {
+    for (const msg of ["yes cancel it", "no", "yes but later", "can it come earlier?", "thank you", "laundry"]) {
+      expect(isAffirmation(msg)).toBe(false);
+    }
   });
 });

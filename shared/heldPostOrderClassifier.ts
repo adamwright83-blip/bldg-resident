@@ -113,6 +113,19 @@ function detectAddService(message: string): PostOrderAddServiceType | null {
   return null;
 }
 
+/**
+ * Bare agreement ("yes", "yeah", "ok", "sure", "do it", "go ahead", "book it").
+ * Used by the client to resume a pending offer (e.g. "Want me to book one?" →
+ * "yes" routes to the parent deterministic booking flow) instead of re-running
+ * the follow-up resolver against the word "yes".
+ */
+export function isAffirmation(message: string): boolean {
+  const text = norm(message).replace(/[!.]+$/, "");
+  return /^(yes|yeah|yep|yup|sure|ok|okay|please|yes please|go ahead|do it|book it|sounds good|let'?s do it)$/.test(
+    text,
+  );
+}
+
 export function classifyPostOrderMessage(message: string): PostOrderClassification {
   const text = norm(message);
   if (!text) return { intent: "free_chat" };
