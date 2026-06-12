@@ -389,21 +389,22 @@ export default function PenPullPrototype({
       return;
     }
 
-    console.debug("[HELD] raw typed text received", { length: text.length });
-    setTypedCommandStatus("summarizing");
+    console.debug("[HELD] raw typed text received — booking from RAW words (no rewrite)", {
+      length: text.length,
+    });
+    // HELD is a chatbot: book from the resident's RAW words. We deliberately do
+    // NOT summarize/rewrite the text before classification/booking. That rewrite
+    // (e.g. "laundry" -> "Laundry service needed.") made the request miss the
+    // deterministic laundry classifier and fall to the legacy LLM booking path,
+    // which lost the confirmed orderId handoff. Any cleaned/display text must be
+    // computed AFTER booking, never before, and must never drive classification.
     setConfirmedRequest(text);
+    setDraft(text);
+    setEditDraft(text);
+    setSpeechTranscript(text);
+    setConfirmedServices(inferServicesFromRequest(text));
+    setTypedCommandStatus("ready");
     setMode("requestReady");
-
-    try {
-      const result = await parseTextCommand(text);
-      console.debug("[HELD] cleaned typed request produced", {
-        hasDisplayRequest: Boolean(result.displayRequest?.trim()),
-      });
-      applyTextCommandResult(text, result);
-    } catch (error) {
-      console.error("[PenPullPrototype] typed command failed", error);
-      applyTextCommandFallback(text);
-    }
   };
   const enterRequestEditMode = (requestOverride?: string) => {
     const nextText = requestOverride?.trim() || confirmedRequest || draft || speechTranscript;
@@ -553,11 +554,15 @@ export default function PenPullPrototype({
     }
     setMode("takingCustody");
 
+    // Idempotency key for this booking attempt: threaded to the server and on to
+    // the admin order as the dedup key, so retries/double-submits reuse one order.
+    const clientRequestId = `held_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     try {
       const response = (await sendMessageMutation.mutateAsync({
         content: nextRequest,
         orderMode,
         source: "held",
+        clientRequestId,
       })) as HeldAgentResponse;
       handleHeldAgentResponse(response, nextRequest, nextServices);
     } catch (error) {

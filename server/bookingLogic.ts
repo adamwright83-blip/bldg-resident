@@ -224,24 +224,19 @@ function computeLaundryPickup(serviceCategory: string): BookingDefaults {
   let endMinute: number;
   let isSameDay: boolean;
 
-  if (currentTimeMinutes < cutoffMinutes) {
-    // Before 11:30am → same day 12:30–1:30pm
-    pickupDate = new Date(now);
-    startHour = 12;
-    startMinute = 30;
-    endHour = 13;
-    endMinute = 30;
-    isSameDay = true;
-  } else {
-    // After 11:30am → next morning 7–10am
-    pickupDate = new Date(now);
-    pickupDate.setDate(pickupDate.getDate() + 1);
-    startHour = 7;
-    startMinute = 0;
-    endHour = 10;
-    endMinute = 0;
-    isSameDay = false;
-  }
+  // HELD Laundry Butler rule: the standard default pickup is ALWAYS the next
+  // morning, 7–9am (the return is tomorrow evening 7–9pm, set on the admin
+  // order). We no longer vary by time-of-day — the old same-day 12:30–1:30 /
+  // next-morning 7–10am logic produced the wrong 7–10am window seen in the DB.
+  void cutoffMinutes;
+  void currentTimeMinutes;
+  pickupDate = new Date(now);
+  pickupDate.setDate(pickupDate.getDate() + 1);
+  startHour = 7;
+  startMinute = 0;
+  endHour = 9;
+  endMinute = 0;
+  isSameDay = false;
 
   pickupDate.setHours(startHour, startMinute, 0, 0);
 
