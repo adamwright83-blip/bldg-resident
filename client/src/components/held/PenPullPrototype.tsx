@@ -280,6 +280,68 @@ export default function PenPullPrototype({
     enabled: mode === "held",
   });
   const residenceLabel = formatHeldResidenceLabel(profileData?.user);
+
+  // ── The returning courier (APP-LEVEL — lives here, not in the post-order
+  // screen). When the operator answers on admin/driver, the reply lands on the
+  // resident's service_request; this watcher polls for it from ANY screen —
+  // idle home included — so reopening the app is enough (SMS optional), and it
+  // is never blocked by the outbound courier's parked "courier_out" state
+  // (the two bugs that made the first live test show nothing).
+  type OperatorFollowupReply = {
+    serviceRequestId: number;
+    operatorTaskId: string | null;
+    type: string | null;
+    message: string;
+    decision: string | null;
+    newPickupTimeWindow: string | null;
+    newDeliveryTimeWindow: string | null;
+  };
+  const followupRepliesQuery = trpc.chat.getFollowupReplies.useQuery(undefined, {
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+  const markFollowupSeenMutation = trpc.chat.markFollowupReplySeen.useMutation();
+  const [returnReply, setReturnReply] = useState<OperatorFollowupReply | null>(null);
+  const [returnPhase, setReturnPhase] = useState<"riding" | "note">("riding");
+  const returnNoteTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    const next = followupRepliesQuery.data?.replies?.[0] as OperatorFollowupReply | undefined;
+    if (!next || returnReply) return;
+    setReturnReply(next);
+    setReturnPhase("riding");
+    if (returnNoteTimerRef.current) window.clearTimeout(returnNoteTimerRef.current);
+    returnNoteTimerRef.current = window.setTimeout(() => setReturnPhase("note"), 5400);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followupRepliesQuery.data]);
+  const dismissReturnReply = () => {
+    const r = returnReply;
+    if (!r) return;
+    markFollowupSeenMutation.mutate({
+      serviceRequestId: r.serviceRequestId,
+      operatorTaskId: r.operatorTaskId,
+    });
+    // Approved changes update the visible order truth (the copy builder reads
+    // service.pickupWindow / service.returnWindow when present). On the idle
+    // home there may be no services in memory — the note itself carried the
+    // truth, and the admin order is already revised server-side.
+    if (r.decision === "approved" && (r.newDeliveryTimeWindow || r.newPickupTimeWindow)) {
+      setConfirmedServices((prev) =>
+        prev.map((s) =>
+          isLaundryService(s.type)
+            ? {
+                ...s,
+                ...(r.newDeliveryTimeWindow ? { returnWindow: r.newDeliveryTimeWindow } : {}),
+                ...(r.newPickupTimeWindow ? { pickupWindow: r.newPickupTimeWindow } : {}),
+              }
+            : s,
+        ),
+      );
+    }
+    setReturnReply(null);
+    setReturnPhase("riding");
+    void followupRepliesQuery.refetch();
+  };
   const composerOpen = controlledComposerOpen ?? internalComposerOpen;
   const composerTrayVisible =
     composerOpen &&
@@ -1195,6 +1257,57 @@ export default function PenPullPrototype({
               residenceLabel={residenceLabel}
               services={confirmedServices}
             />
+          )}
+
+          {/* ── Returning courier (APP-LEVEL overlay) ──────────────────────
+              The operator replied. Horse rides LEFT→RIGHT (it went out
+              right-to-left), then the note opens with the operator's actual
+              words. Renders over ANY screen — idle home included — so simply
+              reopening the app delivers the reply. */}
+          {returnReply && (
+            <div className="pointer-events-none absolute inset-0 z-[120]">
+              {returnPhase === "riding" && (
+                <motion.img
+                  src={HELD_ASSETS.courierHorseReturn}
+                  alt=""
+                  initial={{ x: "-110%" }}
+                  animate={{ x: "440%" }}
+                  transition={{ duration: 5.2, ease: "linear" }}
+                  className="absolute bottom-[24%] left-0 w-[34%] max-w-[340px] drop-shadow-[0_16px_18px_rgba(52,31,12,0.25)]"
+                />
+              )}
+              {returnPhase === "note" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 26, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.45, ease: "easeOut" }}
+                  className="pointer-events-auto absolute left-1/2 top-1/2 w-[86%] max-w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[#b4884b]/40 bg-[#f6efe3] p-5 shadow-2xl"
+                >
+                  <p className="text-[11px] font-bold tracking-[0.18em] text-[#7a5a2e]">
+                    LAUNDRY BUTLER — REPLY
+                  </p>
+                  <p className="mt-2 text-[15px] leading-relaxed text-[#2d2417]">
+                    “{returnReply.message}”
+                  </p>
+                  <p className="mt-2 text-[12px] font-semibold text-[#5f4a26]">
+                    {returnReply.decision === "approved" && returnReply.newDeliveryTimeWindow
+                      ? `Confirmed — delivery ${returnReply.newDeliveryTimeWindow}.`
+                      : returnReply.decision === "approved" && returnReply.newPickupTimeWindow
+                        ? `Confirmed — pickup ${returnReply.newPickupTimeWindow}.`
+                        : returnReply.decision === "declined"
+                          ? "They couldn’t make that change."
+                          : "Reply received."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={dismissReturnReply}
+                    className="mt-4 w-full rounded-lg bg-[#2d2417] py-2.5 text-sm font-semibold text-[#f6efe3]"
+                  >
+                    Got it
+                  </button>
+                </motion.div>
+              )}
+            </div>
           )}
 
           {/* The Labyrinth knob stays reachable across idle home AND the
@@ -2671,65 +2784,6 @@ function HeldTransformingState({
   // a bare "yes" then resumes booking via the parent flow instead of re-running
   // the follow-up resolver against the word "yes".
   const pendingBookOfferRef = useRef(false);
-  // ── The returning courier ─────────────────────────────────────────────
-  // When the operator answers (admin/driver app), the reply lands on the
-  // service_request. We poll for it here — so the loop closes even if the
-  // resident never gets/taps the SMS. An unseen reply rides the horse
-  // LEFT→RIGHT (it went out right-to-left), then the note opens with the
-  // operator's actual words.
-  type FollowupReply = {
-    serviceRequestId: number;
-    operatorTaskId: string | null;
-    type: string | null;
-    message: string;
-    decision: string | null;
-    newPickupTimeWindow: string | null;
-    newDeliveryTimeWindow: string | null;
-  };
-  const followupReplies = trpc.chat.getFollowupReplies.useQuery(undefined, {
-    enabled: isHeld,
-    refetchInterval: 20_000,
-    refetchOnWindowFocus: true,
-  });
-  const markFollowupSeenMutation = trpc.chat.markFollowupReplySeen.useMutation();
-  const [returnReply, setReturnReply] = useState<FollowupReply | null>(null);
-  const [returnPhase, setReturnPhase] = useState<"riding" | "note">("riding");
-  const returnTimerRef = useRef<number | null>(null);
-  useEffect(() => {
-    const next = followupReplies.data?.replies?.[0] as FollowupReply | undefined;
-    if (!next || returnReply || courierStatus !== "idle") return;
-    setReturnReply(next);
-    setReturnPhase("riding");
-    if (returnTimerRef.current) window.clearTimeout(returnTimerRef.current);
-    returnTimerRef.current = window.setTimeout(() => setReturnPhase("note"), 5400);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followupReplies.data]);
-  const dismissReturnReply = () => {
-    const r = returnReply;
-    if (!r) return;
-    markFollowupSeenMutation.mutate({
-      serviceRequestId: r.serviceRequestId,
-      operatorTaskId: r.operatorTaskId,
-    });
-    // Approved changes update the visible order truth (the copy builder reads
-    // service.pickupWindow / service.returnWindow when present).
-    if (r.decision === "approved" && (r.newDeliveryTimeWindow || r.newPickupTimeWindow)) {
-      setActiveServices((prev) =>
-        prev.map((s) =>
-          isLaundryService(s.type)
-            ? {
-                ...s,
-                ...(r.newDeliveryTimeWindow ? { returnWindow: r.newDeliveryTimeWindow } : {}),
-                ...(r.newPickupTimeWindow ? { pickupWindow: r.newPickupTimeWindow } : {}),
-              }
-            : s,
-        ),
-      );
-    }
-    setReturnReply(null);
-    setReturnPhase("riding");
-    void followupReplies.refetch();
-  };
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
@@ -3553,55 +3607,6 @@ function HeldTransformingState({
         );
         })}
       </div>
-      {/* ── Returning courier: operator replied. Horse rides LEFT→RIGHT (it
-          left right-to-left), then the note opens with the operator's words.
-          Approved time changes update the visible order rows on dismiss. */}
-      {isSettled && returnReply && (
-        <div className="pointer-events-none absolute inset-0 z-[60]">
-          {returnPhase === "riding" && (
-            <motion.img
-              src={HELD_ASSETS.courierHorseReturn}
-              alt=""
-              initial={{ x: "-32vw" }}
-              animate={{ x: "112vw" }}
-              transition={{ duration: 5.2, ease: "linear" }}
-              className="absolute bottom-[24%] left-0 w-[34%] max-w-[340px] drop-shadow-[0_16px_18px_rgba(52,31,12,0.25)]"
-            />
-          )}
-          {returnPhase === "note" && (
-            <motion.div
-              initial={{ opacity: 0, y: 26, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.45, ease: "easeOut" }}
-              className="pointer-events-auto absolute left-1/2 top-1/2 w-[86%] max-w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[#b4884b]/40 bg-[#f6efe3] p-5 shadow-2xl"
-            >
-              <p className="text-[11px] font-bold tracking-[0.18em] text-[#7a5a2e]">
-                LAUNDRY BUTLER — REPLY
-              </p>
-              <p className="mt-2 text-[15px] leading-relaxed text-[#2d2417]">
-                “{returnReply.message}”
-              </p>
-              <p className="mt-2 text-[12px] font-semibold text-[#5f4a26]">
-                {returnReply.decision === "approved" && returnReply.newDeliveryTimeWindow
-                  ? `Confirmed — delivery ${returnReply.newDeliveryTimeWindow}.`
-                  : returnReply.decision === "approved" && returnReply.newPickupTimeWindow
-                    ? `Confirmed — pickup ${returnReply.newPickupTimeWindow}.`
-                    : returnReply.decision === "declined"
-                      ? "They couldn’t make that change."
-                      : "Reply received."}
-              </p>
-              <button
-                type="button"
-                onClick={dismissReturnReply}
-                className="mt-4 w-full rounded-lg bg-[#2d2417] py-2.5 text-sm font-semibold text-[#f6efe3]"
-              >
-                Got it
-              </button>
-            </motion.div>
-          )}
-        </div>
-      )}
-
       {isSettled && courierStatus !== "idle" && (
         <HeldCourierGesture
           message={courierMessage}
