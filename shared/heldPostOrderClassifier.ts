@@ -45,7 +45,13 @@ const CANCEL_RE =
   /\b(cancel(?:l?ed|ling)?|call it off|forget it|never\s?mind|nvm|scrap (?:it|that|the)|don'?t need|do not need|no longer need|don'?t want (?:it|the|my)|stop the (?:pickup|order|laundry))\b/;
 
 // Additive markers that signal a NEW service rather than a change to the existing one.
-const ADD_MARKER_RE = /\b(also|add|too|as well|on top|in addition|another|one more|plus)\b/;
+// NOTE: "too" is deliberately NOT in this list. As a degree adverb ("7pm is too
+// late", "too early") it appears constantly in TIMING messages — live incident:
+// "i need my laundry delivered at 5pm though. 7pm is too late." classified as a
+// NEW laundry order and replayed the whole booking ritual. "too" only counts as
+// additive when it means "also", i.e. clause-final ("book grooming too").
+const ADD_MARKER_RE = /\b(also|add|as well|on top|in addition|another|one more|plus)\b/;
+const ADDITIVE_TOO_RE = /\btoo\s*(?=[.!?,;)]|$)/;
 
 const SERVICE_NOUNS: Array<{ type: PostOrderAddServiceType; re: RegExp }> = [
   { type: "dry_cleaning", re: /\b(dry[\s-]?clean(?:ing)?|dryclean)\b/ },
@@ -96,12 +102,14 @@ function extractDeadline(message: string): string | null {
 
 function detectTimingKind(message: string): PostOrderTimingKind {
   if (/\b(pick ?up|collect)\b/.test(message)) return "pickup_time_change";
-  if (/\b(back|return|deliver|drop ?off|get it|have it|by)\b/.test(message)) return "return_by_time";
+  // deliver\w* covers delivered/delivery/delivering — "i need my laundry
+  // delivered at 5pm" is a return-by ask, not a generic constraint.
+  if (/\b(back|return\w*|deliver\w*|drop ?off|get it|have it|by)\b/.test(message)) return "return_by_time";
   return "timing_constraint";
 }
 
 function detectAddService(message: string): PostOrderAddServiceType | null {
-  const hasMarker = ADD_MARKER_RE.test(message);
+  const hasMarker = ADD_MARKER_RE.test(message) || ADDITIVE_TOO_RE.test(message);
   for (const { type, re } of SERVICE_NOUNS) {
     if (!re.test(message)) continue;
     // A new NON-laundry service noun is add-by-itself ("dry clean my jacket").
@@ -111,6 +119,29 @@ function detectAddService(message: string): PostOrderAddServiceType | null {
     if (hasMarker) return "laundry";
   }
   return null;
+}
+
+/**
+ * Server backstop helper: does this message carry timing/change language, and
+ * if so what are the timing details? Used by postOrderFollowup to OVERRIDE an
+ * add_service classification when the named service matches the resident's
+ * active order — a timing ask about the existing order must never re-book,
+ * even if the classifier misfires again.
+ */
+export function getTimingDetails(message: string): {
+  timingKind: PostOrderTimingKind;
+  requestedWindow: string | null;
+  deadline: string | null;
+} | null {
+  const text = norm(message);
+  const hasTimingSignal =
+    TIMING_VERB_RE.test(text) || TIME_RE.test(text) || LOOSE_TIME_RE.test(text);
+  if (!hasTimingSignal) return null;
+  return {
+    timingKind: detectTimingKind(text),
+    requestedWindow: extractRequestedWindow(text),
+    deadline: extractDeadline(message),
+  };
 }
 
 /**
