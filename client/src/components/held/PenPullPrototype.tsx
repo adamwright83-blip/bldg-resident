@@ -718,9 +718,27 @@ export default function PenPullPrototype({
   useEffect(() => {
     if (mode !== "transforming") return undefined;
 
+    // Hand off to "held" only AFTER the full mount ceremony has played.
+    // BUG HISTORY: this was hardcoded 2200ms — tuned for the ORIGINAL 1.55s
+    // melt (650ms ink + 1550ms clay) and never updated when the gravity-drain
+    // melt grew to 2950ms. Flipping mode sets the child's isHeld prop, whose
+    // effect forces phase → "settle", CUTTING THE MELT AT ~52% — the wet-
+    // sienna pour, the firing, and the cool-down to greige never rendered in
+    // any real booking. Keep this in lockstep with HeldTransformingState's
+    // own timeline: ink 650ms + clay (2950ms × ceremonySlow, or 800ms under
+    // reduced motion) + 250ms settle overlap.
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    const clayMs = reduced ? 800 : 2950 * getCeremonySlowFactor();
+    const handoffMs = 650 + clayMs + 250;
+    console.log(
+      `[HELD][Ceremony] transforming mounted — full ceremony scheduled, handoff to held in ${Math.round(handoffMs)}ms (reducedMotion: ${reduced})`,
+    );
+
     const timer = window.setTimeout(() => {
       setMode("held");
-    }, 2200);
+    }, handoffMs);
 
     return () => window.clearTimeout(timer);
   }, [mode]);
@@ -834,6 +852,27 @@ export default function PenPullPrototype({
     setMode("held");
     setRootVitrineToken({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
   }, [showDebugControls]);
+
+  // ?postorder=ceremony works in PRODUCTION too (the block above is gated to
+  // debug builds): the owner must be able to replay the full ink→clay
+  // ceremony on the live site without placing a paid booking.
+  useEffect(() => {
+    if (showDebugControls) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("postorder") !== "ceremony") return;
+    const request = "Laundry pickup ASAP, dog grooming tomorrow, car detail before Friday.";
+    setConfirmedRequest(request);
+    setConfirmedServices(
+      markBookableDemoServices(
+        [{ type: "laundry_pickup" }, { type: "dog_grooming" }, { type: "car_detail" }],
+        request,
+        1,
+      ),
+    );
+    setLastOrderId(orderId => orderId ?? 1);
+    setMode("transforming");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <main className="held-app-stage h-dvh min-h-dvh overflow-hidden bg-[#f4ecdf] text-[#2C2824] md:flex md:items-start md:justify-center md:bg-[#151311] md:px-4 md:py-2">
@@ -2484,6 +2523,9 @@ function HeldInkGathers({
 
       // Puddle fill fractions per pool (grow as material arrives).
       const poolFill = new Array(poolXs.length).fill(0);
+      console.log(
+        `[HELD][LineMelts] melt running: ${strands.length} strands → ${poolXs.length} pools (firing color journey active)`,
+      );
 
       let started = 0;
       let lastBeat = "tension";
@@ -2848,6 +2890,14 @@ function HeldTransformingState({
       return;
     }
     const clayWindowMs = prefersReducedClay ? 800 : 2950 * getCeremonySlowFactor();
+    if (prefersReducedClay) {
+      console.warn(
+        "[HELD][Ceremony] prefers-reduced-motion is ON for this device — the liquid melt is SKIPPED (quick crossfade). macOS: System Settings → Accessibility → Display → Reduce motion.",
+      );
+    }
+    console.log(
+      `[HELD][Ceremony] mount ceremony: ink 650ms → clay ${Math.round(clayWindowMs)}ms → settle`,
+    );
     const toClay = window.setTimeout(() => setPhase("clay"), 650);
     const toSettle = window.setTimeout(() => setPhase("settle"), 650 + clayWindowMs);
     return () => {
