@@ -33,6 +33,7 @@ import {
   type PostOrderServiceDetail,
   type PostOrderServiceMeta,
 } from "@shared/heldPostOrderCopy";
+import { isAffirmation } from "@shared/heldPostOrderClassifier";
 import {
   buildCarDetailBookedSentence,
   buildLaundryReturnAnswer,
@@ -2666,6 +2667,10 @@ function HeldTransformingState({
   // Server-owned post-order intelligence: classify + (for cancel/timing) create a
   // REAL operator task. The horse rides only when the server confirms a task.
   const postOrderFollowupMutation = trpc.chat.postOrderFollowup.useMutation();
+  // True when the LAST server reply offered to book ("Want me to book one?") —
+  // a bare "yes" then resumes booking via the parent flow instead of re-running
+  // the follow-up resolver against the word "yes".
+  const pendingBookOfferRef = useRef(false);
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
@@ -2934,6 +2939,22 @@ function HeldTransformingState({
     console.debug("[HELD] phone follow-up captured", nextValue);
     setComposerValue("");
     submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+
+    // Stateful "yes": if the previous reply offered to book ("Want me to book
+    // one?"), a bare agreement resumes that pending action through the PARENT
+    // deterministic booking flow — it must NOT re-run the follow-up resolver
+    // against the word "yes" and repeat the same fallback.
+    if (pendingBookOfferRef.current && isAffirmation(nextValue)) {
+      pendingBookOfferRef.current = false;
+      renderFollowup({
+        reply: "On it — booking your laundry pickup now.",
+        triggersCourier: false,
+        nextValue,
+      });
+      onAddService?.("laundry");
+      return;
+    }
+
     setPhoneReplyStatus("thinking");
 
     try {
@@ -2941,6 +2962,9 @@ function HeldTransformingState({
       // the message, and (for cancel/timing) creates a REAL operator task. The
       // client never passes a trusted orderId or books here.
       const res = await postOrderFollowupMutation.mutateAsync({ message: nextValue });
+
+      // Remember whether THIS reply offered to book — consumed by the next message.
+      pendingBookOfferRef.current = Boolean((res as { offeredBooking?: boolean }).offeredBooking);
 
       // A brand-new service is booked by the PARENT booking flow — the post-order
       // phone must not create orders itself.

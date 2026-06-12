@@ -1,6 +1,7 @@
 import {
   createServiceRequest,
   getBldgUserById,
+  getServiceRequests,
   insertChatMessage,
   updateBldgUser,
   updateServiceRequest,
@@ -135,6 +136,10 @@ export async function runResidentAgent(input: {
   orderMode?: HeldOrderMode;
   source?: HeldLaunchSource;
   user: BldgUser;
+  /** Idempotency key for this booking action (client tap key or the server's
+   * deterministic fingerprint). Threaded onto the local service_request AND
+   * the admin order so retries/double-submits collapse to one order. */
+  clientRequestId?: string | null;
 }): Promise<ResidentAgentResponse> {
   const session = await getOrCreateResidentAgentSession(input.bldgUserId);
   const freshUser = (await getBldgUserById(input.bldgUserId)) ?? input.user;
@@ -178,6 +183,7 @@ export async function runResidentAgent(input: {
       source: input.source,
       user: freshUser,
       session,
+      clientRequestId: input.clientRequestId ?? null,
     });
   }
 
@@ -211,6 +217,34 @@ export async function runResidentAgent(input: {
   return { handled: false };
 }
 
+/**
+ * Find this user's service_request already carrying the given clientRequestId
+ * (in requestJson). A hit means this exact action was already processed —
+ * reuse the row instead of inserting a sibling.
+ */
+async function findAgentServiceRequestByClientKey(
+  bldgUserId: number,
+  clientRequestId: string | null
+): Promise<{ id: number } | null> {
+  if (!clientRequestId) return null;
+  const requests = await getServiceRequests(bldgUserId, 50);
+  const match = requests.find((r) => {
+    const raw = (r as { requestJson?: unknown }).requestJson;
+    let obj: Record<string, unknown> | null = null;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      obj = raw as Record<string, unknown>;
+    } else if (typeof raw === "string") {
+      try {
+        obj = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        obj = null;
+      }
+    }
+    return obj?.clientRequestId === clientRequestId;
+  });
+  return match ?? null;
+}
+
 async function executeLaundryIntent(input: {
   bldgUserId: number;
   content: string;
@@ -219,6 +253,7 @@ async function executeLaundryIntent(input: {
   user: BldgUser;
   session: ResidentAgentSession;
   suppressAssistantMessage?: boolean;
+  clientRequestId?: string | null;
 }): Promise<ResidentAgentResponse> {
   console.log("[ResidentAgent] laundry intent matched");
   const forceNewHeldOrder = shouldForceNewHeldOrder(input);
@@ -329,8 +364,22 @@ async function executeLaundryIntent(input: {
   let serviceRequestId: number | null = null;
   const userForIntake = freshUser ?? input.user;
 
+  // Key-based reuse runs EVEN in forceNewHeldOrder mode: the same key means
+  // the same user action (retry / double-submit / second code path), never a
+  // genuinely new order. This is what prevents #113/#114-style sibling rows.
+  const keyedExisting = await findAgentServiceRequestByClientKey(
+    input.bldgUserId,
+    input.clientRequestId ?? null
+  );
+
   let sr: { id: number };
-  if (duplicate) {
+  if (keyedExisting) {
+    sr = keyedExisting;
+    serviceRequestId = keyedExisting.id;
+    console.log(
+      `[ResidentAgent] key match — reusing service_request #${keyedExisting.id} for key=${input.clientRequestId}`
+    );
+  } else if (duplicate) {
     sr = duplicate;
     serviceRequestId = duplicate.id;
     console.log(`[ResidentAgent] duplicate laundry booking detected; reusing #${duplicate.id}`);
@@ -347,7 +396,10 @@ async function executeLaundryIntent(input: {
       scheduledStartLocal: defaults.scheduled_start_local,
       scheduledEndLocal: defaults.scheduled_end_local,
       timezone: defaults.timezone,
-      requestJson: { recurrence: defaults.recurrence },
+      requestJson: {
+        recurrence: defaults.recurrence,
+        ...(input.clientRequestId ? { clientRequestId: input.clientRequestId } : {}),
+      },
     });
     serviceRequestId = sr.id;
     console.log(`[ResidentAgent] local service_request created #${sr.id}: laundry`);
@@ -364,6 +416,7 @@ async function executeLaundryIntent(input: {
 
   const intakePayload: LaundryOrderToolInput = {
     externalId: `bldg-sr-${sr.id}`,
+    clientRequestId: input.clientRequestId ?? null,
     source: "bldg-resident",
     status: "new",
     serviceType: "wash_fold",
@@ -458,8 +511,13 @@ async function executeLaundryIntent(input: {
     };
   }
 
-  await updateServiceRequest(sr.id, { orderId: executionResult.orderId });
-  console.log(`[ResidentAgent] stored orderId=${executionResult.orderId} on service_request #${sr.id}`);
+  // Store the booking truth AND flip status in the same write. Live incident
+  // (SR #114/#115, 2026-06-12): storing orderId while leaving status='pending'
+  // made downstream consumers treat a booked order as invisible/unbooked.
+  await updateServiceRequest(sr.id, { orderId: executionResult.orderId, status: "confirmed" });
+  console.log(
+    `[ResidentAgent] stored orderId=${executionResult.orderId} + status=confirmed on service_request #${sr.id}`
+  );
 
   const confirmText = input.source === "held"
     ? buildLaundryBookedSentence()

@@ -7,6 +7,9 @@ export const DEFAULT_ADMIN_AGENT_S2S_RUN_TOOL_URL =
 
 export interface LaundryOrderToolInput {
   externalId: string;
+  /** Idempotency key — stamped into orders.residentClientRequestId by the
+   * admin tool so retries/double-submits resolve to the same order. */
+  clientRequestId?: string | null;
   source: "bldg-resident";
   status: "new";
   serviceType: "wash_fold" | "dry_cleaning";

@@ -40,6 +40,7 @@ import { createOpsPickup } from "../opsIntegration";
 import { withDefaultReturnBy } from "../intakeReturnBy";
 import { createAdminAgentClient } from "../agents/residentAgentClient";
 import { classifyPostOrderMessage } from "../../shared/heldPostOrderClassifier";
+import { resolveActiveLaundryServiceRequest } from "../postOrderResolver";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
@@ -1090,6 +1091,36 @@ function stripBookingMetadata(content: string): string {
 
 // ─── Router ───
 
+/**
+ * Resident-side idempotency lookup: find this user's service_request already
+ * carrying the given clientRequestId (stored in requestJson). Used by every
+ * booking path BEFORE createServiceRequest so a retry / double-submit / second
+ * code path reuses the same local row instead of inserting a sibling
+ * (#113/#114/#115-style duplicates in the 2026-06-12 live incident).
+ */
+async function findServiceRequestByClientKey(
+  bldgUserId: number,
+  clientRequestId: string | null | undefined
+): Promise<{ id: number } | null> {
+  if (!clientRequestId) return null;
+  const requests = await getServiceRequests(bldgUserId, 50);
+  const match = requests.find((r) => {
+    const raw = (r as { requestJson?: unknown }).requestJson;
+    let obj: Record<string, unknown> | null = null;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      obj = raw as Record<string, unknown>;
+    } else if (typeof raw === "string") {
+      try {
+        obj = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        obj = null;
+      }
+    }
+    return obj?.clientRequestId === clientRequestId;
+  });
+  return match ?? null;
+}
+
 // ── Post-order follow-up reply builders (honest, grounded in real order state) ──
 // These never claim a change is done — only requested. Used by postOrderFollowup.
 function buildStatusRecapReply(active: any, requests: any[]): string {
@@ -1236,6 +1267,23 @@ export const chatRouter = router({
           orderMode: heldOrderMode,
         });
       }
+
+      // Idempotency key for EVERY booking-capable path in this request (agent
+      // S2S, fast-path intake, LLM intake). Live DB proof (orders #172/#173,
+      // 2026-06-12): two requests booked 1s apart via two different paths and
+      // ALL key columns were NULL — the unique index can't dedupe NULLs.
+      //
+      // Key policy:
+      // - Client key (one per "set it in motion" tap) is preferred verbatim.
+      // - Fallback is a DETERMINISTIC fingerprint — user + day + 10-minute
+      //   bucket + service category — NOT a timestamp/random value. Two
+      //   keyless requests seconds apart therefore mint the SAME key, so the
+      //   admin unique index collapses them into one order even across
+      //   separate browser calls.
+      const keyBucket = Math.floor(Date.now() / 600_000); // 10-minute bucket
+      const keyYmd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const bookingKeyFor = (category: string): string =>
+        input.clientRequestId ?? `auto_${bldgUserId}_${keyYmd}_${keyBucket}_${category}`;
 
       // Store the user's message
       await insertChatMessage({
@@ -1401,6 +1449,7 @@ export const chatRouter = router({
           orderMode: heldOrderMode,
           source: heldSource,
           user,
+          clientRequestId: bookingKeyFor("laundry"),
         });
         if (agentResult.handled) {
           return {
@@ -1581,8 +1630,20 @@ export const chatRouter = router({
           const lastName  = (freshUser?.lastName ?? user?.lastName ?? "")?.trim() ?? "";
           const phone     = freshUser?.phoneE164 || user?.phoneE164 || "";
 
+          const fpBookingKey = bookingKeyFor(simpleService);
+          // Resident-side dedupe BY KEY (in addition to the date-based guard):
+          // a retry / double-submit carrying the same key must reuse the same
+          // local service_request — never insert a #114/#115-style sibling row.
+          const fpKeyedExisting = await findServiceRequestByClientKey(bldgUserId, fpBookingKey);
+
           let sr: { id: number };
-          if (duplicate) {
+          if (fpKeyedExisting) {
+            sr = fpKeyedExisting;
+            serviceRequestId = fpKeyedExisting.id;
+            console.log(
+              `[ResidentBooking][FastPath] key match — reusing service_request #${fpKeyedExisting.id} for key=${fpBookingKey}`
+            );
+          } else if (duplicate) {
             sr = duplicate;
             serviceRequestId = duplicate.id;
             console.log(`[ResidentBooking][FastPath] duplicate detected — reusing #${duplicate.id}`);
@@ -1601,7 +1662,7 @@ export const chatRouter = router({
               timezone: defaults.timezone,
               requestJson: {
                 recurrence: defaults.recurrence,
-                ...(input.clientRequestId ? { clientRequestId: input.clientRequestId } : {}),
+                clientRequestId: fpBookingKey,
                 ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
               },
             });
@@ -1617,7 +1678,7 @@ export const chatRouter = router({
 
           const intakePayload = {
             externalId: `bldg-sr-${sr.id}`,
-            clientRequestId: input.clientRequestId ?? null,
+            clientRequestId: fpBookingKey,
             source: "bldg-resident",
             status: "new",
             serviceType: fpServiceType,
@@ -2182,8 +2243,19 @@ export const chatRouter = router({
             service: serviceCategory,
           });
 
+          const llmBookingKey = bookingKeyFor(serviceCategory);
+          // Resident-side dedupe BY KEY — same contract as the fast path: a
+          // second request carrying the same key reuses the same local row.
+          const llmKeyedExisting = await findServiceRequestByClientKey(effectiveUserId, llmBookingKey);
+
           let sr: { id: number };
-          if (duplicate) {
+          if (llmKeyedExisting) {
+            sr = llmKeyedExisting;
+            serviceRequestId = llmKeyedExisting.id;
+            console.log(
+              `[ResidentBooking][LLM] key match — reusing service_request #${llmKeyedExisting.id} for key=${llmBookingKey}`
+            );
+          } else if (duplicate) {
             sr = duplicate;
             serviceRequestId = duplicate.id;
             console.log(
@@ -2204,6 +2276,7 @@ export const chatRouter = router({
               timezone: bookingMeta.timezone,
               requestJson: {
                 recurrence: bookingMeta.recurrence,
+                clientRequestId: llmBookingKey,
                 ...(detectSameDay(input.content) && serviceCategory === "dry-cleaning"
                   ? { requestedSameDay: true }
                   : {}),
@@ -2251,6 +2324,7 @@ export const chatRouter = router({
 
             const intakePayload = {
               externalId: `bldg-sr-${sr.id}`,
+              clientRequestId: llmBookingKey,
               source: "bldg-resident",
               status: "new",
               serviceType,
@@ -2258,6 +2332,14 @@ export const chatRouter = router({
               pickupWindow: bookingMeta.window,
               pickupWindowStart,
               pickupWindowEnd,
+              // Explicit, well-formed delivery fields. Live order #173 stored
+              // deliveryTimeWindow="2026-06-14" — a DATE leaked into the window
+              // column because this payload omitted them and the admin mapper
+              // fell back to a return-by date string. Laundry returns same-day
+              // 7–9 PM; dry cleaning gets a real evening window on its return date.
+              ...(serviceCategory === "laundry"
+                ? { deliveryDate: pickupDateISO, deliveryTimeWindow: "7–9 PM" }
+                : { deliveryTimeWindow: "7–9 PM" }),
               address,
               buildingId: intakeBuildingKey || null,
               unit: freshUser?.unit || user?.unit || null,
@@ -2776,16 +2858,28 @@ export const chatRouter = router({
       }
 
       // Load THIS resident's own requests — ownership is guaranteed by the query.
+      // Resolution rule (live-incident hardened): orderId is the operational
+      // truth. A laundry request with an orderId is active even at
+      // status='pending' (the agent path stores orderId without flipping
+      // status). ALWAYS log what was inspected so a wrong answer is debuggable
+      // from logs alone — never silently claim "no active order".
       const requests = await getServiceRequests(bldgUserId, 50);
-      const active =
-        [...requests]
-          .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
-          .find(
-            (r) =>
-              r.orderId != null &&
-              (r.status === "confirmed" || r.status === "paid" || r.status === "scheduled") &&
-              /laundry|dry/i.test(String(r.serviceType ?? "")),
-          ) ?? null;
+      const resolved = resolveActiveLaundryServiceRequest(requests as any[]);
+      const active = resolved.active;
+      console.log(
+        "[PostOrderFollowup][resolver]",
+        JSON.stringify({
+          bldgUserId,
+          selected: active ? { id: active.id, orderId: active.orderId, status: active.status } : null,
+          candidates: resolved.candidates,
+          duplicateOrderIds: resolved.duplicateOrderIds,
+        }),
+      );
+      if (resolved.duplicateOrderIds.length > 0) {
+        console.warn(
+          `[PostOrderFollowup] duplicate_creation_detected: user=${bldgUserId} extraOrderIds=${resolved.duplicateOrderIds.join(",")}`,
+        );
+      }
 
       if (intent === "status") {
         return baseReply(buildStatusRecapReply(active, requests));
@@ -2796,9 +2890,27 @@ export const chatRouter = router({
 
       // cancel / timing require a real active order.
       if (!active || active.orderId == null) {
-        return baseReply(
-          "I don’t see an active laundry order to change right now. Want me to book one?",
-        );
+        // Differentiate honestly instead of one blanket "I don't see an order":
+        // a laundry row that exists but failed resolution is a linkage problem,
+        // not a missing order — never offer to re-book over it.
+        const laundryRowsSeen = resolved.candidates.length > 0;
+        if (laundryRowsSeen) {
+          console.warn(
+            `[PostOrderFollowup] laundry rows exist but none resolved active — NOT offering re-book. user=${bldgUserId}`,
+          );
+          return baseReply(
+            "I found your laundry request, but it isn’t in a changeable state on my side yet — I’m flagging it to the operator now. Nothing else needed from you.",
+          );
+        }
+        return {
+          intent,
+          reply: "I don’t see an active laundry order to change right now. Want me to book one?",
+          operatorTaskCreated: false,
+          triggersCourier: false,
+          // The client stores this; an affirmation ("yes") then routes to the
+          // parent deterministic booking flow instead of re-running this resolver.
+          offeredBooking: true,
+        };
       }
 
       // Merge-safe read of requestJson — NEVER overwrite clientRequestId,
