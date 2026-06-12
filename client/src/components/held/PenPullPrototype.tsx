@@ -1187,6 +1187,7 @@ export default function PenPullPrototype({
               displayRequest={confirmedRequest}
               isHeld={mode === "held"}
               lastOrderId={lastOrderId}
+              onAddService={(text) => void beginSetInMotion(text, inferServicesFromRequest(text))}
               onCourierForegroundChange={setCourierForeground}
               onDebugLaundryVitrineOpened={() => setDebugOpenLaundryVitrine(false)}
               penAssetSrc={penAssetSrc}
@@ -2604,6 +2605,7 @@ function HeldTransformingState({
   displayRequest,
   isHeld,
   lastOrderId,
+  onAddService,
   onCourierForegroundChange,
   onDebugLaundryVitrineOpened,
   penAssetSrc,
@@ -2617,6 +2619,9 @@ function HeldTransformingState({
   // post-order copy MUST render laundry as Booked — the screen reflects the
   // admin order state, never a stale "pending" left over from pre-booking.
   lastOrderId: number | null;
+  // Delegate a brand-new service ("also dry clean my jacket") back to the parent
+  // booking flow — the post-order phone must NOT create orders itself.
+  onAddService?: (text: string) => void;
   // Reports when the courier crossing or the open slip owns the foreground,
   // so the Labyrinth knob can step aside instead of overlapping the ceremony.
   onCourierForegroundChange?: (busy: boolean) => void;
@@ -2658,6 +2663,9 @@ function HeldTransformingState({
   const [highlightedServiceType, setHighlightedServiceType] = useState<string | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
+  // Server-owned post-order intelligence: classify + (for cancel/timing) create a
+  // REAL operator task. The horse rides only when the server confirms a task.
+  const postOrderFollowupMutation = trpc.chat.postOrderFollowup.useMutation();
   // Ink-to-Clay -> Tokens Settle ceremony (two ceremonial beats):
   //   ink    -> the drawn ink line rests on the paper (mode === transforming)
   //   clay   -> ink thickens then dissolves as clay tokens condense out of it,
@@ -2894,43 +2902,79 @@ function HeldTransformingState({
     event.preventDefault();
     void submitFollowupValue(composerInputRef.current?.value);
   };
+  // Shared dim→reply→horse beat. The horse is proof that HELD sent word OUTSIDE
+  // the app; it rides ONLY when a real operator task exists (server-confirmed) or
+  // the local fallback's vendor-facing branch fires.
+  const renderFollowup = (opts: {
+    reply: string;
+    triggersCourier: boolean;
+    threadLabel?: string | null;
+    stateLabel?: string | null;
+    nextValue: string;
+  }) => {
+    setPhoneReplyVisible(false);
+    setPhoneReply(opts.reply);
+    setPhoneReplyStatus("idle");
+    window.setTimeout(() => setPhoneReplyVisible(true), 220);
+    if (opts.triggersCourier) {
+      setCourierMessage(opts.nextValue);
+      setCourierThreadLabel(opts.threadLabel || "LAUNDRY BUTLER");
+      setCourierStateLabel(opts.stateLabel || "Awaiting outside reply.");
+      setCourierSlipOpen(false);
+      setCourierSlipMode("summary");
+      const replyReadMs = 340 + opts.reply.length * 20 + 650;
+      const horseDelay = Math.min(4200, Math.max(1800, replyReadMs));
+      window.setTimeout(() => setCourierStatus("dispatching"), horseDelay);
+    }
+  };
   const submitFollowupValue = async (valueOverride?: string) => {
     const nextValue = (valueOverride ?? composerValue).trim();
     if (!nextValue || phoneReplyStatus === "thinking") return;
 
-    console.debug("[HELD] local phone follow-up captured", nextValue);
+    console.debug("[HELD] phone follow-up captured", nextValue);
     setComposerValue("");
-    const followup = buildReactivePhoneFollowup(nextValue, activeServices, displayRequest);
     submittedFollowupsRef.current = [...submittedFollowupsRef.current, nextValue];
+    setPhoneReplyStatus("thinking");
 
-    if (followup.nextServices) {
-      setActiveServices(followup.nextServices);
-    }
+    try {
+      // SERVER owns the decision: it loads this resident's active order, classifies
+      // the message, and (for cancel/timing) creates a REAL operator task. The
+      // client never passes a trusted orderId or books here.
+      const res = await postOrderFollowupMutation.mutateAsync({ message: nextValue });
 
-    // Sequencing contract: the existing chief/status copy dims FIRST (the
-    // post-order section fades on isPhoneEngaged / dispatching states), and
-    // only after a 150–250ms beat does the new reply appear in its own clean
-    // band. Two readable prose layers never occupy the same space at once.
-    setPhoneReplyVisible(false);
-    setPhoneReply(followup.reply);
-    setPhoneReplyStatus("idle");
-    window.setTimeout(() => setPhoneReplyVisible(true), 220);
+      // A brand-new service is booked by the PARENT booking flow — the post-order
+      // phone must not create orders itself.
+      if (res.intent === "add_service") {
+        renderFollowup({
+          reply: res.reply || "On it — setting that up as a new request.",
+          triggersCourier: false,
+          nextValue,
+        });
+        onAddService?.(nextValue);
+        return;
+      }
 
-    if (followup.triggersCourier) {
-      // The horse is proof that HELD sent word OUTSIDE the app. It rides only
-      // for vendor-facing asks (schedule changes, exceptions, outside
-      // coordination) — never for questions HELD can already answer.
-      setCourierMessage(nextValue);
-      setCourierThreadLabel(followup.threadLabel || "LAUNDRY BUTLER");
-      setCourierStateLabel(followup.courierStateLabel || "Awaiting outside reply.");
-      setCourierSlipOpen(false);
-      setCourierSlipMode("summary");
-      // The reply IS the pre-horse intelligence ("…I’m asking them now").
-      // Hold the courier until the reply has streamed and been read, so the
-      // user understands WHY the horse rides before it appears.
-      const replyReadMs = 340 + followup.reply.length * 20 + 650;
-      const horseDelay = Math.min(4200, Math.max(1800, replyReadMs));
-      window.setTimeout(() => setCourierStatus("dispatching"), horseDelay);
+      // Horse ONLY when the server actually created an operator task.
+      renderFollowup({
+        reply: res.reply || "I’ve got that.",
+        triggersCourier: Boolean(res.triggersCourier && res.operatorTaskCreated),
+        threadLabel: res.dispatchSlip?.thread,
+        stateLabel: res.dispatchSlip?.state,
+        nextValue,
+      });
+    } catch (error) {
+      // Network/server failure → degrade gracefully to the local responder so the
+      // phone never hangs. (This is a fallback, not the primary path.)
+      console.warn("[HELD] postOrderFollowup failed; using local fallback", error);
+      const followup = buildReactivePhoneFollowup(nextValue, activeServices, displayRequest);
+      if (followup.nextServices) setActiveServices(followup.nextServices);
+      renderFollowup({
+        reply: followup.reply,
+        triggersCourier: followup.triggersCourier,
+        threadLabel: followup.threadLabel,
+        stateLabel: followup.courierStateLabel,
+        nextValue,
+      });
     }
   };
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {

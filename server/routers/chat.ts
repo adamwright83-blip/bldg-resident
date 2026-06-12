@@ -38,6 +38,8 @@ import {
 import { sendOwnerAlert } from "../ownerNotify";
 import { createOpsPickup } from "../opsIntegration";
 import { withDefaultReturnBy } from "../intakeReturnBy";
+import { createAdminAgentClient } from "../agents/residentAgentClient";
+import { classifyPostOrderMessage } from "../../shared/heldPostOrderClassifier";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
@@ -1087,6 +1089,76 @@ function stripBookingMetadata(content: string): string {
 }
 
 // ─── Router ───
+
+// ── Post-order follow-up reply builders (honest, grounded in real order state) ──
+// These never claim a change is done — only requested. Used by postOrderFollowup.
+function buildStatusRecapReply(active: any, requests: any[]): string {
+  if (!active || active.orderId == null) {
+    const anyActive = requests.find((r) => r.status === "confirmed" || r.status === "pending");
+    if (!anyActive) return "Nothing’s booked yet — say the word and I’ll set it in motion.";
+  }
+  if (active && /laundry/i.test(String(active.serviceType ?? ""))) {
+    const win = active.scheduledWindow ? String(active.scheduledWindow) : "7–9 AM";
+    return `Your laundry is booked with LAUNDRY BUTLER — pickup tomorrow ${win}, return tomorrow 7–9 PM.`;
+  }
+  if (active && /dry/i.test(String(active.serviceType ?? ""))) {
+    return "Your dry cleaning is booked with LAUNDRY BUTLER — I’ll keep you posted on the return.";
+  }
+  return "Your order is booked — I’ll keep you posted.";
+}
+
+function buildFreeChatReply(message: string): string {
+  const m = message.toLowerCase();
+  if (/\b(thanks|thank you|appreciate|perfect|great|awesome|ok|okay|cool)\b/.test(m)) {
+    return "Of course — it’s handled. I’ll only ping you if something needs your call.";
+  }
+  if (/\b(price|cost|fee|how much|charge)\b/.test(m)) {
+    return "Pricing stays tied to your actual receipts — nothing changes from asking.";
+  }
+  if (/\bwho\b.*\b(pick|handle|do|doing)\b/.test(m)) {
+    return "LAUNDRY BUTLER handles the pickup and the return.";
+  }
+  if (/\bhow (does|do)\b/.test(m)) {
+    return "You tell me what you need, I set it in motion with the vendor, and I only come back when something needs your yes.";
+  }
+  return "I’ve got the plan held. Tell me if you want to change the timing, add something, or cancel.";
+}
+
+function buildTimingFollowupReply(c: {
+  timingKind?: string;
+  requestedWindow?: string | null;
+  deadline?: string | null;
+}): string {
+  const verb = c.timingKind === "pickup_time_change" ? "pick it up" : "return it";
+  const window = c.requestedWindow ? ` by ${c.requestedWindow}` : " earlier";
+  let reply = `Yes — I’m asking LAUNDRY BUTLER whether they can ${verb}${window}`;
+  const deadline = c.deadline ?? "";
+  if (/\bdinner\b/i.test(deadline)) reply += " so you have it before dinner";
+  const dTime = deadline.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  if (dTime) {
+    const t = `${dTime[1]}${dTime[2] ? `:${dTime[2]}` : ""}${dTime[3].toLowerCase()}`;
+    reply += `. I’ll keep the ${t} deadline attached to the order.`;
+  } else {
+    reply += ". I’ll keep that attached to the order and won’t change the time until they confirm.";
+  }
+  return reply;
+}
+
+function buildSlipAsked(c: {
+  timingKind?: string;
+  requestedWindow?: string | null;
+  deadline?: string | null;
+}): string {
+  const verb = c.timingKind === "pickup_time_change" ? "Pickup" : "Return";
+  const w = c.requestedWindow ? ` by ${c.requestedWindow}` : " earlier";
+  const dTime = (c.deadline ?? "").match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  const tail = dTime
+    ? ` — resident needs it before ${dTime[1]}${dTime[3].toLowerCase()}`
+    : /\bdinner\b/i.test(c.deadline ?? "")
+      ? " — resident leaves for dinner"
+      : "";
+  return `${verb}${w}${tail}`;
+}
 
 export const chatRouter = router({
   /**
@@ -2661,6 +2733,209 @@ export const chatRouter = router({
       console.log(`[ServiceRequest] Cancelled #${input.serviceRequestId}`);
 
       return { success: true };
+    }),
+
+  /**
+   * Post-order follow-up: order-aware handling of brass-phone messages typed
+   * AFTER a laundry order is confirmed. The SERVER owns the trust boundary — it
+   * loads the resident's OWN active order (never trusts a client orderId),
+   * classifies the message, and for operator-facing asks (cancel / timing) fires
+   * a REAL operator task over the existing admin S2S channel. The courier
+   * ("horse") rides ONLY when that task was actually created. No order is ever
+   * created or mutated here; copy never claims a change is done, only requested.
+   */
+  postOrderFollowup: publicProcedure
+    .input(z.object({ message: z.string().min(1).max(2000) }))
+    .mutation(async ({ input, ctx }) => {
+      const message = input.message.trim();
+      const classification = classifyPostOrderMessage(message);
+      const intent = classification.intent;
+
+      const baseReply = (reply: string) => ({
+        intent,
+        reply,
+        operatorTaskCreated: false,
+        triggersCourier: false,
+      });
+
+      // add_service → handled by the parent booking flow on the client. The
+      // server must NOT book here (keep ONE deterministic booking path).
+      if (intent === "add_service") {
+        return {
+          intent,
+          reply: "",
+          addServiceType: classification.addServiceType ?? null,
+          operatorTaskCreated: false,
+          triggersCourier: false,
+        };
+      }
+
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) {
+        return baseReply("I’ve got that. Once you’re signed in I can tie it to your order.");
+      }
+
+      // Load THIS resident's own requests — ownership is guaranteed by the query.
+      const requests = await getServiceRequests(bldgUserId, 50);
+      const active =
+        [...requests]
+          .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
+          .find(
+            (r) =>
+              r.orderId != null &&
+              (r.status === "confirmed" || r.status === "paid" || r.status === "scheduled") &&
+              /laundry|dry/i.test(String(r.serviceType ?? "")),
+          ) ?? null;
+
+      if (intent === "status") {
+        return baseReply(buildStatusRecapReply(active, requests));
+      }
+      if (intent === "free_chat") {
+        return baseReply(buildFreeChatReply(message));
+      }
+
+      // cancel / timing require a real active order.
+      if (!active || active.orderId == null) {
+        return baseReply(
+          "I don’t see an active laundry order to change right now. Want me to book one?",
+        );
+      }
+
+      // Merge-safe read of requestJson — NEVER overwrite clientRequestId,
+      // recurrence, windows, or other existing order metadata.
+      let existingJson: Record<string, unknown> = {};
+      if (active.requestJson && typeof active.requestJson === "object" && !Array.isArray(active.requestJson)) {
+        existingJson = active.requestJson as Record<string, unknown>;
+      } else if (typeof active.requestJson === "string") {
+        try {
+          existingJson = JSON.parse(active.requestJson) as Record<string, unknown>;
+        } catch {
+          existingJson = {};
+        }
+      }
+      const existingFollowups = Array.isArray((existingJson as any).followups)
+        ? ((existingJson as any).followups as any[])
+        : [];
+
+      const followupType =
+        intent === "cancel" ? "cancel_request" : classification.timingKind ?? "timing_constraint";
+      const requestedWindow = classification.requestedWindow ?? null;
+
+      // Idempotency: a matching open follow-up already dispatched → don't spam.
+      const duplicate = existingFollowups.find(
+        (f) =>
+          f &&
+          f.type === followupType &&
+          (f.requestedWindow ?? null) === requestedWindow &&
+          f.state === "awaiting_operator",
+      );
+      if (duplicate) {
+        return {
+          intent,
+          reply:
+            intent === "cancel"
+              ? "Your cancellation request is already with LAUNDRY BUTLER — I’ll confirm the moment they stand down."
+              : `I’ve already asked LAUNDRY BUTLER about ${requestedWindow ? `a ${requestedWindow} ` : "that "}change — still awaiting their reply.`,
+          operatorTaskCreated: false,
+          operatorTaskId: duplicate.operatorTaskId ?? undefined,
+          triggersCourier: false,
+        };
+      }
+
+      // Fire the REAL operator task over the existing shared-secret S2S channel.
+      let user: any = null;
+      try {
+        user = await getBldgUserById(bldgUserId);
+      } catch {
+        user = null;
+      }
+      const residentName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || null : null;
+      const session = {
+        buildingId: (user?.buildingSlug ?? user?.buildingId ?? null) as string | null,
+        unit: (user?.unit ?? null) as string | null,
+        firstName: (user?.firstName ?? "") as string,
+        lastName: (user?.lastName ?? "") as string,
+        phone: (user?.phoneE164 ?? "") as string,
+        bldgUserId,
+        stripeCustomerId: (user?.stripeCustomerId ?? null) as string | null,
+        stripePaymentMethodId: (user?.stripePaymentMethodId ?? null) as string | null,
+      };
+
+      const client = createAdminAgentClient();
+      const taskResult = await client.runAdminTool(
+        "createOrderFollowupTaskTool",
+        {
+          followupType,
+          requestText: message,
+          orderId: active.orderId,
+          clientRequestId: (existingJson as any).clientRequestId ?? null,
+          bldgUserId,
+          residentName,
+          phone: user?.phoneE164 ?? null,
+          serviceLabel: "Laundry",
+          requestedWindow,
+          deadline: classification.deadline ?? null,
+        },
+        session,
+      );
+
+      if (!taskResult.success) {
+        console.warn(
+          `[PostOrderFollowup] operator task failed: reason=${(taskResult as { reason?: string }).reason ?? "unknown"}`,
+        );
+        return baseReply(
+          "I caught that, but I couldn’t reach the operator just yet — try again in a moment and I’ll send it through.",
+        );
+      }
+
+      const operatorTaskId =
+        (taskResult as Record<string, unknown>).opsTaskId != null
+          ? String((taskResult as Record<string, unknown>).opsTaskId)
+          : undefined;
+
+      // Append (merge, never overwrite) the follow-up onto the service request.
+      const nextFollowups = [
+        ...existingFollowups,
+        {
+          type: followupType,
+          requestedWindow,
+          deadline: classification.deadline ?? null,
+          operatorTaskId: operatorTaskId ?? null,
+          state: "awaiting_operator",
+          requestText: message,
+          at: new Date().toISOString(),
+        },
+      ];
+      try {
+        await updateServiceRequest(active.id, {
+          requestJson: { ...existingJson, followups: nextFollowups },
+        });
+      } catch (err) {
+        console.warn("[PostOrderFollowup] failed to persist follow-up metadata", err);
+      }
+
+      const reply =
+        intent === "cancel"
+          ? "Cancellation request sent to LAUNDRY BUTLER — I’ll confirm once they stand down. Nothing’s been charged."
+          : buildTimingFollowupReply(classification);
+      const asked = intent === "cancel" ? "Cancel the laundry pickup" : buildSlipAsked(classification);
+
+      console.log(
+        `[PostOrderFollowup] intent=${intent} type=${followupType} order=${active.orderId} opsTask=${operatorTaskId ?? "?"}`,
+      );
+
+      return {
+        intent,
+        reply,
+        operatorTaskCreated: true,
+        operatorTaskId,
+        triggersCourier: true,
+        dispatchSlip: {
+          thread: "LAUNDRY BUTLER",
+          asked,
+          state: "Awaiting operator reply.",
+        },
+      };
     }),
 
   /**
