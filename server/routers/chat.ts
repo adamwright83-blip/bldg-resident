@@ -48,6 +48,7 @@ import {
   needsCriticalProfileRecovery,
 } from "../../shared/profileCritical";
 import { runResidentAgent } from "../agents/residentAgent";
+import { inferResidentIntent } from "../agents/intentClassifier";
 import { tryAttachAdminSavedPaymentMethod } from "../agents/adminSavedPaymentLookup";
 import {
   buildHeldSpecialInstructions,
@@ -1126,6 +1127,9 @@ export const chatRouter = router({
         isOtherRequest: z.boolean().optional(),
         orderMode: z.enum(["new_order", "modify_existing_order"]).optional(),
         source: z.enum(["held"]).optional(),
+        // Idempotency key from the resident client; threaded to the admin order
+        // dedup so one tap (and its retries) creates at most one order.
+        clientRequestId: z.string().max(128).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -1350,6 +1354,21 @@ export const chatRouter = router({
         let simpleService: "dry-cleaning" | "laundry" | null = null;
         if (DRY_CLEAN_SIMPLE.test(msg)) simpleService = "dry-cleaning";
         else if (LAUNDRY_SIMPLE.test(msg)) simpleService = "laundry";
+        // HELD must be DETERMINISTIC for standard services: route ANY laundry /
+        // dry-cleaning phrasing (not only the bare word) through this fast-path,
+        // so the legacy LLM path can never become the HELD booking engine. This
+        // is the fix for "laundry" being rewritten and missing the bare-word match.
+        if (!simpleService && heldSource) {
+          const heldIntent = inferResidentIntent(input.content);
+          if (heldIntent.type === "laundry") simpleService = "laundry";
+          else if (heldIntent.type === "dry-cleaning-request") simpleService = "dry-cleaning";
+          // Final HELD fallback: any message that mentions laundry / wash & fold
+          // (or dry cleaning) is that standard service. HELD is a laundry
+          // concierge, so this keeps phrasings like "laundry please" deterministic
+          // instead of leaking to the (now-blocked) LLM booking path.
+          else if (/\blaundry\b|wash\s*(?:&|and)\s*fold/.test(msg)) simpleService = "laundry";
+          else if (/\bdry[\s-]?clean/.test(msg)) simpleService = "dry-cleaning";
+        }
 
         if (simpleService) {
           console.log(`[ResidentBooking][FastPath] intent matched: ${simpleService}`);
@@ -1510,6 +1529,7 @@ export const chatRouter = router({
               timezone: defaults.timezone,
               requestJson: {
                 recurrence: defaults.recurrence,
+                ...(input.clientRequestId ? { clientRequestId: input.clientRequestId } : {}),
                 ...(fpSameDay && simpleService === "dry-cleaning" ? { requestedSameDay: true } : {}),
               },
             });
@@ -1525,6 +1545,7 @@ export const chatRouter = router({
 
           const intakePayload = {
             externalId: `bldg-sr-${sr.id}`,
+            clientRequestId: input.clientRequestId ?? null,
             source: "bldg-resident",
             status: "new",
             serviceType: fpServiceType,
@@ -1532,6 +1553,12 @@ export const chatRouter = router({
             pickupWindow: defaults.window,
             pickupWindowStart,
             pickupWindowEnd,
+            // Laundry returns the SAME day, 7–9 PM — exactly what the admin order
+            // stores. Send it authoritatively so the admin intake is actionable
+            // (status "new", not "intake-pending") and the return window is right.
+            ...(simpleService === "laundry"
+              ? { deliveryDate: pickupDateISO, deliveryTimeWindow: "7–9 PM" }
+              : {}),
             address,
             buildingId: intakeBuildingKey || null,
             unit: freshUser?.unit || user?.unit || null,
@@ -1555,7 +1582,7 @@ export const chatRouter = router({
           );
 
           if (intakeResult.success) {
-            await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
+            await updateServiceRequest(sr.id, { orderId: intakeResult.orderId, status: "confirmed" });
             console.log(`[BookingConfirm][FastPath] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
             intakeSuccess = true;
             adminOrderId = intakeResult.orderId;
@@ -1971,6 +1998,22 @@ export const chatRouter = router({
           const effectiveUserId = bldgUserId;
           serviceCategory = normalizeServiceCategory(bookingMeta.service);
 
+          // HELD standard laundry/dry-cleaning is booked ONLY by the deterministic
+          // fast-path above. Never let the legacy LLM path create a second order
+          // for HELD laundry/dry-cleaning — that competing path produced the
+          // duplicate orders and the lost confirmed-state handoff in the DB proof.
+          if (heldSource && isLaundryOrDryCleaning(serviceCategory)) {
+            console.warn(
+              "[ResidentBooking][LLM] BLOCKED held laundry/dry-clean from the LLM booking path; the deterministic fast-path owns this booking"
+            );
+            return {
+              role: "assistant" as const,
+              content:
+                "This did not set in motion yet. I kept the request here so you can try again.",
+              booking: null,
+            };
+          }
+
           let freshUserForTutorial = await getBldgUserById(bldgUserId);
           if (getCriticalProfileGaps(freshUserForTutorial).missingPayment) {
             const lookup = await tryAttachAdminSavedPaymentMethod(
@@ -2166,7 +2209,7 @@ export const chatRouter = router({
             );
 
             if (intakeResult.success) {
-              await updateServiceRequest(sr.id, { orderId: intakeResult.orderId });
+              await updateServiceRequest(sr.id, { orderId: intakeResult.orderId, status: "confirmed" });
               console.log(`[BookingConfirm][LLM] stored orderId=${intakeResult.orderId} on service_request #${sr.id}`);
               llmAdminOrderId = intakeResult.orderId;
             } else {
