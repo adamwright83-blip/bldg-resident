@@ -2883,17 +2883,21 @@ export const chatRouter = router({
       }
 
       // SERVER BACKSTOP (live ritual-replay incident): even if the classifier
-      // says add_service, a LAUNDRY mention while an ACTIVE laundry order
-      // exists + timing/change language is a modification of the existing
-      // order — NEVER a new booking. Override to timing so the client can
-      // never replay the new-order ritual for "…delivered at 5pm. 7pm is too
-      // late." class messages.
+      // says add_service, a LAUNDRY mention with timing/change language
+      // ("delivered at 5pm", "7pm is too late", "earlier", "back by…") is a
+      // TIMING ask — NEVER a new booking. This holds with OR WITHOUT an active
+      // order: with one, it routes to the existing-order dispatch; without
+      // one, the timing path answers honestly that no active order exists
+      // (offering to book) — but it must never return add_service and let the
+      // client replay the new-order ritual.
       if (intent === "add_service") {
         const timingDetails =
-          classification.addServiceType === "laundry" && active ? getTimingDetails(message) : null;
+          classification.addServiceType === "laundry" ? getTimingDetails(message) : null;
         if (timingDetails) {
           console.log(
-            `[PostOrderFollowup] backstop override: add_service(laundry) -> timing (active order #${active!.orderId})`,
+            `[PostOrderFollowup] backstop override: add_service(laundry) -> timing (${
+              active ? `active order #${active.orderId}` : "no active order"
+            })`,
           );
           intent = "timing";
           classification = {
