@@ -2966,9 +2966,13 @@ function HeldTransformingState({
       // Remember whether THIS reply offered to book — consumed by the next message.
       pendingBookOfferRef.current = Boolean((res as { offeredBooking?: boolean }).offeredBooking);
 
-      // A brand-new service is booked by the PARENT booking flow — the post-order
-      // phone must not create orders itself.
-      if (res.intent === "add_service") {
+      // A brand-new service is booked by the PARENT booking flow — and ONLY on
+      // the server's EXPLICIT contract (bookNewService === true). The client
+      // never infers "new service" from text on its own: the live ritual-replay
+      // incident ("…7pm is too late" → full Picasso/clay re-book) came from
+      // trusting intent alone. Existing-order resolutions render reply +
+      // dispatch slip only — no ritual, no clay token, no booking flow.
+      if (res.intent === "add_service" && (res as { bookNewService?: boolean }).bookNewService === true) {
         renderFollowup({
           reply: res.reply || "On it — setting that up as a new request.",
           triggersCourier: false,

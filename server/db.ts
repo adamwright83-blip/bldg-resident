@@ -58,7 +58,11 @@ function isSchemaColumnError(error: unknown): boolean {
   );
 }
 
-const serviceRequestBaseSelect = {
+// Exported for the hydration regression tests: the suite asserts this select
+// list carries the operational-truth columns (orderId, requestJson) so the
+// live incident — MySQL holding orderId=172 while the app saw orderId:null —
+// can never silently return.
+export const serviceRequestBaseSelect = {
   id: serviceRequests.id,
   bldgUserId: serviceRequests.bldgUserId,
   serviceType: serviceRequests.serviceType,
@@ -67,6 +71,13 @@ const serviceRequestBaseSelect = {
   requestJson: serviceRequests.requestJson,
   scheduledDate: serviceRequests.scheduledDate,
   scheduledWindow: serviceRequests.scheduledWindow,
+  // orderId is the booking truth. It was missing from this select (and hydrate
+  // hard-nulled it), so every consumer — including the post-order resolver —
+  // saw orderId:null even when the DB row carried a real admin order id
+  // (live SR #115 / order 172, 2026-06-12). The column is guaranteed to exist
+  // in production: updateServiceRequest writes it and
+  // getServiceRequestByBldgUserAndOrderId filters on it.
+  orderId: serviceRequests.orderId,
   createdAt: serviceRequests.createdAt,
   updatedAt: serviceRequests.updatedAt,
 };
@@ -81,12 +92,15 @@ type ServiceRequestBaseRow = typeof serviceRequests.$inferSelect extends infer _
       requestJson: unknown;
       scheduledDate: string | null;
       scheduledWindow: string | null;
+      orderId: number | null;
       createdAt: Date;
       updatedAt: Date;
     }
   : never;
 
-function hydrateServiceRequest(row: ServiceRequestBaseRow): ServiceRequest {
+// Exported for the hydration regression tests (real path, not a hand-built
+// resolver object): a row carrying orderId MUST come out with that orderId.
+export function hydrateServiceRequest(row: ServiceRequestBaseRow): ServiceRequest {
   return {
     ...row,
     scheduledStartUtc: null,
@@ -99,7 +113,9 @@ function hydrateServiceRequest(row: ServiceRequestBaseRow): ServiceRequest {
     upgradeLabel: null,
     paymentAdjustmentDueCents: null,
     receiptUrl: null,
-    orderId: null,
+    // NEVER default orderId to null when the row has a value — that exact line
+    // (orderId: null) is what blinded the post-order resolver in production.
+    orderId: row.orderId ?? null,
     buildingId: null,
     buildingLabel: null,
     residentName: null,

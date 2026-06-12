@@ -48,6 +48,24 @@ describe("classifyPostOrderMessage — post-order intent routing", () => {
     expect(c.timingKind).toBe("return_by_time");
   });
 
+  it("LIVE REGRESSION: '…delivered at 5pm though. 7pm is too late.' is TIMING, never add_service", () => {
+    // The degree adverb "too" (in "too late") used to match the additive
+    // marker, classifying this as a NEW laundry order → full booking ritual
+    // replay. It is a delivery-time change on the existing order.
+    const c = classifyPostOrderMessage("i need my laundry delivered at 5pm though. 7pm is too late.");
+    expect(c.intent).toBe("timing");
+    expect(c.timingKind).toBe("return_by_time");
+    expect(c.requestedWindow).toBe("5pm");
+  });
+
+  it("degree-adverb 'too' is never an add marker; clause-final 'too' still is", () => {
+    for (const msg of ["7pm is too late", "that's too early", "it costs too much"]) {
+      expect(classifyPostOrderMessage(msg).intent).not.toBe("add_service");
+    }
+    expect(classifyPostOrderMessage("book dog grooming too").intent).toBe("add_service");
+    expect(classifyPostOrderMessage("laundry too.").intent).toBe("add_service");
+  });
+
   it("pickup-time change is detected distinctly", () => {
     const c = classifyPostOrderMessage("move pickup to 7pm");
     expect(c.intent).toBe("timing");

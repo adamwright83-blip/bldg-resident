@@ -39,7 +39,7 @@ import { sendOwnerAlert } from "../ownerNotify";
 import { createOpsPickup } from "../opsIntegration";
 import { withDefaultReturnBy } from "../intakeReturnBy";
 import { createAdminAgentClient } from "../agents/residentAgentClient";
-import { classifyPostOrderMessage } from "../../shared/heldPostOrderClassifier";
+import { classifyPostOrderMessage, getTimingDetails } from "../../shared/heldPostOrderClassifier";
 import { resolveActiveLaundryServiceRequest } from "../postOrderResolver";
 import { parseExplicitDateTime } from "../lib/dateParser";
 import { getSessionCookieOptions } from "../_core/cookies";
@@ -2830,8 +2830,8 @@ export const chatRouter = router({
     .input(z.object({ message: z.string().min(1).max(2000) }))
     .mutation(async ({ input, ctx }) => {
       const message = input.message.trim();
-      const classification = classifyPostOrderMessage(message);
-      const intent = classification.intent;
+      let classification = classifyPostOrderMessage(message);
+      let intent = classification.intent;
 
       const baseReply = (reply: string) => ({
         intent,
@@ -2840,19 +2840,20 @@ export const chatRouter = router({
         triggersCourier: false,
       });
 
-      // add_service → handled by the parent booking flow on the client. The
-      // server must NOT book here (keep ONE deterministic booking path).
-      if (intent === "add_service") {
+      // add_service when NOT signed in: nothing to cross-check — hand to the
+      // parent booking flow (it owns auth). bookNewService is the EXPLICIT
+      // client contract: the new-order ritual may only run when this is true.
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (intent === "add_service" && !bldgUserId) {
         return {
           intent,
           reply: "",
           addServiceType: classification.addServiceType ?? null,
+          bookNewService: true,
           operatorTaskCreated: false,
           triggersCourier: false,
         };
       }
-
-      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
       if (!bldgUserId) {
         return baseReply("I’ve got that. Once you’re signed in I can tie it to your order.");
       }
@@ -2879,6 +2880,39 @@ export const chatRouter = router({
         console.warn(
           `[PostOrderFollowup] duplicate_creation_detected: user=${bldgUserId} extraOrderIds=${resolved.duplicateOrderIds.join(",")}`,
         );
+      }
+
+      // SERVER BACKSTOP (live ritual-replay incident): even if the classifier
+      // says add_service, a LAUNDRY mention while an ACTIVE laundry order
+      // exists + timing/change language is a modification of the existing
+      // order — NEVER a new booking. Override to timing so the client can
+      // never replay the new-order ritual for "…delivered at 5pm. 7pm is too
+      // late." class messages.
+      if (intent === "add_service") {
+        const timingDetails =
+          classification.addServiceType === "laundry" && active ? getTimingDetails(message) : null;
+        if (timingDetails) {
+          console.log(
+            `[PostOrderFollowup] backstop override: add_service(laundry) -> timing (active order #${active!.orderId})`,
+          );
+          intent = "timing";
+          classification = {
+            intent: "timing",
+            timingKind: timingDetails.timingKind,
+            requestedWindow: timingDetails.requestedWindow,
+            deadline: timingDetails.deadline,
+          };
+        } else {
+          // A genuinely new service → parent booking flow, explicitly.
+          return {
+            intent,
+            reply: "",
+            addServiceType: classification.addServiceType ?? null,
+            bookNewService: true,
+            operatorTaskCreated: false,
+            triggersCourier: false,
+          };
+        }
       }
 
       if (intent === "status") {
