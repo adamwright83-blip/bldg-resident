@@ -466,8 +466,11 @@ export default function PenPullPrototype({
     setEditDraft(text);
     setSpeechTranscript(text);
     setConfirmedServices(inferServicesFromRequest(text));
-    setTypedCommandStatus("ready");
-    setMode("requestReady");
+    // Skip the "YOUR REQUEST" confirmation card — go straight to Set it in
+    // motion. ChatGPT phrasing: don't add a confirmation popup after every
+    // message; it breaks the chatbot experience and adds a point of friction
+    // that can confuse the intent classifier.
+    void beginSetInMotion(text, inferServicesFromRequest(text));
   };
   const enterRequestEditMode = (requestOverride?: string) => {
     const nextText = requestOverride?.trim() || confirmedRequest || draft || speechTranscript;
@@ -1117,11 +1120,14 @@ export default function PenPullPrototype({
 
           {mode === "collectName" && (
             <HeldLaunchRecoveryCard
-              actionLabel={saveNameMutation.isPending ? "Saving..." : "Continue →"}
+              actionLabel=""
               message={heldAgentMessage}
               onRetry={retryPendingOrder}
               title="Your name"
             >
+              {/* The form's own submit IS the CTA — the card-level actionLabel
+                  is suppressed (empty) so there is never a duplicate "Continue →"
+                  below the inputs. */}
               <form className="mt-4 space-y-3" onSubmit={submitHeldName}>
                 <input
                   autoComplete="given-name"
@@ -1670,13 +1676,17 @@ function HeldLaunchRecoveryCard({
           ) : (
             <span />
           )}
-          <button
-            className="min-h-12 flex-1 text-right font-serif text-[16px] text-[#9a681f] transition-transform active:scale-[0.98]"
-            onClick={onRetry}
-            type="button"
-          >
-            {actionLabel}
-          </button>
+          {actionLabel ? (
+            <button
+              className="min-h-12 flex-1 text-right font-serif text-[16px] text-[#9a681f] transition-transform active:scale-[0.98]"
+              onClick={onRetry}
+              type="button"
+            >
+              {actionLabel}
+            </button>
+          ) : (
+            <span />
+          )}
         </div>
       </div>
     </section>
