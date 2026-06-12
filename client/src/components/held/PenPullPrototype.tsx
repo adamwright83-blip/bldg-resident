@@ -466,8 +466,8 @@ export default function PenPullPrototype({
     setEditDraft(text);
     setSpeechTranscript(text);
     setConfirmedServices(inferServicesFromRequest(text));
-    setTypedCommandStatus("ready");
-    setMode("requestReady");
+    // Go straight to booking — no "YOUR REQUEST / Set it in motion" card.
+    void beginSetInMotion(text, inferServicesFromRequest(text));
   };
   const enterRequestEditMode = (requestOverride?: string) => {
     const nextText = requestOverride?.trim() || confirmedRequest || draft || speechTranscript;
@@ -1019,12 +1019,6 @@ export default function PenPullPrototype({
             />
             <HeldComposerKeyboard />
           </div>
-
-          {mode === "choice" && (
-            <p className="pointer-events-none absolute bottom-[292px] left-[13%] right-[22%] z-[42] text-center font-serif text-[15px] italic leading-5 text-[#2f2923]/80">
-              Type or speak what's on your mind.
-            </p>
-          )}
 
           {mode === "choice" && !physics.isPointerActive && (
             <p className="pointer-events-none absolute bottom-[188px] left-[22%] z-[44] w-[170px] whitespace-nowrap text-center font-serif text-[14px] italic leading-6 text-[#745b45]/88">
