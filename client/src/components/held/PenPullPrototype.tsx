@@ -1310,40 +1310,46 @@ export default function PenPullPrototype({
             </div>
           )}
 
-          {/* The Labyrinth knob stays reachable across idle home AND the
-              active service world (post-order, phone follow-up, courier
-              waiting). It yields only while the horse is mid-crossing or the
-              dispatch slip is open, so it never overlaps the ceremony. */}
-          <HeldLabyrinthDrawer
-            activePanel={labyrinthPanel}
-            isOpen={labyrinthOpen}
-            onClose={() => setLabyrinthOpen(false)}
-            onOpenChange={setLabyrinthOpen}
-            onSelectPanel={(panel) => {
-              setLabyrinthOpen(false);
-              setLabyrinthPanel(panel);
-            }}
-            visible={
-              (showHomeWorld || mode === "held" || mode === "transforming") &&
-              !courierForeground
-            }
-          />
-
-          <AnimatePresence>
-            {labyrinthPanel === "receipts" && (
-              <HeldLabyrinthReceiptsLayer
-                key="labyrinth-receipts"
-                onClose={() => setLabyrinthPanel(null)}
-              />
-            )}
-            {labyrinthPanel === "payment" && (
-              <HeldLabyrinthPaymentLayer
-                key="labyrinth-payment"
-                onClose={() => setLabyrinthPanel(null)}
-              />
-            )}
-          </AnimatePresence>
         </div>
+
+        {/* ── Marble labyrinth knob — OUTSIDE the overflow:hidden stage div ──
+            Root cause of invisible knob: the stage div has `overflow-hidden`
+            which clips anything that extends past its right edge. The board
+            parks at x≈54% of its own width so the knob (left:-7.2% of board)
+            peeks ~25px into view from the right. At x:102% (old value) the
+            knob was 150px off-screen on every real phone. Moving the board
+            here (sibling of the overflow-hidden div, inside the relative
+            held-app-frame section) lets it extend freely off screen-right
+            while the knob remains visible. */}
+        <HeldLabyrinthDrawer
+          activePanel={labyrinthPanel}
+          isOpen={labyrinthOpen}
+          onClose={() => setLabyrinthOpen(false)}
+          onOpenChange={setLabyrinthOpen}
+          onSelectPanel={(panel) => {
+            setLabyrinthOpen(false);
+            setLabyrinthPanel(panel);
+          }}
+          visible={
+            (showHomeWorld || mode === "held" || mode === "transforming") &&
+            !courierForeground
+          }
+        />
+
+        <AnimatePresence>
+          {labyrinthPanel === "receipts" && (
+            <HeldLabyrinthReceiptsLayer
+              key="labyrinth-receipts"
+              onClose={() => setLabyrinthPanel(null)}
+            />
+          )}
+          {labyrinthPanel === "payment" && (
+            <HeldLabyrinthPaymentLayer
+              key="labyrinth-payment"
+              onClose={() => setLabyrinthPanel(null)}
+            />
+          )}
+        </AnimatePresence>
       </section>
     </main>
   );
@@ -1456,7 +1462,7 @@ function HeldLabyrinthDrawer({
         animate={
           isOpen
             ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
-            : { x: "102%", y: "-50%", rotateX: 0, scale: 0.94 }
+            : { x: "56%", y: "-50%", rotateX: 0, scale: 0.94 }
         }
         className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
         initial={false}
