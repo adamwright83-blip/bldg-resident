@@ -1553,6 +1553,12 @@ export const chatRouter = router({
             pickupWindow: defaults.window,
             pickupWindowStart,
             pickupWindowEnd,
+            // Laundry returns the SAME day, 7–9 PM — exactly what the admin order
+            // stores. Send it authoritatively so the admin intake is actionable
+            // (status "new", not "intake-pending") and the return window is right.
+            ...(simpleService === "laundry"
+              ? { deliveryDate: pickupDateISO, deliveryTimeWindow: "7–9 PM" }
+              : {}),
             address,
             buildingId: intakeBuildingKey || null,
             unit: freshUser?.unit || user?.unit || null,
