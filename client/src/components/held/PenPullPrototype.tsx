@@ -3919,8 +3919,8 @@ function HeldTransformingState({
       renderFollowup({
         reply: res.reply || "I’ve got that.",
         triggersCourier: Boolean(res.triggersCourier && res.operatorTaskCreated),
-        threadLabel: res.dispatchSlip?.thread,
-        stateLabel: res.dispatchSlip?.state,
+        threadLabel: "dispatchSlip" in res ? res.dispatchSlip?.thread : undefined,
+        stateLabel: "dispatchSlip" in res ? res.dispatchSlip?.state : undefined,
         nextValue,
       });
     } catch (error) {

@@ -14,7 +14,13 @@
  * The classifier never books, cancels, or mutates anything. It only labels.
  */
 
-export type PostOrderIntent = "cancel" | "timing" | "status" | "add_service" | "free_chat";
+export type PostOrderIntent =
+  | "cancel"
+  | "timing"
+  | "status"
+  | "add_service"
+  | "general_capability_question"
+  | "free_chat";
 
 export type PostOrderTimingKind = "return_by_time" | "pickup_time_change" | "timing_constraint";
 
@@ -64,6 +70,9 @@ const SERVICE_NOUNS: Array<{ type: PostOrderAddServiceType; re: RegExp }> = [
 // Read-only questions about the EXISTING order (no change requested).
 const STATUS_RE =
   /\b(what'?s booked|what is booked|already booked|what did i (?:book|order)|what do i have|status|recap|where (?:are|is) (?:we|it|my)|when(?:'?s| is)?\s+(?:the\s+)?(?:pickup|it coming|coming back|delivery|return|ready)|what time(?:'?s| is)?\s+(?:the\s+)?(?:pickup|return|delivery))\b/;
+
+const GENERAL_CAPABILITY_RE =
+  /\b(what else can (?:i ask|i talk|you do)|can you help with things besides|how does this work|what services do you support|what is held|how do receipts work|how do i message (?:the )?vendor|can i ask you questions|what can i talk to you about)\b/;
 
 // A change/constraint to the existing order's timing.
 const TIMING_VERB_RE =
@@ -176,6 +185,10 @@ export function classifyPostOrderMessage(message: string): PostOrderClassificati
   const hasTimingVerb = TIMING_VERB_RE.test(text) || TIME_RE.test(text) || LOOSE_TIME_RE.test(text);
   if (STATUS_RE.test(text) && !hasTimingVerb) {
     return { intent: "status" };
+  }
+
+  if (GENERAL_CAPABILITY_RE.test(text)) {
+    return { intent: "general_capability_question" };
   }
 
   // 4) Timing change/constraint on the existing order.

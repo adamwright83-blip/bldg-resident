@@ -263,6 +263,18 @@ function makeTestModeToolResult(
       path: "agent-tool",
     };
   }
+  if (toolName === "createOrderFollowupTaskTool") {
+    return { success: true, opsTaskId: `ops_test_${Date.now()}`, path: "agent-tool" };
+  }
+  if (toolName === "cancelResidentOrderTool") {
+    return {
+      success: true,
+      orderId: typeof input.orderId === "number" ? input.orderId : Number(input.orderId),
+      orderCancelled: true,
+      status: "cancelled",
+      path: "agent-tool",
+    };
+  }
   return { success: true, path: "agent-tool" };
 }
 
@@ -312,6 +324,12 @@ function getMissingRequiredIdReason(
   ) {
     return "missing_requestId";
   }
+  if (toolName === "createOrderFollowupTaskTool" && !hasPresentId(output.opsTaskId)) {
+    return "missing_opsTaskId";
+  }
+  if (toolName === "cancelResidentOrderTool" && output.orderCancelled !== true) {
+    return "missing_orderCancelled";
+  }
   return null;
 }
 
@@ -323,6 +341,8 @@ function getRequiredIdLogValue(toolName: string, output: Record<string, unknown>
   if (toolName === "createResidentCoordinatedRequestTool") {
     return `requestId:${String(output.requestId ?? "missing")}`;
   }
+  if (toolName === "createOrderFollowupTaskTool") return `opsTaskId:${String(output.opsTaskId ?? "missing")}`;
+  if (toolName === "cancelResidentOrderTool") return `orderCancelled:${String(output.orderCancelled ?? "missing")}`;
   return "not_required";
 }
 

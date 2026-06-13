@@ -37,9 +37,23 @@ describe("classifyPostOrderMessage — post-order intent routing", () => {
 
   it("Case 5: 'thank you' → free_chat (no horse, no order)", () => {
     expect(classifyPostOrderMessage("thank you").intent).toBe("free_chat");
-    expect(classifyPostOrderMessage("how does this work?").intent).toBe("free_chat");
     expect(classifyPostOrderMessage("how much does this cost?").intent).toBe("free_chat");
     expect(classifyPostOrderMessage("who picks it up?").intent).toBe("free_chat");
+  });
+
+  it("capability questions stay helpful instead of active-order fallback copy", () => {
+    for (const msg of [
+      "What else can I talk to you about other than ordering laundry?",
+      "what else can you do?",
+      "how does this work?",
+      "what services do you support?",
+      "what is HELD?",
+      "how do receipts work?",
+      "how do I message the vendor?",
+      "can I ask you questions?",
+    ]) {
+      expect(classifyPostOrderMessage(msg).intent).toBe("general_capability_question");
+    }
   });
 
   it("Case 6: 'can laundry come back earlier?' → timing", () => {

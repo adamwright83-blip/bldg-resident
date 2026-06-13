@@ -51,6 +51,7 @@ import {
   needsCriticalProfileRecovery,
 } from "../../shared/profileCritical";
 import { runResidentAgent } from "../agents/residentAgent";
+import { getOrCreateResidentAgentSession } from "../agents/session";
 import { inferResidentIntent } from "../agents/intentClassifier";
 import { tryAttachAdminSavedPaymentMethod } from "../agents/adminSavedPaymentLookup";
 import {
@@ -1155,6 +1156,10 @@ function buildFreeChatReply(message: string): string {
   return "I’ve got the plan held. Tell me if you want to change the timing, add something, or cancel.";
 }
 
+function buildGeneralCapabilityReply(): string {
+  return "You can ask me to manage laundry, dry cleaning, pet grooming, car detail, home cleaning, delivery timing, cancellations, receipts, payment questions, and vendor/operator messages.";
+}
+
 function buildTimingFollowupReply(c: {
   timingKind?: string;
   requestedWindow?: string | null;
@@ -1162,7 +1167,7 @@ function buildTimingFollowupReply(c: {
 }): string {
   const verb = c.timingKind === "pickup_time_change" ? "pick it up" : "return it";
   const window = c.requestedWindow ? ` by ${c.requestedWindow}` : " earlier";
-  let reply = `Yes — I’m asking LAUNDRY BUTLER whether they can ${verb}${window}`;
+  let reply = `I’m asking whether your laundry can be ${verb === "return it" ? "returned" : "picked up"}${window}`;
   const deadline = c.deadline ?? "";
   if (/\bdinner\b/i.test(deadline)) reply += " so you have it before dinner";
   const dTime = deadline.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
@@ -2832,12 +2837,19 @@ export const chatRouter = router({
       const message = input.message.trim();
       let classification = classifyPostOrderMessage(message);
       let intent = classification.intent;
+      const publicIntent = () =>
+        intent === "timing"
+          ? "order_timing_change"
+          : intent === "cancel"
+            ? "cancel_order"
+            : intent;
 
       const baseReply = (reply: string) => ({
-        intent,
+        intent: publicIntent(),
         reply,
         operatorTaskCreated: false,
         triggersCourier: false,
+        bookNewService: false,
       });
 
       // add_service when NOT signed in: nothing to cross-check — hand to the
@@ -2922,6 +2934,9 @@ export const chatRouter = router({
       if (intent === "status") {
         return baseReply(buildStatusRecapReply(active, requests));
       }
+      if (intent === "general_capability_question") {
+        return baseReply(buildGeneralCapabilityReply());
+      }
       if (intent === "free_chat") {
         return baseReply(buildFreeChatReply(message));
       }
@@ -2936,18 +2951,25 @@ export const chatRouter = router({
           console.warn(
             `[PostOrderFollowup] laundry rows exist but none resolved active — NOT offering re-book. user=${bldgUserId}`,
           );
+          if (intent === "cancel") {
+            return baseReply("I don’t see an active order to cancel.");
+          }
           return baseReply(
             "I found your laundry request, but it isn’t in a changeable state on my side yet — I’m flagging it to the operator now. Nothing else needed from you.",
           );
         }
         return {
-          intent,
-          reply: "I don’t see an active laundry order to change right now. Want me to book one?",
+          intent: publicIntent(),
+          reply:
+            intent === "cancel"
+              ? "I don’t see an active order to cancel."
+              : "I don’t see an active laundry order to change right now. Want me to book one?",
           operatorTaskCreated: false,
           triggersCourier: false,
+          bookNewService: false,
           // The client stores this; an affirmation ("yes") then routes to the
           // parent deterministic booking flow instead of re-running this resolver.
-          offeredBooking: true,
+          offeredBooking: intent !== "cancel",
         };
       }
 
@@ -2967,8 +2989,71 @@ export const chatRouter = router({
         ? ((existingJson as any).followups as any[])
         : [];
 
+      if (intent === "cancel") {
+        if (resolved.duplicateOrderIds.length > 0) {
+          return baseReply("I see more than one active order. Which one should I cancel?");
+        }
+
+        const client = createAdminAgentClient();
+        const session = await getOrCreateResidentAgentSession(bldgUserId);
+        const cancelResult = await client.runAdminTool(
+          "cancelResidentOrderTool",
+          {
+            orderId: active.orderId,
+            bldgUserId,
+            reason: message,
+          },
+          session,
+        );
+
+        if (!cancelResult.success || cancelResult.orderCancelled !== true) {
+          console.warn(
+            `[PostOrderFollowup] direct cancellation failed: order=${active.orderId} reason=${(cancelResult as { reason?: string }).reason ?? "unknown"}`,
+          );
+          return {
+            intent: publicIntent(),
+            reply: "I found the order, but I couldn’t cancel it on the order system yet. Try again in a moment.",
+            targetOrderId: active.orderId,
+            serviceRequestId: active.id,
+            orderCancelled: false,
+            operatorTaskCreated: false,
+            triggersCourier: false,
+            bookNewService: false,
+          };
+        }
+
+        const nextFollowups = [
+          ...existingFollowups,
+          {
+            type: "cancel_order",
+            state: "cancelled",
+            requestText: message,
+            at: new Date().toISOString(),
+          },
+        ];
+        try {
+          await updateServiceRequest(active.id, {
+            status: "cancelled",
+            requestJson: { ...existingJson, followups: nextFollowups },
+          });
+        } catch (err) {
+          console.warn("[PostOrderFollowup] admin order cancelled but local service_request update failed", err);
+        }
+
+        return {
+          intent: publicIntent(),
+          reply: "Cancelled. I’ve removed this laundry order from your active plan.",
+          targetOrderId: active.orderId,
+          serviceRequestId: active.id,
+          orderCancelled: true,
+          operatorTaskCreated: false,
+          triggersCourier: false,
+          bookNewService: false,
+        };
+      }
+
       const followupType =
-        intent === "cancel" ? "cancel_request" : classification.timingKind ?? "timing_constraint";
+        classification.timingKind ?? "timing_constraint";
       const requestedWindow = classification.requestedWindow ?? null;
 
       // Idempotency: a matching open follow-up already dispatched → don't spam.
@@ -2981,14 +3066,13 @@ export const chatRouter = router({
       );
       if (duplicate) {
         return {
-          intent,
+          intent: publicIntent(),
           reply:
-            intent === "cancel"
-              ? "Your cancellation request is already with LAUNDRY BUTLER — I’ll confirm the moment they stand down."
-              : `I’ve already asked LAUNDRY BUTLER about ${requestedWindow ? `a ${requestedWindow} ` : "that "}change — still awaiting their reply.`,
+            `I’ve already asked LAUNDRY BUTLER about ${requestedWindow ? `a ${requestedWindow} ` : "that "}change — still awaiting their reply.`,
           operatorTaskCreated: false,
           operatorTaskId: duplicate.operatorTaskId ?? undefined,
           triggersCourier: false,
+          bookNewService: false,
         };
       }
 
@@ -3000,16 +3084,7 @@ export const chatRouter = router({
         user = null;
       }
       const residentName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || null : null;
-      const session = {
-        buildingId: (user?.buildingSlug ?? user?.buildingId ?? null) as string | null,
-        unit: (user?.unit ?? null) as string | null,
-        firstName: (user?.firstName ?? "") as string,
-        lastName: (user?.lastName ?? "") as string,
-        phone: (user?.phoneE164 ?? "") as string,
-        bldgUserId,
-        stripeCustomerId: (user?.stripeCustomerId ?? null) as string | null,
-        stripePaymentMethodId: (user?.stripePaymentMethodId ?? null) as string | null,
-      };
+      const session = await getOrCreateResidentAgentSession(bldgUserId);
 
       const client = createAdminAgentClient();
       const taskResult = await client.runAdminTool(
@@ -3033,9 +3108,15 @@ export const chatRouter = router({
         console.warn(
           `[PostOrderFollowup] operator task failed: reason=${(taskResult as { reason?: string }).reason ?? "unknown"}`,
         );
-        return baseReply(
-          "I caught that, but I couldn’t reach the operator just yet — try again in a moment and I’ll send it through.",
-        );
+        return {
+          intent: publicIntent(),
+          reply: "I caught that, but I couldn’t reach the operator just yet — try again in a moment and I’ll send it through.",
+          targetOrderId: active.orderId,
+          serviceRequestId: active.id,
+          operatorTaskCreated: false,
+          triggersCourier: false,
+          bookNewService: false,
+        };
       }
 
       const operatorTaskId =
@@ -3064,22 +3145,22 @@ export const chatRouter = router({
         console.warn("[PostOrderFollowup] failed to persist follow-up metadata", err);
       }
 
-      const reply =
-        intent === "cancel"
-          ? "Cancellation request sent to LAUNDRY BUTLER — I’ll confirm once they stand down. Nothing’s been charged."
-          : buildTimingFollowupReply(classification);
-      const asked = intent === "cancel" ? "Cancel the laundry pickup" : buildSlipAsked(classification);
+      const reply = buildTimingFollowupReply(classification);
+      const asked = buildSlipAsked(classification);
 
       console.log(
         `[PostOrderFollowup] intent=${intent} type=${followupType} order=${active.orderId} opsTask=${operatorTaskId ?? "?"}`,
       );
 
       return {
-        intent,
+        intent: publicIntent(),
         reply,
+        targetOrderId: active.orderId,
+        serviceRequestId: active.id,
         operatorTaskCreated: true,
         operatorTaskId,
         triggersCourier: true,
+        bookNewService: false,
         dispatchSlip: {
           thread: "LAUNDRY BUTLER",
           asked,
