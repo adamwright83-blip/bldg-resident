@@ -3562,6 +3562,7 @@ function HeldInkGathers({
 
 function HeldTutorialHint({
   arrowClassName,
+  arrowShape = "down",
   className,
   compact = false,
   label,
@@ -3569,12 +3570,32 @@ function HeldTutorialHint({
   stepNumber = 1,
 }: {
   arrowClassName?: string;
+  arrowShape?: "down" | "longDown" | "downRight";
   className: string;
   compact?: boolean;
   label: string;
   message: string;
   stepNumber?: number;
 }) {
+  const arrow =
+    arrowShape === "longDown"
+      ? {
+          className: "h-[280px] w-11",
+          path: "M18 3 C17 47 16 92 17 150 M8 140 L18 156 L29 140",
+          viewBox: "0 0 36 168",
+        }
+      : arrowShape === "downRight"
+        ? {
+            className: "h-24 w-16",
+            path: "M18 3 C17 14 16 25 17 38 M8 29 L18 42 L29 29",
+            viewBox: "0 0 36 56",
+          }
+        : {
+            className: "h-14 w-9",
+            path: "M18 3 C17 14 16 25 17 38 M8 29 L18 42 L29 29",
+            viewBox: "0 0 36 56",
+          };
+
   return (
     <div
       aria-hidden="true"
@@ -3607,12 +3628,12 @@ function HeldTutorialHint({
       </p>
       <svg
         aria-hidden="true"
-        className={`held-tutorial-arrow mx-auto mt-3 block h-14 w-9 ${arrowClassName ?? ""}`}
+        className={`held-tutorial-arrow mx-auto mt-3 block ${arrow.className} ${arrowClassName ?? ""}`}
         fill="none"
-        viewBox="0 0 36 56"
+        viewBox={arrow.viewBox}
       >
         <path
-          d="M18 3 C17 14 16 25 17 38 M8 29 L18 42 L29 29"
+          d={arrow.path}
           stroke="currentColor"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -3654,8 +3675,9 @@ function HeldInstructionBook({
       {isGuideOpen && (
         <>
           <HeldTutorialHint
-            arrowClassName="held-tutorial-arrow-down h-16 w-10"
-            className="bottom-[calc(36px+20.5%+env(safe-area-inset-bottom))] left-[31%] z-[121] w-[152px] -translate-x-1/2 text-center"
+            arrowClassName="held-tutorial-arrow-down"
+            arrowShape="longDown"
+            className="bottom-[calc(36px+11.5%+env(safe-area-inset-bottom))] left-[43%] z-[121] w-[166px] -translate-x-1/2 text-center"
             compact
             label="GET ORDER STATUS"
             message="tap the clay."
@@ -3670,8 +3692,9 @@ function HeldInstructionBook({
             stepNumber={2}
           />
           <HeldTutorialHint
-            arrowClassName="held-tutorial-arrow-down-right h-32 w-16"
-            className="bottom-[calc(36px+33%+env(safe-area-inset-bottom))] right-[1%] z-[121] w-[152px] text-center"
+            arrowClassName="held-tutorial-arrow-down-right"
+            arrowShape="downRight"
+            className="bottom-[calc(36px+48%+env(safe-area-inset-bottom))] left-[82%] z-[121] w-[140px] -translate-x-1/2 text-center"
             compact
             label="SETTINGS & RECEIPTS"
             message="tap the knob."
