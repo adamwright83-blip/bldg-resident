@@ -87,6 +87,41 @@ const HELD_ASSETS = {
   tray: "/held/nursery-heldscreen.png",
 };
 
+const HELD_TUTORIAL_STORAGE_KEYS = {
+  pen: "held.tutorial.penPull.dismissed",
+  phone: "held.tutorial.phoneLift.dismissed",
+  token: "held.tutorial.clayToken.dismissed",
+} as const;
+
+function readHeldTutorialVisible(storageKey: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(storageKey) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+function writeHeldTutorialDismissed(storageKey: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(storageKey, "1");
+  } catch {
+    // Local storage can be unavailable in private contexts; the UI can still run.
+  }
+}
+
+function useHeldOneTimeTutorial(storageKey: string) {
+  const [isVisible, setIsVisible] = useState(() => readHeldTutorialVisible(storageKey));
+
+  const dismiss = () => {
+    setIsVisible(false);
+    writeHeldTutorialDismissed(storageKey);
+  };
+
+  return [isVisible, dismiss] as const;
+}
+
 function useHeldMountedClass() {
   useEffect(() => {
     const root = document.documentElement;
@@ -267,6 +302,9 @@ export default function PenPullPrototype({
   const [typedCommandStatus, setTypedCommandStatus] = useState<
     "idle" | "summarizing" | "ready" | "error"
   >("idle");
+  const [showPenTutorial, dismissPenTutorial] = useHeldOneTimeTutorial(
+    HELD_TUTORIAL_STORAGE_KEYS.pen,
+  );
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
   // Timestamp (ms) when the takingCustody ceremony began, i.e. when the user
   // tapped "Set it in motion" and the request card mounted in its stamped
@@ -689,6 +727,7 @@ export default function PenPullPrototype({
     debug,
     onComposerPenSwipe: enterSpeechMode,
     onUnlock: info => {
+      dismissPenTutorial();
       if (controlledComposerOpen === undefined) {
         setInternalComposerOpen(true);
       }
@@ -699,6 +738,12 @@ export default function PenPullPrototype({
     stageRef,
     tuning: physicsTuning,
   });
+  const showPenTutorialHint =
+    showPenTutorial &&
+    showPenGesture &&
+    mode === "rest" &&
+    !composerTrayVisible &&
+    !physics.isPointerActive;
   const returnToHeld = () => {
     if (!confirmedRequest) return;
 
@@ -1016,11 +1061,19 @@ export default function PenPullPrototype({
               <PenCharm
                 {...physics.penRefs}
                 {...physics.pointerHandlers}
-                className="z-[80]"
+                className={`z-[80] ${showPenTutorialHint ? "held-tutorial-pen-nudge" : ""}`}
                 objectFit="contain"
                 penAssetSrc={penAssetSrc}
                 transformOrigin="50% 3%"
               />
+              {showPenTutorialHint && (
+                <HeldTutorialHint
+                  arrowClassName="held-tutorial-arrow-down"
+                  className="left-[49%] top-[60%] z-[74] w-[230px] -translate-x-1/2 text-center"
+                  label="PULL THE PEN DOWN"
+                  message="to make a request."
+                />
+              )}
             </>
           )}
 
@@ -3433,6 +3486,38 @@ function HeldInkGathers({
   );
 }
 
+function HeldTutorialHint({
+  arrowClassName,
+  className,
+  label,
+  message,
+}: {
+  arrowClassName?: string;
+  className: string;
+  label: string;
+  message: string;
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`held-tutorial-hint pointer-events-none absolute ${className}`}
+    >
+      <div className="mx-auto mb-2 flex w-[120px] items-center justify-center gap-3 text-[#2a2520]/45">
+        <span className="h-px flex-1 bg-current" />
+        <span className="font-serif text-[15px] leading-none text-[#2a2520]/75">1</span>
+        <span className="h-px flex-1 bg-current" />
+      </div>
+      <p className="font-serif text-[15px] uppercase tracking-[0.18em] text-[#2a2520]">
+        {label}
+      </p>
+      <p className="mt-1 font-serif text-[15px] leading-5 text-[#3d342c]/86">
+        {message}
+      </p>
+      <span className={`held-tutorial-arrow mx-auto mt-3 block h-14 w-9 ${arrowClassName ?? ""}`} />
+    </div>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -3494,6 +3579,12 @@ function HeldTransformingState({
   const [courierSlipOpen, setCourierSlipOpen] = useState(false);
   const [courierSlipMode, setCourierSlipMode] = useState<CourierSlipMode>("summary");
   const [highlightedServiceType, setHighlightedServiceType] = useState<string | null>(null);
+  const [showPhoneTutorial, dismissPhoneTutorial] = useHeldOneTimeTutorial(
+    HELD_TUTORIAL_STORAGE_KEYS.phone,
+  );
+  const [showTokenTutorial, dismissTokenTutorial] = useHeldOneTimeTutorial(
+    HELD_TUTORIAL_STORAGE_KEYS.token,
+  );
   const highlightTimerRef = useRef<number | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Server-owned post-order intelligence: classify + (for cancel/timing) create a
@@ -3671,6 +3762,7 @@ function HeldTransformingState({
     }
   };
   const openToken = (token: HeldTokenAsset) => {
+    dismissTokenTutorial();
     setSelectedToken(token);
   };
   const returnPhoneToDock = () => {
@@ -3687,6 +3779,7 @@ function HeldTransformingState({
     setPhoneReplyStatus("idle");
   };
   const engagePhone = () => {
+    dismissPhoneTutorial();
     window.navigator.vibrate?.(8);
     setIsPhoneEngaged(true);
     setPhoneDragY(0);
@@ -3915,6 +4008,21 @@ function HeldTransformingState({
     phase === "clay" &&
     !prefersReducedClay &&
     (gatherBeat === "idle" || gatherBeat === "tension" || gatherBeat === "gather");
+  const showPhoneTutorialHint =
+    showPhoneTutorial &&
+    isSettled &&
+    hasActiveTrayWork &&
+    !isPhoneEngaged &&
+    !selectedToken &&
+    !courierOwnsForeground &&
+    !phoneReply;
+  const showTokenTutorialHint =
+    showTokenTutorial &&
+    isSettled &&
+    tokens.length > 0 &&
+    !isPhoneEngaged &&
+    !selectedToken &&
+    !courierOwnsForeground;
 
   useEffect(() => {
     onCourierForegroundChange?.(courierOwnsForeground);
@@ -4230,7 +4338,7 @@ function HeldTransformingState({
                 : hasActiveTrayWork
                   ? "drop-shadow-[0_10px_12px_rgba(184,137,60,0.16)]"
                   : "drop-shadow-[0_8px_10px_rgba(44,28,14,0.18)]"
-            }`}
+            } ${showPhoneTutorialHint ? "held-tutorial-phone-nudge" : ""}`}
             data-held-phone-interactive="true"
             data-held-phone-state={isPhoneEngaged ? "engaged" : "docked"}
             onPointerCancel={finishPhoneLift}
@@ -4265,6 +4373,14 @@ function HeldTransformingState({
               src={HELD_ASSETS.phoneBody}
             />
           </button>
+          {showPhoneTutorialHint && (
+            <HeldTutorialHint
+              arrowClassName="held-tutorial-arrow-up"
+              className="right-[2%] top-[51%] z-[122] w-[160px] text-center"
+              label="LIFT THE PHONE"
+              message="to adjust, ask, add, or cancel."
+            />
+          )}
         </>
       )}
       {/* Token tray anchors at the walnut cradle when settled. During the clay
@@ -4334,6 +4450,14 @@ function HeldTransformingState({
         );
         })}
       </div>
+      {showTokenTutorialHint && (
+        <HeldTutorialHint
+          arrowClassName="held-tutorial-arrow-down"
+          className="bottom-[calc(36px+18.6%+env(safe-area-inset-bottom))] left-[10%] z-[118] w-[174px] text-center"
+          label="TAP THE CLAY"
+          message="for order status."
+        />
+      )}
       {isSettled && courierStatus !== "idle" && (
         <HeldCourierGesture
           message={courierMessage}
