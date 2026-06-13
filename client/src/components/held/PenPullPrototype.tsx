@@ -60,6 +60,7 @@ const HELD_ASSETS = {
   courierEnvelope: "/held/held_courier_envelope.png",
   courierHorseOutbound: "/held/held_courier_horse_outbound.png",
   courierHorseReturn: "/held/held_courier_horse_return.png",
+  courierHorseHeadTease: "/held/held_courier_head_tease.png",
   courierNote: "/held/held_courier_note.png",
   courierSatchel: "/held/held_courier_satchel.png",
   courierTail: "/held/held_courier_tail.png",
@@ -2624,14 +2625,14 @@ function HeldCourierGesture({
         <>
           <aside
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-[calc(26%+env(safe-area-inset-bottom))] left-0 top-[11%] z-[3] w-[54px]"
+            className="pointer-events-none absolute bottom-[calc(19%+env(safe-area-inset-bottom))] left-0 top-[10%] z-[3] w-[58px]"
           >
             <div className="absolute inset-y-3 right-0 w-px bg-[#b8893c]/14" />
-            <div className="absolute inset-y-4 left-[7px] w-[38px] rounded-r-[3px] bg-[linear-gradient(90deg,rgba(247,237,216,0.5),rgba(247,237,216,0))] shadow-[2px_0_10px_rgba(54,34,16,0.06)]" />
+            <div className="absolute inset-y-4 left-[5px] w-[42px] rounded-r-[3px] bg-[linear-gradient(90deg,rgba(247,237,216,0.42),rgba(247,237,216,0))] shadow-[2px_0_10px_rgba(54,34,16,0.06)]" />
           </aside>
           <button
             aria-label="Open courier dispatch slip"
-            className="pointer-events-auto absolute left-[5px] top-[40%] z-[4] h-[64px] w-[46px] touch-none border-0 bg-transparent p-0 opacity-[0.9] outline-none transition-[filter,opacity,transform] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            className="pointer-events-auto absolute left-[-32px] top-[25%] z-[4] h-[57%] w-[92px] touch-none border-0 bg-transparent p-0 opacity-[0.94] outline-none transition-[filter,opacity,transform] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
             onClick={() => onOpenSlip("summary")}
             onContextMenu={event => event.preventDefault()}
             onPointerCancel={finishTailDrag}
@@ -2651,18 +2652,17 @@ function HeldCourierGesture({
             style={{ transform: `translateX(${tailDragX}px)` }}
             type="button"
           >
-            {/* The tassel is a deliberate "courier is away" marker — grounded
-                with a real shadow and lifted off the edge so it never reads as
-                something accidentally clipped. */}
+            {/* The horse-head sliver is a deliberate "courier is away" marker:
+                mostly offstage, but alive enough to invite the status slip. */}
             <span
               aria-hidden="true"
-              className="absolute -bottom-2 left-1/2 z-0 h-[7px] w-[88%] -translate-x-1/2 rounded-full bg-[#5f3a16]/30 blur-[5px]"
+              className="absolute bottom-[10%] left-[36px] z-0 h-[76%] w-[24px] rounded-full bg-[#5f3a16]/18 blur-[9px]"
             />
             <img
               alt=""
-              className="relative z-[1] h-full w-full object-contain drop-shadow-[0_10px_14px_rgba(54,34,16,0.34)]"
+              className="relative z-[1] h-full w-auto max-w-none object-contain object-right drop-shadow-[0_12px_16px_rgba(54,34,16,0.28)]"
               draggable={false}
-              src={HELD_ASSETS.courierTail}
+              src={HELD_ASSETS.courierHorseHeadTease}
             />
           </button>
         </>
@@ -4496,7 +4496,7 @@ function HeldTransformingState({
           </div>
           <img
             alt=""
-            className="pointer-events-none absolute bottom-[calc(36px+5.7%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[112px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_5px_7px_rgba(31,21,13,0.28)]"
+            className="pointer-events-none absolute bottom-[calc(36px+1.5%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[170px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_7px_10px_rgba(31,21,13,0.30)]"
             draggable={false}
             src={penAssetSrc}
           />
