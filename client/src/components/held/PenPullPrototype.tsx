@@ -64,6 +64,7 @@ const HELD_ASSETS = {
   courierSatchel: "/held/held_courier_satchel.png",
   courierTail: "/held/held_courier_tail.png",
   courierTailGlow: "/held/held_courier_tail_glow.png",
+  encyclopedia: "/held/encyclopedia.png",
   galleryBench: "/held/nursery-cradle.png",
   labyrinthBoard: "/held/held_labyrinth_board.png",
   labyrinthKnob: "/held/held_labyrinth_knob.png",
@@ -88,6 +89,7 @@ const HELD_ASSETS = {
 };
 
 const HELD_TUTORIAL_STORAGE_KEYS = {
+  instructionsBook: "held.tutorial.instructionsBook.dismissed",
   pen: "held.tutorial.penPull.dismissed",
   phone: "held.tutorial.phoneLift.dismissed",
   token: "held.tutorial.clayToken.dismissed",
@@ -296,6 +298,12 @@ export default function PenPullPrototype({
   const [speechTranscript, setSpeechTranscript] = useState("");
   const [labyrinthOpen, setLabyrinthOpen] = useState(false);
   const [labyrinthPanel, setLabyrinthPanel] = useState<LabyrinthPanel>(null);
+  const [showInstructionsBook, setShowInstructionsBook] = useState(() =>
+    readHeldTutorialVisible(HELD_TUTORIAL_STORAGE_KEYS.instructionsBook),
+  );
+  const [forceShowInstructionsBook, setForceShowInstructionsBook] = useState(false);
+  const [instructionsGuideOpen, setInstructionsGuideOpen] = useState(false);
+  const [instructionsGuideSeen, setInstructionsGuideSeen] = useState(false);
   // True while the courier horse is crossing or the dispatch slip is open —
   // the Labyrinth knob yields the foreground during that ceremony only.
   const [courierForeground, setCourierForeground] = useState(false);
@@ -817,9 +825,49 @@ export default function PenPullPrototype({
     setPendingOrderServices([]);
     setLabyrinthOpen(false);
     setLabyrinthPanel(null);
+    setForceShowInstructionsBook(false);
+    setInstructionsGuideOpen(false);
+    setInstructionsGuideSeen(false);
     setTypedCommandStatus("idle");
     setMode("rest");
     physics.reset();
+  };
+  const consumeInstructionsGuide = () => {
+    if (!instructionsGuideSeen) {
+      setForceShowInstructionsBook(false);
+      setInstructionsGuideOpen(false);
+      return;
+    }
+
+    setInstructionsGuideOpen(false);
+    setForceShowInstructionsBook(false);
+    setInstructionsGuideSeen(false);
+    if (showInstructionsBook) {
+      setShowInstructionsBook(false);
+      writeHeldTutorialDismissed(HELD_TUTORIAL_STORAGE_KEYS.instructionsBook);
+    }
+  };
+  const toggleInstructionsGuide = () => {
+    if (instructionsGuideOpen) {
+      consumeInstructionsGuide();
+      return;
+    }
+
+    setInstructionsGuideOpen(true);
+    setInstructionsGuideSeen(true);
+  };
+  const showInstructionsFromLabyrinth = () => {
+    setLabyrinthOpen(false);
+    setLabyrinthPanel(null);
+    setForceShowInstructionsBook(true);
+    setInstructionsGuideOpen(true);
+    setInstructionsGuideSeen(true);
+  };
+  const handleLabyrinthOpenChange = (nextOpen: boolean) => {
+    if (nextOpen && instructionsGuideOpen) {
+      consumeInstructionsGuide();
+    }
+    setLabyrinthOpen(nextOpen);
   };
 
   useEffect(() => {
@@ -1353,11 +1401,16 @@ export default function PenPullPrototype({
             <HeldTransformingState
               debugOpenLaundryVitrine={debugOpenLaundryVitrine}
               displayRequest={confirmedRequest}
+              forceShowInstructionsBook={forceShowInstructionsBook}
+              instructionsGuideOpen={instructionsGuideOpen}
+              instructionsBookVisible={showInstructionsBook || forceShowInstructionsBook}
               isHeld={mode === "held"}
               lastOrderId={lastOrderId}
               onAddService={(text) => void beginSetInMotion(text, inferServicesFromRequest(text))}
               onCourierForegroundChange={setCourierForeground}
               onDebugLaundryVitrineOpened={() => setDebugOpenLaundryVitrine(false)}
+              onInstructionsGuideConsumed={consumeInstructionsGuide}
+              onInstructionsGuideToggle={toggleInstructionsGuide}
               penAssetSrc={penAssetSrc}
               residenceLabel={residenceLabel}
               services={confirmedServices}
@@ -1428,13 +1481,15 @@ export default function PenPullPrototype({
             while the knob remains visible. */}
         <HeldLabyrinthDrawer
           activePanel={labyrinthPanel}
+          guideActive={instructionsGuideOpen}
           isOpen={labyrinthOpen}
           onClose={() => setLabyrinthOpen(false)}
-          onOpenChange={setLabyrinthOpen}
+          onOpenChange={handleLabyrinthOpenChange}
           onSelectPanel={(panel) => {
             setLabyrinthOpen(false);
             setLabyrinthPanel(panel);
           }}
+          onShowInstructions={showInstructionsFromLabyrinth}
           visible={
             (showHomeWorld || mode === "held" || mode === "transforming") &&
             !courierForeground
@@ -1462,17 +1517,21 @@ export default function PenPullPrototype({
 
 function HeldLabyrinthDrawer({
   activePanel,
+  guideActive,
   isOpen,
   onClose,
   onOpenChange,
   onSelectPanel,
+  onShowInstructions,
   visible,
 }: {
   activePanel: LabyrinthPanel;
+  guideActive: boolean;
   isOpen: boolean;
   onClose: () => void;
   onOpenChange: (isOpen: boolean) => void;
   onSelectPanel: (panel: Exclude<LabyrinthPanel, null>) => void;
+  onShowInstructions: () => void;
   visible: boolean;
 }) {
   const dragStartXRef = useRef<number | null>(null);
@@ -1569,7 +1628,9 @@ function HeldLabyrinthDrawer({
             ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
             : { x: "56%", y: "-50%", rotateX: 0, scale: 0.94 }
         }
-        className="absolute left-1/2 top-[46%] z-[122] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none"
+        className={`absolute left-1/2 top-[46%] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none ${
+          guideActive ? "z-[136]" : "z-[122]"
+        }`}
         initial={false}
         style={{ perspective: 1200 }}
         transition={{
@@ -1623,6 +1684,19 @@ function HeldLabyrinthDrawer({
                 type="button"
               />
             ))}
+          {isOpen && (
+            <button
+              aria-label="Show controls guide again"
+              className="absolute left-[31%] top-[55%] w-[38%] rounded-[6px] border border-[#c19a54]/45 bg-[#f9efd9]/82 px-3 py-2 text-center font-serif text-[#2d241c] shadow-[0_8px_18px_rgba(42,26,12,0.16)] outline-none transition-transform duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#d6ac54]/70"
+              onClick={onShowInstructions}
+              type="button"
+            >
+              <span className="block text-[12px] uppercase tracking-[0.18em]">Instructions</span>
+              <span className="mt-1 block text-[11px] italic leading-tight text-[#6c5946]">
+                Show controls guide again
+              </span>
+            </button>
+          )}
         </div>
       </motion.div>
     </>
@@ -3489,28 +3563,46 @@ function HeldInkGathers({
 function HeldTutorialHint({
   arrowClassName,
   className,
+  compact = false,
   label,
   message,
+  stepNumber = 1,
 }: {
   arrowClassName?: string;
   className: string;
+  compact?: boolean;
   label: string;
   message: string;
+  stepNumber?: number;
 }) {
   return (
     <div
       aria-hidden="true"
       className={`held-tutorial-hint pointer-events-none absolute ${className}`}
     >
-      <div className="mx-auto mb-2 flex w-[120px] items-center justify-center gap-3 text-[#2a2520]/45">
+      <div
+        className={`mx-auto flex items-center justify-center gap-3 text-[#2a2520]/45 ${
+          compact ? "mb-1 w-[92px]" : "mb-2 w-[120px]"
+        }`}
+      >
         <span className="h-px flex-1 bg-current" />
-        <span className="font-serif text-[15px] leading-none text-[#2a2520]/75">1</span>
+        <span className="font-serif text-[15px] leading-none text-[#2a2520]/75">
+          {stepNumber}
+        </span>
         <span className="h-px flex-1 bg-current" />
       </div>
-      <p className="font-serif text-[15px] uppercase tracking-[0.18em] text-[#2a2520]">
+      <p
+        className={`font-serif font-semibold uppercase text-[#2a2520] ${
+          compact ? "text-[14px] leading-[1.22] tracking-[0.14em]" : "text-[18px] tracking-[0.16em]"
+        }`}
+      >
         {label}
       </p>
-      <p className="mt-1 font-serif text-[15px] leading-5 text-[#3d342c]/86">
+      <p
+        className={`mt-1 font-serif text-[#3d342c]/86 ${
+          compact ? "text-[13px] leading-[17px]" : "text-[15px] leading-5"
+        }`}
+      >
         {message}
       </p>
       <svg
@@ -3531,20 +3623,88 @@ function HeldTutorialHint({
   );
 }
 
+function HeldInstructionBook({
+  isGuideOpen,
+  onToggleGuide,
+}: {
+  isGuideOpen: boolean;
+  onToggleGuide: () => void;
+}) {
+  return (
+    <>
+      <motion.button
+        aria-label={isGuideOpen ? "Hide controls guide" : "Open controls guide"}
+        animate={
+          isGuideOpen
+            ? { rotate: -4, scale: 1.06, y: -7 }
+            : { rotate: -7, scale: 1, y: 0 }
+        }
+        className="absolute bottom-[calc(36px+4.2%+env(safe-area-inset-bottom))] left-[4.5%] z-[122] w-[78px] border-0 bg-transparent p-0 outline-none drop-shadow-[0_13px_15px_rgba(39,25,13,0.28)] transition-[filter] focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+        onClick={onToggleGuide}
+        transition={{ type: "spring", stiffness: 280, damping: 18 }}
+        type="button"
+      >
+        <img
+          alt=""
+          className="pointer-events-none h-auto w-full select-none"
+          draggable={false}
+          src={HELD_ASSETS.encyclopedia}
+        />
+      </motion.button>
+      {isGuideOpen && (
+        <>
+          <HeldTutorialHint
+            arrowClassName="held-tutorial-arrow-down h-16 w-10"
+            className="bottom-[calc(36px+20.5%+env(safe-area-inset-bottom))] left-[31%] z-[121] w-[152px] -translate-x-1/2 text-center"
+            compact
+            label="GET ORDER STATUS"
+            message="tap the clay."
+            stepNumber={1}
+          />
+          <HeldTutorialHint
+            arrowClassName="held-tutorial-arrow-down h-16 w-10"
+            className="bottom-[calc(36px+20.5%+env(safe-area-inset-bottom))] right-[0%] z-[121] w-[148px] text-center"
+            compact
+            label="CONTACT HELD"
+            message="lift the phone."
+            stepNumber={2}
+          />
+          <HeldTutorialHint
+            arrowClassName="held-tutorial-arrow-down-right h-32 w-16"
+            className="bottom-[calc(36px+33%+env(safe-area-inset-bottom))] right-[1%] z-[121] w-[152px] text-center"
+            compact
+            label="SETTINGS & RECEIPTS"
+            message="tap the knob."
+            stepNumber={3}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
+  forceShowInstructionsBook,
+  instructionsBookVisible,
+  instructionsGuideOpen,
   isHeld,
   lastOrderId,
   onAddService,
   onCourierForegroundChange,
   onDebugLaundryVitrineOpened,
+  onInstructionsGuideConsumed,
+  onInstructionsGuideToggle,
   penAssetSrc,
   residenceLabel,
   services,
 }: {
   debugOpenLaundryVitrine?: boolean;
   displayRequest: string;
+  forceShowInstructionsBook: boolean;
+  instructionsBookVisible: boolean;
+  instructionsGuideOpen: boolean;
   isHeld: boolean;
   // The real admin order id once the booking succeeded. When present, the
   // post-order copy MUST render laundry as Booked — the screen reflects the
@@ -3557,6 +3717,8 @@ function HeldTransformingState({
   // so the Labyrinth knob can step aside instead of overlapping the ceremony.
   onCourierForegroundChange?: (busy: boolean) => void;
   onDebugLaundryVitrineOpened?: () => void;
+  onInstructionsGuideConsumed: () => void;
+  onInstructionsGuideToggle: () => void;
   penAssetSrc: string;
   residenceLabel: string;
   services: HeldParsedService[];
@@ -3592,12 +3754,6 @@ function HeldTransformingState({
   const [courierSlipOpen, setCourierSlipOpen] = useState(false);
   const [courierSlipMode, setCourierSlipMode] = useState<CourierSlipMode>("summary");
   const [highlightedServiceType, setHighlightedServiceType] = useState<string | null>(null);
-  const [showPhoneTutorial, dismissPhoneTutorial] = useHeldOneTimeTutorial(
-    HELD_TUTORIAL_STORAGE_KEYS.phone,
-  );
-  const [showTokenTutorial, dismissTokenTutorial] = useHeldOneTimeTutorial(
-    HELD_TUTORIAL_STORAGE_KEYS.token,
-  );
   const highlightTimerRef = useRef<number | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
   // Server-owned post-order intelligence: classify + (for cancel/timing) create a
@@ -3775,7 +3931,9 @@ function HeldTransformingState({
     }
   };
   const openToken = (token: HeldTokenAsset) => {
-    dismissTokenTutorial();
+    if (instructionsGuideOpen) {
+      onInstructionsGuideConsumed();
+    }
     setSelectedToken(token);
   };
   const returnPhoneToDock = () => {
@@ -3792,7 +3950,9 @@ function HeldTransformingState({
     setPhoneReplyStatus("idle");
   };
   const engagePhone = () => {
-    dismissPhoneTutorial();
+    if (instructionsGuideOpen) {
+      onInstructionsGuideConsumed();
+    }
     window.navigator.vibrate?.(8);
     setIsPhoneEngaged(true);
     setPhoneDragY(0);
@@ -4021,21 +4181,14 @@ function HeldTransformingState({
     phase === "clay" &&
     !prefersReducedClay &&
     (gatherBeat === "idle" || gatherBeat === "tension" || gatherBeat === "gather");
-  const showPhoneTutorialHint =
-    showPhoneTutorial &&
-    isSettled &&
-    hasActiveTrayWork &&
-    !isPhoneEngaged &&
-    !selectedToken &&
-    !courierOwnsForeground &&
-    !phoneReply;
-  const showTokenTutorialHint =
-    showTokenTutorial &&
+  const showInstructionBook =
+    (instructionsBookVisible || forceShowInstructionsBook) &&
     isSettled &&
     tokens.length > 0 &&
     !isPhoneEngaged &&
     !selectedToken &&
-    !courierOwnsForeground;
+    !courierOwnsForeground &&
+    !phoneReply;
 
   useEffect(() => {
     onCourierForegroundChange?.(courierOwnsForeground);
@@ -4351,7 +4504,7 @@ function HeldTransformingState({
                 : hasActiveTrayWork
                   ? "drop-shadow-[0_10px_12px_rgba(184,137,60,0.16)]"
                   : "drop-shadow-[0_8px_10px_rgba(44,28,14,0.18)]"
-            } ${showPhoneTutorialHint ? "held-tutorial-phone-nudge" : ""}`}
+            }`}
             data-held-phone-interactive="true"
             data-held-phone-state={isPhoneEngaged ? "engaged" : "docked"}
             onPointerCancel={finishPhoneLift}
@@ -4386,14 +4539,6 @@ function HeldTransformingState({
               src={HELD_ASSETS.phoneBody}
             />
           </button>
-          {showPhoneTutorialHint && (
-            <HeldTutorialHint
-              arrowClassName="held-tutorial-arrow-up"
-              className="right-[2%] top-[51%] z-[122] w-[160px] text-center"
-              label="LIFT THE PHONE"
-              message="to adjust, ask, add, or cancel."
-            />
-          )}
         </>
       )}
       {/* Token tray anchors at the walnut cradle when settled. During the clay
@@ -4463,12 +4608,10 @@ function HeldTransformingState({
         );
         })}
       </div>
-      {showTokenTutorialHint && (
-        <HeldTutorialHint
-          arrowClassName="held-tutorial-arrow-down"
-          className="bottom-[calc(36px+18.6%+env(safe-area-inset-bottom))] left-[10%] z-[118] w-[174px] text-center"
-          label="TAP THE CLAY"
-          message="for order status."
+      {showInstructionBook && (
+        <HeldInstructionBook
+          isGuideOpen={instructionsGuideOpen}
+          onToggleGuide={onInstructionsGuideToggle}
         />
       )}
       {isSettled && courierStatus !== "idle" && (
