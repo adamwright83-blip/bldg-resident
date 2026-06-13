@@ -15,7 +15,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
-import { receiptCardBg, receiptNicheBg } from "./heldReceiptAssets";
+import { receiptNicheBg } from "./heldReceiptAssets";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -1748,11 +1748,12 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
 function HeldReceiptCard({ receipt }: { receipt: HeldReceiptEntry }) {
   return (
     <li
-      className="relative h-[112px] list-none"
+      className="relative list-none overflow-hidden rounded-[6px]"
       style={{
-        backgroundImage: `url(${receiptCardBg})`,
-        backgroundSize: "100% 100%",
-        filter: "drop-shadow(0 10px 14px rgba(20,12,5,0.32))",
+        background:
+          "linear-gradient(180deg, #fdf5e4 0%, #f7ecd4 55%, #f2e6cc 100%)",
+        boxShadow:
+          "0 1px 0 rgba(255,252,242,0.85) inset, 0 -1px 0 rgba(100,72,30,0.14) inset, 0 8px 18px rgba(18,10,3,0.28), 0 2px 4px rgba(18,10,3,0.18)",
       }}
     >
       <div className="flex h-full items-center gap-3 py-3.5 pl-4 pr-5">

@@ -1,4 +1,2 @@
-// Receipts-archive imagery, served from /public (full-resolution originals
-// uploaded directly to the repo).
+// Receipts-archive imagery, served from /public (full-resolution originals).
 export const receiptNicheBg = "/held/settings_sub_category_background_screen.png";
-export const receiptCardBg = "/held/receiptcards.png";
