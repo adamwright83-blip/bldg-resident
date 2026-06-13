@@ -4173,6 +4173,14 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
       onPointerUp={handlePointerUp}
       transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
     >
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Playfair+Display:wght@600;700&display=swap');
+        .held-hand{font-family:'Caveat','Segoe Script',cursive;}
+        .held-press{font-family:'Playfair Display',Georgia,serif;text-shadow:0 1px 0 rgba(255,251,240,0.7),0 -1px 1px rgba(46,32,16,0.32);}
+        .held-fine{text-shadow:0 1px 0 rgba(255,251,240,0.55);}
+        .held-chip{font-family:'Space Grotesk',sans-serif;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#6e4c14;padding:9px 15px;border-radius:3px;border:1px solid #a87c2e;background:linear-gradient(180deg,#f7ecd2,#ead7ac);box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),inset 0 -1px 0 rgba(110,76,20,0.25),0 2px 4px rgba(77,48,19,0.18);}
+        .held-chip:active{transform:translateY(1px);box-shadow:inset 0 1px 2px rgba(110,76,20,0.3);}
+      `}</style>
       <div
         className="absolute inset-0"
         style={{
@@ -4200,95 +4208,207 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
         initial={{ opacity: 0, y: 18 }}
         transition={{ delay: 0.05, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       >
-        <header>
-          <p className="text-[14px] tracking-[0.08em]">HELD.chat</p>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.3em] text-[#6f6254]">
-            Residence 1807 · 12A
-          </p>
-        </header>
-
-        <section className="mt-3 grid grid-cols-[34%_1fr] items-center gap-5">
-          <div className="relative mx-auto h-[126px] w-[104px] overflow-hidden rounded-[52%] border border-[#b8893c]/85 bg-[#eadcc4] p-[3px] shadow-[0_12px_24px_rgba(77,48,19,0.15)]">
+        {/* The vendor's trade card — thick ivory cotton stock on the cream desk. */}
+        <article
+          className="relative mt-5 rounded-[4px] border border-[#e2d1b0] px-5 pb-7 pt-6"
+          style={{
+            background:
+              "linear-gradient(178deg, #fbf4e4 0%, #f8efdc 58%, #f3e8d0 100%)",
+            boxShadow:
+              "0 1px 0 rgba(255,255,255,0.65) inset, 0 -1px 0 rgba(120,90,40,0.12) inset, 0 18px 38px rgba(60,40,18,0.2), 0 3px 8px rgba(60,40,18,0.12)",
+          }}
+        >
+          {/* The clay token you tapped, resting on the card's corner. */}
+          <div className="pointer-events-none absolute -top-3 right-1 z-10 w-[72px] rotate-[9deg]">
+            <span className="absolute left-1/2 top-[60%] h-[16px] w-[54px] -translate-x-1/2 rounded-full bg-[#3a2a16]/28 blur-[5px]" />
             <img
-              alt="Laundry Butler provider"
-              className="h-full w-full rounded-[52%] object-cover object-center saturate-[0.9] sepia-[0.08]"
+              alt=""
+              className="relative w-full select-none drop-shadow-[0_9px_9px_rgba(42,28,16,0.28)]"
               draggable={false}
-              src={HELD_ASSETS.laundryProvider}
-              style={{
-                objectPosition: "34% 34%",
-                transform: "scale(1.34)",
-              }}
+              src={HELD_ASSETS.tokenLaundry}
             />
-            <span className="pointer-events-none absolute inset-[7px] rounded-[52%] border border-[#fff7e9]/65" />
           </div>
-          <div className="pb-2">
-            <h1 className="font-serif text-[33px] italic leading-[0.95] text-[#2a2520]">
-              Laundry Butler
+
+          <header className="text-center">
+            <p className="held-fine text-[8.5px] uppercase tracking-[0.4em] text-[#8a755a]">
+              HELD.chat — Residence 1807 · 12A
+            </p>
+            <h1 className="held-press mt-4 text-[27px] font-bold leading-none tracking-[0.14em] text-[#3f3022]">
+              LAUNDRY BUTLER
             </h1>
-            <p className="mt-2 font-serif text-[18px] italic leading-5 text-[#3b3128]">
+            <div className="mt-3 flex items-center justify-center gap-3 text-[#a87c2e]">
+              <span className="h-px w-14 bg-gradient-to-r from-transparent to-[#a87c2e]/70" />
+              <span className="text-[13px] leading-none">❦</span>
+              <span className="h-px w-14 bg-gradient-to-l from-transparent to-[#a87c2e]/70" />
+            </div>
+            <p className="held-fine mt-2 text-[9.5px] uppercase tracking-[0.34em] text-[#6b5a44]">
               Pickup &amp; delivery
             </p>
-            <p className="mt-1 font-serif text-[18px] italic leading-5 text-[#a06a2b]">
-              In motion
+          </header>
+
+          <section className="mt-5 flex items-center gap-4">
+            <div className="relative w-[88px] shrink-0 rotate-[-2.5deg]">
+              <div className="overflow-hidden rounded-[3px] border border-[#b08a45]/70 bg-[#eadcc4] p-[3px] shadow-[0_10px_18px_rgba(77,48,19,0.22)]">
+                <div className="h-[100px] overflow-hidden rounded-[2px]">
+                  <img
+                    alt="Laundry Butler provider"
+                    className="h-full w-full object-cover saturate-[0.72] sepia-[0.24]"
+                    draggable={false}
+                    src={HELD_ASSETS.laundryProvider}
+                    style={{
+                      objectPosition: "34% 34%",
+                      transform: "scale(1.34)",
+                    }}
+                  />
+                </div>
+              </div>
+              <span
+                className="absolute left-[4px] top-[4px] h-[6px] w-[6px] rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle at 35% 30%, #f0dca8, #a87c2e 60%, #6e4c14)",
+                }}
+              />
+              <span
+                className="absolute right-[4px] top-[4px] h-[6px] w-[6px] rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle at 35% 30%, #f0dca8, #a87c2e 60%, #6e4c14)",
+                }}
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="held-hand rotate-[-1.5deg] text-[28px] leading-none text-[#5b4632]">
+                Adam
+              </p>
+              <p className="held-fine mt-1.5 text-[8.5px] uppercase tracking-[0.28em] text-[#6b5a44]">
+                Your driver — in motion
+              </p>
+              <p className="mt-2 font-serif text-[12px] italic leading-[1.45] text-[#6f6254]">
+                Trusted vendor · 4 services completed at your residence
+              </p>
+            </div>
+          </section>
+
+          <section className="relative mt-5 border-t border-[#d9c39c]/60 pt-3">
+            <p className="held-fine text-[9px] uppercase tracking-[0.3em] text-[#6b5a44]">
+              Current status
             </p>
-            <p className="mt-1 font-serif text-[15px] leading-5">
-              Adam · Your driver
+            <h2 className="mt-1.5 max-w-[55%] font-serif text-[18px] italic leading-[1.2] text-[#201b17]">
+              Driver is en route to pickup
+            </h2>
+            <div
+              className="absolute right-0 top-2 rotate-[-6deg]"
+              style={{
+                color: "#7a2a1f",
+                maskImage:
+                  "radial-gradient(130% 110% at 34% 38%, black 52%, rgba(0,0,0,0.6) 76%, rgba(0,0,0,0.88) 100%)",
+                mixBlendMode: "multiply",
+                opacity: 0.9,
+                WebkitMaskImage:
+                  "radial-gradient(130% 110% at 34% 38%, black 52%, rgba(0,0,0,0.6) 76%, rgba(0,0,0,0.88) 100%)",
+              }}
+            >
+              <div className="rounded-[6px] border-[2.5px] border-current p-[3px]">
+                <div className="rounded-[3px] border border-current px-3 py-1.5 text-center">
+                  <p
+                    className="text-[17px] font-bold leading-none tracking-[0.18em]"
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  >
+                    EN ROUTE
+                  </p>
+                  <p className="mt-[3px] text-[6.5px] font-semibold uppercase tracking-[0.3em]">
+                    In motion · HELD
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-3">
+            <StatusDetailRow label="Pickup window" value="Today · 4:00–5:00 PM" />
+            <StatusDetailRow label="Driver ETA" value="18 minutes" />
+            <StatusDetailRow label="Residence" value="1807 · 12A" />
+            <StatusDetailRow label="Estimated return" value="Tomorrow · 6:00 PM" />
+            <StatusDetailRow label="Estimated total" value="$44.00" />
+            <StatusDetailRow label="Order number" value="L-30218" />
+          </section>
+
+          <section className="mt-4 pt-1 text-center">
+            <p className="held-fine text-[9px] uppercase tracking-[0.3em] text-[#6b5a44]">
+              Service includes
             </p>
-          </div>
-        </section>
+            <p className="mt-1.5 font-serif text-[14px] italic leading-6 text-[#3b3128]">
+              Pickup · Wash &amp; fold · Dry clean on request · Return delivery
+            </p>
+            <div className="mt-3 flex justify-center gap-3">
+              <button className="held-chip" type="button">
+                Call driver
+              </button>
+              <button className="held-chip" type="button">
+                Text driver
+              </button>
+            </div>
+          </section>
 
-        <p className="border-b border-[#b8893c]/32 pb-2 text-center font-serif text-[12px] leading-5">
-          Trusted vendor · 4 services completed at your residence
-        </p>
+          <section className="mt-5">
+            <VitrineJourneyList />
+          </section>
 
-        <section className="mt-4 border-b border-[#b8893c]/28 pb-3">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f5145]">
-            Current status
-          </p>
-          <h2 className="mt-1 font-serif text-[33px] italic leading-[1.04] text-[#201b17]">
-            Driver is en route to pickup
-          </h2>
-        </section>
-
-        <section className="mt-2 border-b border-[#b8893c]/28">
-          <StatusDetailRow label="Pickup window" value="Today · 4:00–5:00 PM" />
-          <StatusDetailRow label="Driver ETA" value="18 minutes" />
-          <StatusDetailRow label="Residence" value="1807 · 12A" />
-          <StatusDetailRow label="Estimated return" value="Tomorrow · 6:00 PM" />
-          <StatusDetailRow label="Estimated total" value="$44.00" />
-          <StatusDetailRow label="Order number" value="L-30218" />
-        </section>
-
-        <section className="mt-2">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f5145]">
-            Service includes
-          </p>
-          <p className="mt-1 font-serif text-[17px] italic leading-6">
-            Pickup · Wash &amp; fold · Dry clean on request · Return delivery
-          </p>
-          <div className="mt-1 flex justify-center gap-4 font-serif text-[17px] italic text-[#a06a2b]">
-            <button type="button">Call driver</button>
-            <span>·</span>
-            <button type="button">Text driver</button>
-          </div>
-        </section>
-
-        <section className="mt-3 border-t border-[#b8893c]/28 pt-2">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f5145]">
-            Journey
-          </p>
-          <VitrineJourneyList />
-        </section>
-
-        <footer className="mt-4 text-center">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[#8d6322] bg-[#b8893c]/25 font-serif text-[28px] text-[#8d6322] shadow-[inset_0_2px_3px_rgba(255,255,255,0.45),0_8px_14px_rgba(76,45,16,0.18)]">
-            H
-          </div>
-          <p className="mt-2 font-serif text-[18px] italic">
-            Everything kept on file.
-          </p>
-        </footer>
+          <footer className="mt-6 flex flex-col items-center">
+            <div className="relative h-[60px] w-[64px] rotate-[-6deg]">
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(circle at 34% 28%, #a63a28, #7c2317 56%, #58130c 92%)",
+                  borderRadius: "46% 54% 52% 48% / 54% 46% 52% 48%",
+                  boxShadow:
+                    "inset 0 2px 3px rgba(255,160,120,0.35), inset 0 -3px 5px rgba(30,5,2,0.45), 0 6px 12px rgba(60,18,8,0.32)",
+                }}
+              />
+              <span
+                className="absolute -right-[6px] top-[12px] h-[13px] w-[13px]"
+                style={{
+                  background:
+                    "radial-gradient(circle at 35% 30%, #9c3325, #6d1d12)",
+                  borderRadius: "55% 45% 50% 50% / 50% 55% 45% 50%",
+                }}
+              />
+              <div
+                className="absolute inset-[9px] grid place-items-center"
+                style={{
+                  borderRadius: "50%",
+                  boxShadow:
+                    "inset 0 1px 2px rgba(30,5,2,0.55), inset 0 -1px 1px rgba(255,150,110,0.3)",
+                }}
+              >
+                <span
+                  className="font-serif text-[25px] leading-none text-[#511008]"
+                  style={{
+                    textShadow:
+                      "0 1px 1px rgba(255,140,100,0.4), 0 -1px 1px rgba(20,2,0,0.6)",
+                  }}
+                >
+                  H
+                </span>
+              </div>
+            </div>
+            <p className="mt-3 font-serif text-[15px] italic text-[#3b3128]">
+              Everything kept on file.
+            </p>
+          </footer>
+        </article>
       </motion.div>
+      {/* Vitrine glass between the viewer and the card. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[40]"
+        style={{
+          background:
+            "linear-gradient(112deg, transparent 30%, rgba(255,255,255,0.15) 38%, rgba(255,255,255,0.04) 45%, transparent 50%, transparent 62%, rgba(255,255,255,0.09) 68%, transparent 74%), linear-gradient(180deg, rgba(255,255,255,0.16), transparent 9%)",
+        }}
+      />
       <VitrineRecededCradle />
       <div className="pointer-events-none absolute inset-x-0 bottom-[22%] z-[12] h-[36%] bg-gradient-to-b from-[#f4ede0]/16 via-[#f4ede0]/68 to-[#f4ede0]/88" />
     </motion.section>
@@ -4343,12 +4463,14 @@ function VitrineRecededCradle() {
 }
 
 function StatusDetailRow({ label, value }: { label: string; value: string }) {
+  // Ledger line: letterpress label, dotted leader, fountain-pen value.
   return (
-    <div className="grid grid-cols-[42%_1fr] items-baseline border-t border-[#b8893c]/22 py-1.5">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-[#5f5145]">
-        {label}:
+    <div className="flex items-end gap-2 border-b border-[#d9c39c]/55 py-[7px]">
+      <p className="held-fine shrink-0 pb-[4px] text-[9px] uppercase tracking-[0.2em] text-[#6b5a44]">
+        {label}
       </p>
-      <p className="font-serif text-[18px] italic leading-5 text-[#2a2520]">
+      <span className="mb-[8px] min-w-[14px] flex-1 border-b border-dotted border-[#b08a45]/55" />
+      <p className="held-hand max-w-[58%] rotate-[-0.8deg] pr-1 text-right text-[20px] leading-[1.05] text-[#5b4632]">
         {value}
       </p>
     </div>
@@ -4365,49 +4487,63 @@ function VitrineJourneyList() {
     { label: "Complete", meta: "pending", state: "future" },
   ] as const;
 
+  // Railway-ticket passage record: punched stops, pencil-circled current leg.
   return (
-    <ol className="mt-2 space-y-1.5">
-      {steps.map((step, index) => (
-        <li
-          className={`grid grid-cols-[28px_1fr] items-baseline gap-3 ${
-            step.state === "future" ? "opacity-45" : ""
-          }`}
-          key={step.label}
-        >
-          <span className="relative flex justify-center">
-            {index < steps.length - 1 && (
-              <span className="absolute left-1/2 top-[15px] h-[20px] w-px -translate-x-1/2 bg-[#b8893c]/45" />
+    <div className="relative rounded-[3px] border border-dashed border-[#b08a45]/55 bg-[#f1e3c6]/70 px-4 pb-3 pt-2.5">
+      <span
+        className="absolute -left-[8px] top-1/2 h-[15px] w-[15px] -translate-y-1/2 rounded-full border border-dashed border-[#b08a45]/55"
+        style={{ background: "#f9f1e0" }}
+      />
+      <span
+        className="absolute -right-[8px] top-1/2 h-[15px] w-[15px] -translate-y-1/2 rounded-full border border-dashed border-[#b08a45]/55"
+        style={{ background: "#f9f1e0" }}
+      />
+      <p className="held-fine text-center text-[8.5px] uppercase tracking-[0.34em] text-[#8a6c3c]">
+        Journey — passage record
+      </p>
+      <ol className="mt-1.5">
+        {steps.map((step, index) => (
+          <li
+            className={`grid grid-cols-[26px_1fr_auto] items-center gap-2 py-[5px] ${
+              index > 0 ? "border-t border-dotted border-[#b08a45]/30" : ""
+            } ${step.state === "future" ? "opacity-40" : ""}`}
+            key={step.label}
+          >
+            {step.state === "done" ? (
+              <span
+                className="mx-auto h-[12px] w-[12px] rounded-full"
+                style={{
+                  background: "#f4ede0",
+                  boxShadow:
+                    "inset 0 1px 2px rgba(58,40,18,0.5), inset 0 -1px 1px rgba(255,255,255,0.55), 0 1px 0 rgba(255,255,255,0.6)",
+                }}
+              />
+            ) : step.state === "current" ? (
+              <span
+                className="mx-auto h-[16px] w-[16px] rotate-[-8deg] border-2 border-[#4d453c]"
+                style={{ borderRadius: "52% 48% 50% 50% / 48% 52% 46% 54%" }}
+              />
+            ) : (
+              <span className="mx-auto h-[7px] w-[7px] rounded-full border border-[#8f8377]" />
             )}
-            <span
-              className={`relative z-10 mt-1 h-3.5 w-3.5 rounded-full border ${
-                step.state === "current"
-                  ? "border-[#b8893c] bg-[#f4ede0]"
-                  : step.state === "done"
-                    ? "border-[#b8893c] bg-[#b8893c]"
-                    : "border-[#8f8377] bg-[#f4ede0]"
-              }`}
-            />
-          </span>
-          <p className="font-serif text-[15px] leading-5">
-            <span
-              className={`uppercase tracking-[0.14em] ${
-                step.state === "current" ? "text-[#2a2520]" : "text-[#3b3128]"
+            <p
+              className={`held-fine text-[9.5px] uppercase tracking-[0.18em] ${
+                step.state === "current" ? "text-[#2a2520]" : "text-[#5f5145]"
               }`}
             >
               {step.label}
-            </span>
-            <span className="mx-2 text-[#8c7a69]">—</span>
-            <span
-              className={`italic ${
-                step.state === "current" ? "text-[#a06a2b]" : "text-[#3b3128]"
+            </p>
+            <p
+              className={`held-hand text-right text-[17px] leading-none ${
+                step.state === "current" ? "text-[#7a2a1f]" : "text-[#5b4632]"
               }`}
             >
               {step.meta}
-            </span>
-          </p>
-        </li>
-      ))}
-    </ol>
+            </p>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
