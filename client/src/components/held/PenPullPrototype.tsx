@@ -1117,7 +1117,7 @@ export default function PenPullPrototype({
               {showPenTutorialHint && (
                 <HeldTutorialHint
                   arrowClassName="held-tutorial-arrow-down"
-                  className="left-[49%] top-[55%] z-[74] w-[230px] -translate-x-1/2 text-center"
+                  className="left-[38%] top-[47%] z-[74] w-[210px] -translate-x-1/2 text-center"
                   label="PULL THE PEN DOWN"
                   message="to make a request."
                 />
@@ -1161,7 +1161,7 @@ export default function PenPullPrototype({
           </div>
 
           {mode === "choice" && !physics.isPointerActive && (
-            <p className="pointer-events-none absolute bottom-[188px] left-[22%] z-[44] w-[170px] whitespace-nowrap text-center font-serif text-[14px] italic leading-6 text-[#745b45]/88">
+            <p className="pointer-events-none absolute bottom-[252px] left-[22%] z-[44] w-[170px] whitespace-nowrap text-center font-serif text-[14px] italic leading-6 text-[#745b45]/88">
               Tap & type your request
             </p>
           )}
@@ -1173,7 +1173,7 @@ export default function PenPullPrototype({
               autoCapitalize="sentences"
               autoComplete="off"
               className={`pointer-events-auto absolute left-[14%] right-[14%] z-[96] resize-none rounded-[6px] border px-4 py-3 text-center font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#9a681f] outline-none transition-[background,border,bottom,box-shadow,opacity] ${
-                mode === "typing" ? "bottom-[146px] min-h-[104px]" : "bottom-[104px] min-h-[84px]"
+                mode === "typing" ? "bottom-[278px] min-h-[104px]" : "bottom-[220px] min-h-[84px]"
               } ${
                 mode === "typing"
                   ? "border-[#cdb792]/45 bg-[#fff8ec]/86 opacity-100 shadow-[0_4px_14px_rgba(50,35,20,0.06)] placeholder:text-[#8a6f55]/58 focus:border-[#b78a38]/50 focus:bg-[#fff9ef]/92"
@@ -1217,7 +1217,7 @@ export default function PenPullPrototype({
           {mode === "typing" && (
             <button
               aria-label="Submit typed request"
-              className={`absolute bottom-[156px] right-[9%] z-[97] grid h-11 w-11 place-items-center rounded-full border border-[#b78a38]/55 bg-[#c5a475]/80 font-serif text-[22px] leading-none text-[#fffaf2] shadow-[0_8px_18px_rgba(70,43,18,0.18)] transition-[opacity,transform] active:scale-95 ${
+              className={`absolute bottom-[288px] right-[9%] z-[97] grid h-11 w-11 place-items-center rounded-full border border-[#b78a38]/55 bg-[#c5a475]/80 font-serif text-[22px] leading-none text-[#fffaf2] shadow-[0_8px_18px_rgba(70,43,18,0.18)] transition-[opacity,transform] active:scale-95 ${
                 draft.trim() ? "opacity-100" : "opacity-55"
               }`}
               onClick={() => void submitTypedCommand()}
