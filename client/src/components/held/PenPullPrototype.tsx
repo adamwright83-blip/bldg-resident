@@ -1618,7 +1618,18 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
   const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
   const cardLast4 = profileData?.user?.cardLast4 ?? "****";
 
-  const receipts = (requestsData?.requests ?? [])
+  const ACTIVE_STATUSES = new Set([
+    "pending", "paid", "confirmed", "in-progress",
+    "scheduled", "contacting-vendor", "awaiting-vendor", "new",
+  ]);
+
+  const allRequests: any[] = requestsData?.requests ?? [];
+
+  const activeOrders = allRequests
+    .filter((r: any) => ACTIVE_STATUSES.has(r.status))
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const receipts = allRequests
     .filter((r: any) => r.receiptUrl && String(r.receiptUrl).trim())
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -1676,8 +1687,80 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="absolute inset-x-[8.5%] bottom-[4.5%] top-[27%] z-10 overflow-y-auto pt-1">
+
+        {/* ── ACTIVE ORDERS ── */}
+        {activeOrders.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-[#7a6a52]">
+              Active orders
+            </p>
+            <ul className="space-y-2">
+              {activeOrders.map((r: any) => (
+                <li
+                  key={r.id}
+                  className="list-none overflow-hidden rounded-[5px]"
+                  style={{
+                    background: "linear-gradient(180deg, #fff8ec 0%, #f7edd8 100%)",
+                    boxShadow:
+                      "0 1px 0 rgba(255,252,242,0.9) inset, 0 -1px 0 rgba(100,72,30,0.12) inset, 0 4px 12px rgba(18,10,3,0.24)",
+                  }}
+                >
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    {/* Type medallion */}
+                    <div
+                      className="grid h-[40px] w-[40px] shrink-0 place-items-center rounded-full border border-[#b39256]/55"
+                      style={{
+                        background: "radial-gradient(circle at 38% 32%, #f7eeda, #ecdfc2 78%)",
+                      }}
+                    >
+                      <span className="font-serif text-[12px] text-[#6b5638]">
+                        {serviceTypeInitials(r.serviceType ?? "")}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[8px] font-semibold uppercase tracking-[0.22em] text-[#8a6c3c]">
+                        {serviceTypeToLabel(r.serviceType ?? "")}
+                      </p>
+                      <p className="mt-[1px] truncate font-serif text-[15px] leading-[1.1] text-[#2f261b]">
+                        {r.requestSummary ?? serviceTypeToLabel(r.serviceType ?? "")}
+                      </p>
+                      {(r.scheduledDate || r.scheduledWindow) && (
+                        <p className="mt-[2px] text-[9.5px] text-[#6b5e4c]">
+                          {r.scheduledDate ?? formatReceiptDate(r.createdAt)}
+                          {r.scheduledWindow ? ` · ${r.scheduledWindow}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    {/* Status pill */}
+                    <span
+                      className="shrink-0 rounded-full border px-2 py-[3px] text-[8px] font-semibold uppercase tracking-[0.16em]"
+                      style={{
+                        background: "rgba(184,137,60,0.12)",
+                        borderColor: "rgba(184,137,60,0.45)",
+                        color: "#7a5c1e",
+                      }}
+                    >
+                      {r.status === "in-progress"
+                        ? "In progress"
+                        : r.status === "contacting-vendor"
+                          ? "Contacting"
+                          : r.status === "awaiting-vendor"
+                            ? "Awaiting"
+                            : r.status ?? "Active"}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ── RECEIPTS ── */}
+        <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-[#7a6a52]">
+          Receipts
+        </p>
         {receipts.length === 0 ? (
-          <p className="mt-8 text-center font-serif text-[15px] italic text-[#7a6a52]">
+          <p className="mt-2 font-serif text-[14px] italic text-[#7a6a52]">
             No receipts yet.
           </p>
         ) : (
