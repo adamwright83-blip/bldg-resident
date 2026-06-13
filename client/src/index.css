@@ -4027,31 +4027,9 @@
   animation: held-tutorial-hint-in 420ms ease-out both;
 }
 .held-tutorial-arrow {
-  position: relative;
   color: #2a2520;
   opacity: 0.82;
-}
-.held-tutorial-arrow::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 1.5px;
-  height: 100%;
-  background: currentColor;
-  transform: translateX(-50%) rotate(7deg);
-  transform-origin: 50% 0;
-}
-.held-tutorial-arrow::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 18px;
-  height: 18px;
-  border-bottom: 1.5px solid currentColor;
-  border-right: 1.5px solid currentColor;
-  transform: translateX(-50%) rotate(45deg);
+  overflow: visible;
 }
 .held-tutorial-arrow-down {
   animation: held-tutorial-arrow-bob-down 1.35s ease-in-out infinite;

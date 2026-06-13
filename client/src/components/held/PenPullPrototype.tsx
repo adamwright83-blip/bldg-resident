@@ -1069,7 +1069,7 @@ export default function PenPullPrototype({
               {showPenTutorialHint && (
                 <HeldTutorialHint
                   arrowClassName="held-tutorial-arrow-down"
-                  className="left-[49%] top-[60%] z-[74] w-[230px] -translate-x-1/2 text-center"
+                  className="left-[49%] top-[55%] z-[74] w-[230px] -translate-x-1/2 text-center"
                   label="PULL THE PEN DOWN"
                   message="to make a request."
                 />
@@ -3513,7 +3513,20 @@ function HeldTutorialHint({
       <p className="mt-1 font-serif text-[15px] leading-5 text-[#3d342c]/86">
         {message}
       </p>
-      <span className={`held-tutorial-arrow mx-auto mt-3 block h-14 w-9 ${arrowClassName ?? ""}`} />
+      <svg
+        aria-hidden="true"
+        className={`held-tutorial-arrow mx-auto mt-3 block h-14 w-9 ${arrowClassName ?? ""}`}
+        fill="none"
+        viewBox="0 0 36 56"
+      >
+        <path
+          d="M18 3 C17 14 16 25 17 38 M8 29 L18 42 L29 29"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.2"
+        />
+      </svg>
     </div>
   );
 }
