@@ -1576,61 +1576,51 @@ function HeldLabyrinthDrawer({
   );
 }
 
-const HELD_RECEIPTS = [
-  {
-    id: "r164",
-    amount: "$17.00",
-    badge: "LB",
-    card: "•••• 6065",
-    category: "Dry cleaning",
-    order: "Order #164 · Residence",
-    vendor: "Laundry Butler",
-    when: "Jun 10, 2026 · 5:02 PM",
-  },
-  {
-    id: "r170",
-    amount: "$42.50",
-    badge: "LB",
-    card: "•••• 6065",
-    category: "Wash & fold",
-    order: "Order #170 · Residence",
-    vendor: "Laundry Butler",
-    when: "Jun 8, 2026 · 11:18 AM",
-  },
-  {
-    id: "r98",
-    amount: "$120.00",
-    badge: "broom",
-    card: "•••• 6065",
-    category: "Home cleaning",
-    order: "Order #98 · Residence",
-    vendor: "Pristine Home",
-    when: "Jun 6, 2026 · 3:44 PM",
-  },
-  {
-    id: "r221",
-    amount: "$68.34",
-    badge: "cart",
-    card: "•••• 6065",
-    category: "Groceries",
-    order: "Order #221 · Residence",
-    vendor: "Verde Market",
-    when: "Jun 5, 2026 · 9:12 AM",
-  },
-] as const;
+function serviceTypeToLabel(t: string): string {
+  if (t === "laundry") return "Laundry";
+  if (t === "dry-cleaning") return "Dry cleaning";
+  if (t === "car-wash") return "Car wash";
+  if (t === "cleaning") return "Home cleaning";
+  if (t === "grooming") return "Pet grooming";
+  if (t === "amenity") return "Amenity";
+  if (t === "maintenance") return "Maintenance";
+  return "Service";
+}
 
-type HeldReceiptEntry = (typeof HELD_RECEIPTS)[number];
+function serviceTypeInitials(t: string): string {
+  if (t === "laundry" || t === "dry-cleaning") return "LB";
+  if (t === "car-wash") return "CW";
+  if (t === "cleaning") return "HC";
+  if (t === "grooming") return "PG";
+  return "H";
+}
+
+function formatReceiptDate(d: Date | string | null | undefined): string {
+  if (!d) return "";
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return dt.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+      if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
+
+  const { data: requestsData } = trpc.chat.getRequests.useQuery();
+  const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
+  const cardLast4 = profileData?.user?.cardLast4 ?? "****";
+
+  const receipts = (requestsData?.requests ?? [])
+    .filter((r: any) => r.receiptUrl && String(r.receiptUrl).trim())
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <motion.section
@@ -1640,15 +1630,12 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
       initial={{ opacity: 0, x: 30 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
     >
-      {/* A section of the labyrinth's interior: carved marble niche, lantern
-          burning top-right. The lantern is the room's only light source. */}
       <img
         alt=""
         className="absolute inset-0 h-full w-full select-none object-cover"
         draggable={false}
         src={receiptNicheBg}
       />
-      {/* Lantern light washing down over the alcove contents. */}
       <div
         className="pointer-events-none absolute inset-0 z-[5]"
         style={{
@@ -1662,14 +1649,11 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
         onClick={onClose}
         type="button"
       >
-        <span aria-hidden="true" className="text-[18px] leading-none">
-          ‹
-        </span>
+        <span aria-hidden="true" className="text-[18px] leading-none">‹</span>
         <span>Back</span>
       </button>
 
       <div className="absolute inset-x-[11%] top-[8.2%] z-10">
-        {/* Title plaque carved into the niche wall. */}
         <div
           className="relative rounded-[10px] px-4 pb-3 pt-3.5 text-center"
           style={{
@@ -1689,183 +1673,148 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
             Your past orders &amp; payments
           </p>
         </div>
-
-        {/* Recessed sort bar. */}
-        <div
-          className="mt-3 flex h-[38px] items-center gap-2 rounded-full border border-[#c9b794]/55 px-4"
-          style={{
-            background: "rgba(255,250,240,0.42)",
-            boxShadow:
-              "inset 0 2px 4px rgba(62,44,24,0.18), 0 1px 0 rgba(255,250,238,0.45)",
-          }}
-        >
-          <svg
-            aria-hidden="true"
-            className="h-[15px] w-[15px] shrink-0"
-            fill="none"
-            stroke="#6b5e4c"
-            strokeLinecap="round"
-            strokeWidth="1.6"
-            viewBox="0 0 16 16"
-          >
-            <circle cx="7" cy="7" r="4.4" />
-            <path d="M10.4 10.4 14 14" />
-          </svg>
-          <p className="flex-1 text-center text-[11px] text-[#6b5e4c]">
-            Sort by{" "}
-            <span className="font-semibold text-[#3a2f23]">Most Recent</span>
-            <span aria-hidden="true" className="ml-1">
-              ⌄
-            </span>
-          </p>
-          <svg
-            aria-hidden="true"
-            className="h-[15px] w-[15px] shrink-0"
-            fill="none"
-            stroke="#6b5e4c"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.6"
-            viewBox="0 0 16 16"
-          >
-            <path d="M2 3h12L9.5 8.6V13l-3 1.6V8.6L2 3Z" />
-          </svg>
-        </div>
       </div>
 
-      {/* Stone receipt cards stacked inside the alcove. */}
-      <div className="absolute inset-x-[8.5%] bottom-[4.5%] top-[27.5%] z-10 overflow-y-auto pt-1">
-        <ul className="space-y-3 pb-4">
-          {HELD_RECEIPTS.map(receipt => (
-            <HeldReceiptCard key={receipt.id} receipt={receipt} />
-          ))}
-        </ul>
+      <div className="absolute inset-x-[8.5%] bottom-[4.5%] top-[27%] z-10 overflow-y-auto pt-1">
+        {receipts.length === 0 ? (
+          <p className="mt-8 text-center font-serif text-[15px] italic text-[#7a6a52]">
+            No receipts yet.
+          </p>
+        ) : (
+          <ul className="space-y-3 pb-4">
+            {receipts.map((r: any) => (
+              <HeldReceiptCard
+                key={r.id}
+                amount={
+                  r.upgradePriceCents != null
+                    ? `$${(r.upgradePriceCents / 100).toFixed(2)}`
+                    : "—"
+                }
+                cardLast4={cardLast4}
+                category={serviceTypeToLabel(r.serviceType ?? "")}
+                initials={serviceTypeInitials(r.serviceType ?? "")}
+                orderId={r.orderId}
+                receiptUrl={r.receiptUrl}
+                summary={r.requestSummary ?? serviceTypeToLabel(r.serviceType ?? "")}
+                when={r.scheduledDate ?? formatReceiptDate(r.createdAt)}
+              />
+            ))}
+          </ul>
+        )}
       </div>
     </motion.section>
   );
 }
 
-function HeldReceiptCard({ receipt }: { receipt: HeldReceiptEntry }) {
+function HeldReceiptCard({
+  amount,
+  cardLast4,
+  category,
+  initials,
+  orderId,
+  receiptUrl,
+  summary,
+  when,
+}: {
+  amount: string;
+  cardLast4: string;
+  category: string;
+  initials: string;
+  orderId: number | null;
+  receiptUrl: string;
+  summary: string;
+  when: string;
+}) {
   return (
-    <li
-      className="relative list-none overflow-hidden rounded-[6px]"
-      style={{
-        background:
-          "linear-gradient(180deg, #fdf5e4 0%, #f7ecd4 55%, #f2e6cc 100%)",
-        boxShadow:
-          "0 1px 0 rgba(255,252,242,0.85) inset, 0 -1px 0 rgba(100,72,30,0.14) inset, 0 8px 18px rgba(18,10,3,0.28), 0 2px 4px rgba(18,10,3,0.18)",
-      }}
-    >
-      <div className="flex h-full items-center gap-3 py-3.5 pl-4 pr-5">
-        <HeldReceiptPlaque badge={receipt.badge} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[8.5px] font-semibold uppercase tracking-[0.22em] text-[#8a6c3c]">
-            {receipt.category}
-          </p>
-          <p className="mt-[2px] truncate font-serif text-[18px] leading-[1.1] text-[#2f261b]">
-            {receipt.vendor}
-          </p>
-          <p className="mt-[3px] text-[10.5px] text-[#6b5e4c]">
-            {receipt.order}
-          </p>
-          <p className="mt-[3px] flex items-center gap-1.5 text-[9.5px] text-[#7a6a52]">
-            <svg
-              aria-hidden="true"
-              className="h-[10px] w-[10px] shrink-0"
-              fill="none"
-              stroke="#7a6a52"
-              strokeLinecap="round"
-              strokeWidth="1.4"
-              viewBox="0 0 12 12"
-            >
-              <rect height="8.5" rx="1.2" width="10" x="1" y="2.2" />
-              <path d="M1 4.6h10M3.6 1v2M8.4 1v2" />
-            </svg>
-            <span>{receipt.when}</span>
-            <span className="tracking-[0.12em]">{receipt.card}</span>
-          </p>
-        </div>
-        <div className="flex h-full shrink-0 flex-col items-end justify-between py-[2px]">
-          <span className="flex items-center gap-1 rounded-full bg-[#dde3c8]/90 px-2 py-[2.5px] text-[8.5px] font-semibold text-[#55663f]">
-            Paid
-            <span className="grid h-[11px] w-[11px] place-items-center rounded-full bg-[#6f7f53]">
+    <li className="list-none">
+      <a
+        className="block overflow-hidden rounded-[6px]"
+        href={receiptUrl}
+        rel="noopener noreferrer"
+        style={{
+          background: "linear-gradient(180deg, #fdf5e4 0%, #f7ecd4 55%, #f2e6cc 100%)",
+          boxShadow:
+            "0 1px 0 rgba(255,252,242,0.85) inset, 0 -1px 0 rgba(100,72,30,0.14) inset, 0 8px 18px rgba(18,10,3,0.28), 0 2px 4px rgba(18,10,3,0.18)",
+        }}
+        target="_blank"
+      >
+        <div className="flex items-center gap-3 py-3.5 pl-4 pr-4">
+          {/* Badge medallion */}
+          <div
+            className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full border border-[#b39256]/65"
+            style={{
+              background: "radial-gradient(circle at 38% 32%, #f7eeda, #ecdfc2 78%)",
+              boxShadow:
+                "inset 0 1px 2px rgba(255,252,242,0.8), inset 0 -2px 3px rgba(94,70,38,0.18), 0 2px 4px rgba(40,26,12,0.18)",
+            }}
+          >
+            <div className="grid h-[42px] w-[42px] place-items-center rounded-full border border-[#b39256]/45">
+              <span className="font-serif text-[14px] tracking-[0.04em] text-[#6b5638]">
+                {initials}
+              </span>
+            </div>
+          </div>
+
+          {/* Text block */}
+          <div className="min-w-0 flex-1">
+            <p className="text-[8.5px] font-semibold uppercase tracking-[0.22em] text-[#8a6c3c]">
+              {category}
+            </p>
+            <p className="mt-[2px] truncate font-serif text-[17px] leading-[1.1] text-[#2f261b]">
+              {summary}
+            </p>
+            {orderId != null && (
+              <p className="mt-[3px] text-[10px] text-[#6b5e4c]">
+                Order #{orderId} · Residence
+              </p>
+            )}
+            <p className="mt-[3px] flex items-center gap-1.5 text-[9.5px] text-[#7a6a52]">
               <svg
                 aria-hidden="true"
-                className="h-[7px] w-[7px]"
+                className="h-[9px] w-[9px] shrink-0"
                 fill="none"
-                stroke="#f4f0e2"
+                stroke="#7a6a52"
                 strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 10 10"
+                strokeWidth="1.4"
+                viewBox="0 0 12 12"
               >
-                <path d="M1.5 5.2 4 7.6 8.5 2.5" />
+                <rect height="8.5" rx="1.2" width="10" x="1" y="2.2" />
+                <path d="M1 4.6h10M3.6 1v2M8.4 1v2" />
               </svg>
-            </span>
-          </span>
-          <span className="font-serif text-[21px] leading-none text-[#2f261b]">
-            {receipt.amount}
-          </span>
-          <span
-            aria-hidden="true"
-            className="text-[15px] leading-none text-[#8a6c3c]"
-          >
-            ›
-          </span>
-        </div>
-      </div>
-    </li>
-  );
-}
+              <span>{when}</span>
+              <span className="tracking-[0.12em]">•••• {cardLast4}</span>
+            </p>
+          </div>
 
-function HeldReceiptPlaque({ badge }: { badge: HeldReceiptEntry["badge"] }) {
-  return (
-    <div
-      className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border border-[#b39256]/65"
-      style={{
-        background: "radial-gradient(circle at 38% 32%, #f7eeda, #ecdfc2 78%)",
-        boxShadow:
-          "inset 0 1px 2px rgba(255,252,242,0.8), inset 0 -2px 3px rgba(94,70,38,0.18), 0 2px 4px rgba(40,26,12,0.18)",
-      }}
-    >
-      <div className="grid h-[44px] w-[44px] place-items-center rounded-full border border-[#b39256]/45">
-        {badge === "broom" ? (
-          <svg
-            aria-hidden="true"
-            className="h-[22px] w-[22px]"
-            fill="none"
-            stroke="#8a6c3c"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.5"
-            viewBox="0 0 24 24"
-          >
-            <path d="M14.5 3 10 10.5" />
-            <path d="M10 10.5c-2.6 1.4-4.2 3.6-4.8 6.9 3.4.4 6-.3 8.1-2.4Z" />
-            <path d="m7.5 17.5-1 2.4M10.5 16.8l.2 2.6M12.8 15l1.8 1.8" />
-          </svg>
-        ) : badge === "cart" ? (
-          <svg
-            aria-hidden="true"
-            className="h-[22px] w-[22px]"
-            fill="none"
-            stroke="#8a6c3c"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.5"
-            viewBox="0 0 24 24"
-          >
-            <path d="M3 4h2.4l1.8 9.4h10.3L20 7H6" />
-            <circle cx="9" cy="18.4" r="1.5" />
-            <circle cx="16" cy="18.4" r="1.5" />
-          </svg>
-        ) : (
-          <span className="font-serif text-[16px] tracking-[0.04em] text-[#6b5638]">
-            {badge}
-          </span>
-        )}
-      </div>
-    </div>
+          {/* Right column */}
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="flex items-center gap-1 rounded-full bg-[#dde3c8]/90 px-2 py-[2.5px] text-[8.5px] font-semibold text-[#55663f]">
+              Paid
+              <span className="grid h-[11px] w-[11px] place-items-center rounded-full bg-[#6f7f53]">
+                <svg
+                  aria-hidden="true"
+                  className="h-[7px] w-[7px]"
+                  fill="none"
+                  stroke="#f4f0e2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 10 10"
+                >
+                  <path d="M1.5 5.2 4 7.6 8.5 2.5" />
+                </svg>
+              </span>
+            </span>
+            <span className="font-serif text-[20px] leading-none text-[#2f261b]">
+              {amount}
+            </span>
+            <span aria-hidden="true" className="text-[14px] leading-none text-[#8a6c3c]">
+              ›
+            </span>
+          </div>
+        </div>
+      </a>
+    </li>
   );
 }
 
