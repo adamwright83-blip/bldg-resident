@@ -13,6 +13,8 @@ describe("mergeWelcomeHandoffIdentity", () => {
     ).toEqual({
       firstName: "Alex",
       lastName: "Rivera",
+      email: null,
+      unit: null,
       buildingSlug: "opusla",
     });
   });
@@ -35,6 +37,8 @@ describe("mergeWelcomeHandoffIdentity", () => {
     ).toEqual({
       firstName: "Pat",
       lastName: "Kim",
+      email: null,
+      unit: null,
       buildingSlug: "cpe-north",
     });
   });
@@ -53,6 +57,8 @@ describe("mergeWelcomeHandoffIdentity", () => {
     ).toEqual({
       firstName: "Sam",
       lastName: "Lee",
+      email: null,
+      unit: null,
       buildingSlug: "opusla",
     });
   });
@@ -68,6 +74,8 @@ describe("mergeWelcomeHandoffIdentity", () => {
     ).toEqual({
       firstName: "Jo",
       lastName: "Doe",
+      email: null,
+      unit: null,
       buildingSlug: "3545",
     });
   });

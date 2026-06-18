@@ -24,10 +24,12 @@ import {
   getBldgUserById,
   getBldgUserByPhone,
   insertChatMessage,
+  insertChatMessageIdempotently,
   updateBldgUser,
   getServiceRequests,
   getServiceRequestByBldgUserAndOrderId,
   updateServiceRequest,
+  upsertWelcomeServiceRequest,
 } from "./db";
 import { mergeWelcomeHandoffIdentity } from "./lib/welcomeHandoffMerge";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -40,6 +42,7 @@ import {
   parseReceiptExpansionIdentityFromJwt,
 } from "./receipt/parseExpansionIdentity";
 import { UnsupportedReceiptVendorError } from "./receipt/errors";
+import { verifyWelcomeToken } from "./lib/welcomeHandoff";
 
 const BLDG_COOKIE_NAME = "bldg_session";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -143,7 +146,7 @@ function getBldgSessionCookie(req: Request): string | undefined {
 function formatReceiptMessage(
   receiptData: any,
   firstName?: string | null,
-  orderId?: string
+  orderId?: string | number
 ): string {
   const name = firstName || "there";
 
@@ -353,44 +356,22 @@ export function registerWelcomeRoutes(app: Router): void {
 
       // Verify the JWT from Laundry Butler (signed with APP_SHARED_API_SECRET)
       const sharedSecret = getSharedApiSecretBytes();
-      let payload: Record<string, unknown>;
+      let claims;
 
       try {
-        const result = await jwtVerify(token, sharedSecret, {
-          algorithms: ["HS256"],
-        });
-        payload = result.payload as Record<string, unknown>;
+        claims = await verifyWelcomeToken(token, sharedSecret);
       } catch (err) {
         console.error("[Welcome] JWT verification failed:", err);
         return res.status(401).json({ error: "Invalid or expired token" });
       }
 
-      // Extract fields from the JWT
-      const phone = typeof payload.phone === "string" ? payload.phone.trim() : undefined;
-      const orderIdRaw = payload.orderId;
-      const orderId =
-        typeof orderIdRaw === "string"
-          ? orderIdRaw.trim()
-          : orderIdRaw != null
-            ? String(orderIdRaw)
-            : undefined;
-
-      const jwtFirst =
-        typeof payload.firstName === "string" && payload.firstName.trim()
-          ? payload.firstName.trim()
-          : undefined;
-      const jwtLast =
-        typeof payload.lastName === "string" && payload.lastName.trim()
-          ? payload.lastName.trim()
-          : undefined;
+      const { phoneE164: phone, orderId, firstName: jwtFirst, lastName: jwtLast } = claims;
 
       const hostBuilding = resolveBuildingFromHostname(req.hostname || "");
       // Handoff JWT buildingSlug (bldg-admin-api generatePortalToken): canonical tower ids
       // "3545" | "3650" | "2160" | "2170", or null/omitted when LB cannot resolve — not wrong tower.
       const payloadBuildingRaw =
-        typeof payload.buildingSlug === "string" && payload.buildingSlug.trim()
-          ? payload.buildingSlug.trim()
-          : undefined;
+        claims.buildingSlug;
       const payloadBuilding =
         normalizePortalBuildingSlugForWelcome(payloadBuildingRaw);
       const buildingCandidate = hostBuilding?.slug ?? payloadBuilding ?? undefined;
@@ -407,19 +388,14 @@ export function registerWelcomeRoutes(app: Router): void {
         );
       }
 
-      if (!phone || !orderId) {
-        console.error("[Welcome] JWT missing required fields (phone, orderId)");
-        return res
-          .status(400)
-          .json({ error: "Token missing required fields" });
-      }
-
       const existing = await getBldgUserByPhone(phone);
       const merged = mergeWelcomeHandoffIdentity(existing, {
         firstName: jwtFirst,
         lastName: jwtLast,
         buildingCandidate: buildingCandidate ?? null,
-        buildingFallback: "3545",
+        buildingFallback: "",
+        email: claims.email,
+        unit: claims.unit,
       });
 
       console.log(
@@ -432,6 +408,15 @@ export function registerWelcomeRoutes(app: Router): void {
         firstName: merged.firstName,
         lastName: merged.lastName,
         buildingSlug: merged.buildingSlug,
+        email: merged.email,
+        unit: merged.unit,
+        onboardingStep: existing?.onboardingStep === 5
+          ? 5
+          : !merged.buildingSlug || !merged.unit
+            ? 1
+            : !merged.firstName || !merged.lastName
+              ? 2
+              : 4,
       });
 
       const receiptDisplayName =
@@ -466,6 +451,21 @@ export function registerWelcomeRoutes(app: Router): void {
         );
       }
 
+      // Persist the booked Laundry Butler order as Vault-visible operational truth.
+      // This is part of a successful handoff, not a best-effort chat embellishment.
+      await upsertWelcomeServiceRequest({
+          bldgUserId: bldgUser.id,
+          serviceType: "laundry",
+          status: receiptData?.paid ? "paid" : "confirmed",
+          orderId,
+          requestSummary: `Laundry Butler order #${orderId}`,
+          requestJson: { orderId, receiptData, handoffJti: claims.jti },
+          residentName: receiptDisplayName,
+          residentPhone: phone,
+          buildingId: merged.buildingSlug,
+          source: "laundry-butler-welcome",
+      });
+
       // Inject receipt as AI's first chat message
       try {
         const content = formatReceiptMessage(
@@ -473,7 +473,7 @@ export function registerWelcomeRoutes(app: Router): void {
           receiptDisplayName,
           orderId
         );
-        await insertChatMessage({
+        await insertChatMessageIdempotently({
           bldgUserId: bldgUser.id,
           role: "assistant",
           content,
@@ -482,6 +482,7 @@ export function registerWelcomeRoutes(app: Router): void {
             orderId,
             receiptData,
           },
+          idempotencyKey: `welcome-receipt:${bldgUser.id}:${orderId}`,
         });
         console.log(
           `[Welcome] Injected receipt message for user ${bldgUser.id}`

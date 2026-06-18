@@ -7,6 +7,8 @@ export type WelcomeHandoffExisting = {
   firstName?: string | null;
   lastName?: string | null;
   buildingSlug?: string | null;
+  email?: string | null;
+  unit?: string | null;
 } | null | undefined;
 
 export type WelcomeHandoffIncoming = {
@@ -14,6 +16,8 @@ export type WelcomeHandoffIncoming = {
   lastName?: string | null;
   /** Resolved from hostname or JWT buildingSlug only — omit default building here */
   buildingCandidate?: string | null;
+  email?: string | null;
+  unit?: string | null;
   /** Used for new users or when JWT + existing have no building */
   buildingFallback: string;
 };
@@ -28,7 +32,7 @@ function trimOrEmpty(v: string | null | undefined): string {
 export function mergeWelcomeHandoffIdentity(
   existing: WelcomeHandoffExisting,
   incoming: WelcomeHandoffIncoming
-): { firstName: string | null; lastName: string | null; buildingSlug: string } {
+): { firstName: string | null; lastName: string | null; email: string | null; unit: string | null; buildingSlug: string } {
   const pick = (jwtVal: string | null | undefined, stored: string | null | undefined): string | null => {
     const j = trimOrEmpty(jwtVal ?? undefined);
     if (j) return j;
@@ -38,11 +42,13 @@ export function mergeWelcomeHandoffIdentity(
 
   const firstName = pick(incoming.firstName, existing?.firstName);
   const lastName = pick(incoming.lastName, existing?.lastName);
+  const email = pick(incoming.email, existing?.email);
+  const unit = pick(incoming.unit, existing?.unit);
 
   const cand = trimOrEmpty(incoming.buildingCandidate ?? undefined);
   const storedB = trimOrEmpty(existing?.buildingSlug ?? undefined);
-  const fb = trimOrEmpty(incoming.buildingFallback) || "3545";
+  const fb = trimOrEmpty(incoming.buildingFallback);
   const buildingSlug = cand || storedB || fb;
 
-  return { firstName, lastName, buildingSlug };
+  return { firstName, lastName, email, unit, buildingSlug };
 }

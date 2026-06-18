@@ -36,6 +36,7 @@ export const bldgUsers = mysqlTable("bldg_users", {
   phoneE164: varchar("phoneE164", { length: 20 }).notNull().unique(),
   firstName: varchar("firstName", { length: 100 }),
   lastName: varchar("lastName", { length: 100 }),
+  email: varchar("email", { length: 320 }),
   unit: varchar("unit", { length: 50 }),
   buildingSlug: varchar("buildingSlug", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -68,6 +69,7 @@ export const chatMessages = mysqlTable("chat_messages", {
   content: text("content").notNull(),
   /** Optional metadata: receipt data, service request refs, etc. */
   metadata: json("metadata"),
+  idempotencyKey: varchar("idempotencyKey", { length: 191 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

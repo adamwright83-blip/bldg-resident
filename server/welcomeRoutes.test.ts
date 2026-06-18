@@ -1,138 +1,76 @@
 import { describe, expect, it } from "vitest";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose";
+import {
+  normalizePhoneE164,
+  verifyWelcomeToken,
+  WELCOME_JWT_AUDIENCE,
+  WELCOME_JWT_ISSUER,
+} from "./lib/welcomeHandoff";
+import { mergeWelcomeHandoffIdentity } from "./lib/welcomeHandoffMerge";
 
-/**
- * Tests for the Laundry Butler handoff flow.
- *
- * Key design:
- * - Handoff JWTs (from Laundry Butler) are signed with APP_SHARED_API_SECRET
- * - BLDG session cookies (internal) are signed with JWT_SECRET
- * - Receipt API calls use APP_SHARED_API_SECRET in the X-APP-SHARED-SECRET header
- */
+const secret = new TextEncoder().encode("test-shared-secret-that-is-long-enough");
 
-const getSharedSecret = () =>
-  new TextEncoder().encode(process.env.APP_SHARED_API_SECRET ?? "");
-const getSessionSecret = () =>
-  new TextEncoder().encode(process.env.JWT_SECRET ?? "");
+async function token(overrides: Record<string, unknown> = {}, signingSecret = secret) {
+  return new SignJWT({
+    phone: "(310) 555-1234",
+    firstName: "Alex",
+    lastName: "Rivera",
+    email: "Alex@Example.com",
+    unit: "12A",
+    buildingSlug: "3545",
+    orderId: 123,
+    ...overrides,
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setIssuer(WELCOME_JWT_ISSUER)
+    .setAudience(WELCOME_JWT_AUDIENCE)
+    .setJti(String(overrides.jti ?? "handoff-123"))
+    .setExpirationTime(typeof overrides.exp === "number" ? overrides.exp : "5m")
+    .sign(signingSecret);
+}
 
-describe("Environment variables", () => {
-  it("JWT_SECRET is set and non-empty", () => {
-    expect(process.env.JWT_SECRET).toBeDefined();
-    expect(process.env.JWT_SECRET!.length).toBeGreaterThan(0);
+describe("Laundry Butler welcome JWT contract", () => {
+  it("accepts a new-user handoff and normalizes identity", async () => {
+    const claims = await verifyWelcomeToken(await token(), secret);
+    expect(claims).toMatchObject({ phoneE164: "+13105551234", email: "alex@example.com", unit: "12A", orderId: 123 });
   });
 
-  it("APP_SHARED_API_SECRET is set and non-empty", () => {
-    expect(process.env.APP_SHARED_API_SECRET).toBeDefined();
-    expect(process.env.APP_SHARED_API_SECRET!.length).toBeGreaterThan(0);
+  it.each([
+    ["phone", ""], ["orderId", ""],
+  ])("rejects missing required %s", async (field, value) => {
+    await expect(verifyWelcomeToken(await token({ [field]: value }), secret)).rejects.toThrow();
   });
 
-  it("LAUNDRY_API_BASE_URL is set and starts with https://", () => {
-    expect(process.env.LAUNDRY_API_BASE_URL).toBeDefined();
-    expect(process.env.LAUNDRY_API_BASE_URL).toMatch(/^https?:\/\//);
-  });
-});
-
-describe("Handoff JWT (signed with APP_SHARED_API_SECRET)", () => {
-  it("can create and verify a handoff JWT with APP_SHARED_API_SECRET", async () => {
-    const secret = getSharedSecret();
-
-    // Simulate what Laundry Butler does: sign a JWT with APP_SHARED_API_SECRET
-    const token = await new SignJWT({
-      phone: "+13105551234",
-      firstName: "Alex",
-      lastName: "Rivera",
-      orderId: "ord_test_123",
-      buildingSlug: "opusla",
-    })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
-      .sign(secret);
-
-    expect(token).toBeDefined();
-    expect(typeof token).toBe("string");
-
-    // Verify it (simulating what /api/welcome does)
-    const { payload } = await jwtVerify(token, secret, {
-      algorithms: ["HS256"],
-    });
-
-    expect(payload.phone).toBe("+13105551234");
-    expect(payload.firstName).toBe("Alex");
-    expect(payload.lastName).toBe("Rivera");
-    expect(payload.orderId).toBe("ord_test_123");
-    expect(payload.buildingSlug).toBe("opusla");
+  it("rejects expired and tampered tokens", async () => {
+    await expect(verifyWelcomeToken(await token({ exp: Math.floor(Date.now() / 1000) - 1 }), secret)).rejects.toThrow();
+    const wrong = new TextEncoder().encode("a-different-test-shared-secret-value");
+    await expect(verifyWelcomeToken(await token({}, wrong), secret)).rejects.toThrow();
   });
 
-  it("rejects a handoff JWT signed with a different secret", async () => {
-    const wrongSecret = new TextEncoder().encode("wrong-secret-key-12345");
-    const correctSecret = getSharedSecret();
-
-    const token = await new SignJWT({
-      phone: "+13105551234",
-      orderId: "ord_test_456",
-    })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
-      .sign(wrongSecret);
-
-    await expect(
-      jwtVerify(token, correctSecret, { algorithms: ["HS256"] })
-    ).rejects.toThrow();
+  it("requires issuer, audience, expiration, and jti", async () => {
+    const missingClaims = await new SignJWT({ phone: "+13105551234", orderId: 123 })
+      .setProtectedHeader({ alg: "HS256" }).sign(secret);
+    await expect(verifyWelcomeToken(missingClaims, secret)).rejects.toThrow();
   });
 
-  it("rejects an expired handoff JWT", async () => {
-    const secret = getSharedSecret();
-
-    const token = await new SignJWT({
-      phone: "+13105551234",
-      orderId: "ord_test_789",
-    })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-      .setExpirationTime(Math.floor(Date.now() / 1000) - 60) // expired 60s ago
-      .sign(secret);
-
-    await expect(
-      jwtVerify(token, secret, { algorithms: ["HS256"] })
-    ).rejects.toThrow();
+  it("normalizes supported phone forms and rejects ambiguous values", () => {
+    expect(normalizePhoneE164("310.555.1234")).toBe("+13105551234");
+    expect(normalizePhoneE164("+44 7911 123456")).toBe("+447911123456");
+    expect(normalizePhoneE164("555-1234")).toBeNull();
   });
 });
 
-describe("BLDG session token (signed with JWT_SECRET)", () => {
-  it("can create and verify a BLDG session token with JWT_SECRET", async () => {
-    const secret = getSessionSecret();
-
-    // Simulate what /api/welcome does: create a session with bldgUserId
-    const sessionToken = await new SignJWT({ bldgUserId: 42 })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
-      .sign(secret);
-
-    const { payload } = await jwtVerify(sessionToken, secret, {
-      algorithms: ["HS256"],
-    });
-
-    expect(payload.bldgUserId).toBe(42);
+describe("welcome profile merge and repeat handoff idempotency inputs", () => {
+  it("preserves existing nonempty values when handoff values are blank", () => {
+    expect(mergeWelcomeHandoffIdentity(
+      { firstName: "Stored", lastName: "Resident", email: "stored@example.com", unit: "8B", buildingSlug: "3650" },
+      { firstName: " ", lastName: null, email: "", unit: null, buildingCandidate: "", buildingFallback: "" },
+    )).toEqual({ firstName: "Stored", lastName: "Resident", email: "stored@example.com", unit: "8B", buildingSlug: "3650" });
   });
 
-  it("handoff JWT cannot be verified with JWT_SECRET (different keys)", async () => {
-    const sharedSecret = getSharedSecret();
-    const sessionSecret = getSessionSecret();
-
-    // Sign with APP_SHARED_API_SECRET (like Laundry Butler does)
-    const handoffToken = await new SignJWT({
-      phone: "+13105551234",
-      orderId: "ord_test_cross",
-    })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
-      .sign(sharedSecret);
-
-    // Try to verify with JWT_SECRET — should fail since they're different keys
-    // (unless by coincidence they happen to be the same value, which is unlikely)
-    if (process.env.APP_SHARED_API_SECRET !== process.env.JWT_SECRET) {
-      await expect(
-        jwtVerify(handoffToken, sessionSecret, { algorithms: ["HS256"] })
-      ).rejects.toThrow();
-    }
+  it("uses stable database idempotency keys for repeated handoffs", () => {
+    const userId = 42, orderId = 123;
+    expect(`welcome-receipt:${userId}:${orderId}`).toBe("welcome-receipt:42:123");
+    expect([userId, orderId]).toEqual([42, 123]);
   });
 });

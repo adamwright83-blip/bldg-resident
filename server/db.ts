@@ -245,6 +245,9 @@ export async function upsertBldgUser(data: {
   firstName?: string | null;
   lastName?: string | null;
   buildingSlug?: string | null;
+  email?: string | null;
+  unit?: string | null;
+  onboardingStep?: number;
 }): Promise<BldgUser> {
   const db = await getDb();
   if (!db) {
@@ -259,21 +262,21 @@ export async function upsertBldgUser(data: {
     firstName: data.firstName ?? null,
     lastName: data.lastName ?? null,
     buildingSlug: data.buildingSlug ?? null,
+    email: data.email ?? null,
+    unit: data.unit ?? null,
+    onboardingStep: data.onboardingStep ?? 0,
     lastLoginAt: now,
   };
 
   const updateSet: Record<string, unknown> = {
     lastLoginAt: now,
   };
-  if (data.firstName !== undefined) {
-    updateSet.firstName = data.firstName;
-  }
-  if (data.lastName !== undefined) {
-    updateSet.lastName = data.lastName;
-  }
-  if (data.buildingSlug !== undefined) {
-    updateSet.buildingSlug = data.buildingSlug;
-  }
+  if (data.firstName?.trim()) updateSet.firstName = data.firstName.trim();
+  if (data.lastName?.trim()) updateSet.lastName = data.lastName.trim();
+  if (data.buildingSlug?.trim()) updateSet.buildingSlug = data.buildingSlug.trim();
+  if (data.email?.trim()) updateSet.email = data.email.trim();
+  if (data.unit?.trim()) updateSet.unit = data.unit.trim();
+  if (data.onboardingStep !== undefined) updateSet.onboardingStep = data.onboardingStep;
 
   await db.insert(bldgUsers).values(values).onDuplicateKeyUpdate({
     set: updateSet,
@@ -377,6 +380,14 @@ export async function insertChatMessage(
     .limit(1);
 
   return rows[0];
+}
+
+export async function insertChatMessageIdempotently(data: InsertChatMessage): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot insert chat message: database not available");
+  await db.insert(chatMessages).values(data).onDuplicateKeyUpdate({
+    set: { idempotencyKey: data.idempotencyKey },
+  });
 }
 
 /**
@@ -533,6 +544,25 @@ export async function getServiceRequestByBldgUserAndOrderId(
     });
     return undefined;
   }
+}
+
+export async function upsertWelcomeServiceRequest(data: InsertServiceRequest): Promise<ServiceRequest> {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot upsert service request: database not available");
+  await db.insert(serviceRequests).values(data).onDuplicateKeyUpdate({
+    set: {
+      requestSummary: data.requestSummary,
+      requestJson: data.requestJson,
+      status: data.status,
+      source: data.source,
+      residentName: data.residentName,
+      residentPhone: data.residentPhone,
+      buildingId: data.buildingId,
+    },
+  });
+  const row = await getServiceRequestByBldgUserAndOrderId(data.bldgUserId, data.orderId!);
+  if (!row) throw new Error("[Database] Upserted welcome service request could not be read back");
+  return row;
 }
 
 /**
