@@ -56,19 +56,21 @@ const COMPOSITE_PATHS: Record<string, HeldDrawing> = {
   // FOLDED SHIRT — collar V, shoulders, folded sleeves, hem; placket + crease accents.
   laundry_pickup: {
     id: "laundry_pickup",
-    main: "M 155.5 78.4 C 170.4 97.7 200.1 105.1 215 108.1 C 229.9 105.1 259.6 97.7 274.5 78.4 C 293.8 81.4 311.6 85.8 325 93.3 C 319.1 123 310.1 146.8 296.8 161.6 C 286.4 154.2 278.9 149.7 270 146.8 L 273 209.2 C 273 216.6 268.5 219.6 261.1 219.6 L 168.9 219.6 C 161.5 219.6 157 216.6 157 209.2 L 160 146.8 C 151.1 149.7 143.6 154.2 133.2 161.6 C 119.9 146.8 110.9 123 105 93.3 C 118.4 85.8 136.2 81.4 155.5 78.4",
+    main: "M294 177 C311 151 345 143 377 140 C410 137 438 119 468 123 C495 128 518 147 548 157 C568 164 584 174 583 188 C581 203 561 207 536 207 C506 208 483 216 454 222 C422 229 393 226 366 214 C342 203 320 199 298 200 C279 201 266 196 267 186 C268 181 278 177 294 177 M280 214 C259 219 249 233 254 246 C260 261 281 266 303 267 C329 268 347 278 369 289 C392 301 411 301 432 291 C454 280 478 267 508 263 C535 260 555 247 556 234 C557 222 544 214 527 214 M269 267 C250 275 247 289 258 300 C272 313 296 314 320 314 C344 314 365 320 386 335 C411 354 428 360 447 348 C465 336 475 314 502 308 C525 302 542 292 542 281 C542 271 531 265 517 264 M223 305 C233 346 240 392 248 438 C254 472 276 491 312 498 C356 507 444 507 488 498 C524 491 546 472 552 438 C560 392 567 346 577 305 M223 305 C212 277 195 268 187 279 C178 291 191 316 224 333 M577 305 C588 277 605 268 613 279 C622 291 609 316 576 333",
     details: [
-      "M 215 114.1 L 215 155.7",
-      "M 180.8 185.4 C 210.5 179.5 237.3 179.5 261.1 185.4",
+      "M337 203 C362 218 383 235 407 244 C430 253 451 248 470 238 C492 226 514 217 545 215",
+      "M306 267 C329 276 344 294 367 302 C389 310 408 306 426 296 C451 282 473 270 506 264",
+      "M493 219 C511 207 533 202 551 204 M490 275 C510 268 529 268 541 273",
     ],
   },
   // Deadline laundry uses the same approved shirt (the deadline is conveyed in copy).
   laundry_pickup_deadline: {
     id: "laundry_pickup_deadline",
-    main: "M 155.5 78.4 C 170.4 97.7 200.1 105.1 215 108.1 C 229.9 105.1 259.6 97.7 274.5 78.4 C 293.8 81.4 311.6 85.8 325 93.3 C 319.1 123 310.1 146.8 296.8 161.6 C 286.4 154.2 278.9 149.7 270 146.8 L 273 209.2 C 273 216.6 268.5 219.6 261.1 219.6 L 168.9 219.6 C 161.5 219.6 157 216.6 157 209.2 L 160 146.8 C 151.1 149.7 143.6 154.2 133.2 161.6 C 119.9 146.8 110.9 123 105 93.3 C 118.4 85.8 136.2 81.4 155.5 78.4",
+    main: "M294 177 C311 151 345 143 377 140 C410 137 438 119 468 123 C495 128 518 147 548 157 C568 164 584 174 583 188 C581 203 561 207 536 207 C506 208 483 216 454 222 C422 229 393 226 366 214 C342 203 320 199 298 200 C279 201 266 196 267 186 C268 181 278 177 294 177 M280 214 C259 219 249 233 254 246 C260 261 281 266 303 267 C329 268 347 278 369 289 C392 301 411 301 432 291 C454 280 478 267 508 263 C535 260 555 247 556 234 C557 222 544 214 527 214 M269 267 C250 275 247 289 258 300 C272 313 296 314 320 314 C344 314 365 320 386 335 C411 354 428 360 447 348 C465 336 475 314 502 308 C525 302 542 292 542 281 C542 271 531 265 517 264 M223 305 C233 346 240 392 248 438 C254 472 276 491 312 498 C356 507 444 507 488 498 C524 491 546 472 552 438 C560 392 567 346 577 305 M223 305 C212 277 195 268 187 279 C178 291 191 316 224 333 M577 305 C588 277 605 268 613 279 C622 291 609 316 576 333",
     details: [
-      "M 215 114.1 L 215 155.7",
-      "M 180.8 185.4 C 210.5 179.5 237.3 179.5 261.1 185.4",
+      "M337 203 C362 218 383 235 407 244 C430 253 451 248 470 238 C492 226 514 217 545 215",
+      "M306 267 C329 276 344 294 367 302 C389 310 408 306 426 296 C451 282 473 270 506 264",
+      "M493 219 C511 207 533 202 551 204 M490 275 C510 268 529 268 541 273",
     ],
   },
   // SCISSORS — two crossing blades with finger rings; pivot screw accent.
@@ -191,6 +193,11 @@ export function HeldArtistDrawing({
   );
   const path = drawing.main;
   const details = drawing.details ?? [];
+  const isLaundryDrawing = drawing.id === "laundry_pickup" || drawing.id === "laundry_pickup_deadline";
+  const canvasX = isLaundryDrawing ? 150 : 0;
+  const canvasY = isLaundryDrawing ? 100 : 0;
+  const canvasWidth = isLaundryDrawing ? 500 : 430;
+  const canvasHeight = isLaundryDrawing ? 430 : 260;
   const duration = useMemo(() => getDuration(services), [services]);
   onDrawingCompleteRef.current = onDrawingComplete;
 
@@ -335,8 +342,8 @@ export function HeldArtistDrawing({
       lifted: boolean,
     ) => {
       setPenStyle({
-        left: `${(pose.x / 430) * 100}%`,
-        top: `${(pose.y / 260) * 100}%`,
+        left: `${((pose.x - canvasX) / canvasWidth) * 100}%`,
+        top: `${((pose.y - canvasY) / canvasHeight) * 100}%`,
         transform: `translate(-30%, -86%) rotate(${pose.tilt.toFixed(2)}deg)${
           lifted ? " translateY(-7px) scale(1.03)" : ""
         }`,
@@ -398,8 +405,8 @@ export function HeldArtistDrawing({
     // the first stroke point. The CSS transition (set in initial penStyle) does
     // the easing. No line is drawn yet — dashoffset is still full length.
     setPenStyle({
-      left: `${(startPose.x / 430) * 100}%`,
-      top: `${(startPose.y / 260) * 100}%`,
+      left: `${((startPose.x - canvasX) / canvasWidth) * 100}%`,
+      top: `${((startPose.y - canvasY) / canvasHeight) * 100}%`,
       transform: `translate(-30%, -86%) rotate(${startPose.tilt.toFixed(2)}deg)`,
       transition: `left ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), top ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
     });
@@ -503,7 +510,7 @@ export function HeldArtistDrawing({
         window.clearTimeout(approachTimer);
       }
     };
-  }, [duration, path]);
+  }, [canvasHeight, canvasWidth, canvasX, canvasY, duration, path]);
 
   return (
     <div className="absolute inset-0 z-[80] overflow-hidden bg-[#f4ecdf]">
@@ -550,7 +557,7 @@ export function HeldArtistDrawing({
               isComplete ? "opacity-75" : "opacity-100"
             }`}
             preserveAspectRatio="xMidYMid meet"
-            viewBox="0 0 430 260"
+            viewBox={`${canvasX} ${canvasY} ${canvasWidth} ${canvasHeight}`}
           >
             <path
               ref={pathRef}
