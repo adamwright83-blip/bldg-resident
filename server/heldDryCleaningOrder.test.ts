@@ -17,6 +17,7 @@ describe("HELD dry-cleaning second order", () => {
     expect(existsSync(tokenPath)).toBe(true);
     expect(prototypeSource).toContain('tokenDryCleaning: "/held/token-dry-cleaning.png"');
     expect(prototypeSource).toContain('type: "dry_cleaning"');
+    expect(prototypeSource).toContain('"h-[120px] w-[120px]"');
   });
 
   it("uses the dedicated pen-trace drawing", () => {
@@ -25,6 +26,7 @@ describe("HELD dry-cleaning second order", () => {
     ]);
     expect(drawing.id).toBe("dry_cleaning");
     expect(getPenTraceSegments(drawing).length).toBeGreaterThan(3);
+    expect(drawing.main).toContain("C329 78 331 66 341 60");
   });
 
   it("keeps laundry and adds dry cleaning as a distinct service", () => {

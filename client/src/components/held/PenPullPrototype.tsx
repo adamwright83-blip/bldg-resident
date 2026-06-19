@@ -231,8 +231,8 @@ const stripePromise =
 const TOKEN_POSITIONS: Record<number, Array<{ left: number; top: number }>> = {
   1: [{ left: 50, top: 50 }],
   2: [
-    { left: 34, top: 50 },
-    { left: 66, top: 50 },
+    { left: 24, top: 50 },
+    { left: 76, top: 50 },
   ],
   3: [
     { left: 18, top: 38 },
@@ -4829,11 +4829,18 @@ function HeldTransformingState({
         {tokens.map((token, index) => {
           const isEmphasized =
             highlightedServiceType === token.type || selectedToken?.type === token.type;
+          const isDryCleaningToken = token.type === "dry_cleaning";
           return (
           <button
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
             className={`pointer-events-auto absolute touch-manipulation transition-[transform,filter] duration-200 active:scale-[0.94] ${
-              isSettled ? "h-[52px] w-[52px]" : "h-[80px] w-[80px]"
+              isSettled
+                ? isDryCleaningToken
+                  ? "h-[120px] w-[120px]"
+                  : "h-[72px] w-[72px]"
+                : isDryCleaningToken
+                  ? "h-[140px] w-[140px]"
+                  : "h-[96px] w-[96px]"
             } ${isEmphasized ? "z-[2]" : ""}`}
             key={`${token.src}-${index}`}
             onClick={event => {
