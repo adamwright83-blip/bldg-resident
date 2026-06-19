@@ -536,17 +536,6 @@ export default function PenPullPrototype({
     mode === "takingCustody" ||
     mode === "orderError";
   const showPenGesture = showHomeWorld && mode !== "speech";
-  const canReturnToHeld =
-    Boolean(confirmedRequest) &&
-    Boolean(lastOrderId) &&
-    (mode === "choice" ||
-      mode === "speech" ||
-      mode === "typing" ||
-      mode === "requestReady" ||
-      mode === "editingRequest" ||
-      mode === "collectName" ||
-      mode === "collectPayment" ||
-      mode === "orderError");
   const microphoneClassName =
     mode === "speech"
       ? // Voice-capture: the tray owns the middle of the screen, so the mic
@@ -911,22 +900,6 @@ export default function PenPullPrototype({
     mode === "rest" &&
     !composerTrayVisible &&
     !physics.isPointerActive;
-  const returnToHeld = () => {
-    if (!confirmedRequest) return;
-
-    if (controlledComposerOpen === undefined) {
-      setInternalComposerOpen(false);
-    }
-
-    setDraft("");
-    setSpeechTranscript("");
-    setHeldAgentStatus("idle");
-    setHeldAgentMessage("");
-    setTypedCommandStatus("idle");
-    setMode("held");
-    physics.reset();
-  };
-
   useEffect(() => {
     if (mode !== "transforming") return undefined;
 
@@ -1185,31 +1158,6 @@ export default function PenPullPrototype({
               {residenceLabel}
             </p>
           </header>}
-
-          {showHomeWorld && (
-            canReturnToHeld ? (
-              <button
-                aria-label="Return to held services"
-                className="absolute right-[7%] top-[7%] z-[75] h-10 w-10 rounded-full p-0 opacity-75 transition-opacity active:opacity-100"
-                onClick={returnToHeld}
-                type="button"
-              >
-                <img
-                  alt=""
-                  className="h-full w-full select-none"
-                  draggable={false}
-                  src={HELD_ASSETS.crest}
-                />
-              </button>
-            ) : (
-              <img
-                alt=""
-                className="pointer-events-none absolute right-[7%] top-[7%] z-20 h-10 w-10 opacity-70"
-                draggable={false}
-                src={HELD_ASSETS.crest}
-              />
-            )
-          )}
 
           {showHomeWorld && <section className="held-home-copy pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
             <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
