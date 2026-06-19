@@ -43,6 +43,7 @@ export type PenUnlockInfo = {
 };
 
 export type UsePenPhysicsOptions = {
+  active?: boolean;
   composerOpen?: boolean;
   debug?: boolean;
   onComposerPenSwipe?: () => void;
@@ -103,6 +104,7 @@ function getLocalPoint(
 }
 
 export function usePenPhysics({
+  active = true,
   composerOpen = false,
   debug = false,
   onComposerPenSwipe,
@@ -385,6 +387,10 @@ export function usePenPhysics({
   }, [finishPull]);
 
   useLayoutEffect(() => {
+    if (!active) {
+      return undefined;
+    }
+
     const stage = stageRef.current;
     if (!stage) {
       return undefined;
@@ -451,7 +457,7 @@ export function usePenPhysics({
       resizeObserver.disconnect();
       window.removeEventListener("orientationchange", measure);
     };
-  }, [setMachineState, stageRef]);
+  }, [active, setMachineState, stageRef]);
 
   useEffect(() => {
     let raf = 0;

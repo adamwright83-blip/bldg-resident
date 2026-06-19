@@ -851,6 +851,7 @@ export default function PenPullPrototype({
   );
 
   const physics = usePenPhysics({
+    active: bootstrapReady,
     composerOpen: composerTrayVisible,
     debug,
     onComposerPenSwipe: enterSpeechMode,
