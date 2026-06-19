@@ -339,6 +339,13 @@ export default function PenPullPrototype({
   const [forceShowInstructionsBook, setForceShowInstructionsBook] = useState(false);
   const [instructionsGuideOpen, setInstructionsGuideOpen] = useState(false);
   const [instructionsGuideSeen, setInstructionsGuideSeen] = useState(false);
+  const [bootstrapReady, setBootstrapReady] = useState(showDebugControls);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [emailPromptOpen, setEmailPromptOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailReceiptsDraftEnabled, setEmailReceiptsDraftEnabled] = useState(true);
+  const [pendingReceiptServiceRequestId, setPendingReceiptServiceRequestId] = useState<number | null>(null);
+  const restoredOrdersRef = useRef(false);
   // True while the courier horse is crossing or the dispatch slip is open —
   // the Labyrinth knob yields the foreground during that ceremony only.
   const [courierForeground, setCourierForeground] = useState(false);
@@ -360,10 +367,65 @@ export default function PenPullPrototype({
   const takingCustodyStartRef = useRef<number | null>(null);
   const drawingHandoffTimerRef = useRef<number | null>(null);
   const saveNameMutation = trpc.chat.saveName.useMutation();
-  const { data: profileData } = trpc.chat.getVaultProfile.useQuery(undefined, {
-    enabled: mode === "held",
-  });
+  const profileQuery = trpc.chat.getVaultProfile.useQuery();
+  const activeBookingsQuery = trpc.chat.getActiveBookings.useQuery();
+  const profileData = profileQuery.data;
+  const receiptPreferencesMutation = trpc.chat.updateReceiptEmailPreferences.useMutation();
+  const emailReceiptMutation = trpc.chat.emailOrderReceipt.useMutation();
+  const logoutMutation = trpc.auth.logout.useMutation();
   const residenceLabel = formatHeldResidenceLabel(profileData?.user);
+
+  useEffect(() => {
+    if (showDebugControls || restoredOrdersRef.current) return;
+    if (profileQuery.isLoading || activeBookingsQuery.isLoading) return;
+    restoredOrdersRef.current = true;
+    const bookings = activeBookingsQuery.data?.bookings ?? [];
+    if (bookings.length > 0) {
+      const services = bookings.map(booking => ({
+        type: booking.serviceType,
+        status: booking.status,
+        orderId: booking.orderId ?? booking.id,
+        pickupWindow: booking.scheduledWindow,
+      })) as HeldParsedService[];
+      const request = bookings
+        .map(booking => booking.requestSummary?.trim())
+        .filter(Boolean)
+        .join(" · ") || "Your services are in motion.";
+      setConfirmedRequest(request);
+      setConfirmedServices(services);
+      setLastOrderId(Number(bookings[0].orderId ?? bookings[0].id));
+      setHeldAgentStatus("confirmed");
+      setHeldAgentMessage("Your services are in motion.");
+      setMode("held");
+    }
+    setEmailDraft(profileQuery.data?.user?.email ?? "");
+    setBootstrapReady(true);
+  }, [activeBookingsQuery.data, activeBookingsQuery.isLoading, profileQuery.data, profileQuery.isLoading, showDebugControls]);
+
+  const saveReceiptEmail = async () => {
+    const email = emailDraft.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return;
+    await receiptPreferencesMutation.mutateAsync({ email, enabled: emailReceiptsDraftEnabled, prompted: true });
+    if (emailReceiptsDraftEnabled && pendingReceiptServiceRequestId) {
+      await emailReceiptMutation.mutateAsync({ serviceRequestId: pendingReceiptServiceRequestId }).catch(error =>
+        console.warn("[HELD] first receipt email was not sent", error),
+      );
+    }
+    setPendingReceiptServiceRequestId(null);
+    setEmailPromptOpen(false);
+    await profileQuery.refetch();
+  };
+  const skipReceiptEmail = async () => {
+    await receiptPreferencesMutation.mutateAsync({ prompted: true });
+    setEmailPromptOpen(false);
+    await profileQuery.refetch();
+  };
+  const logoutResident = async () => {
+    await logoutMutation.mutateAsync();
+    localStorage.removeItem("bldg_onboarding_complete");
+    localStorage.removeItem("manus-runtime-user-info");
+    window.location.href = "/";
+  };
 
   // ── The returning courier (APP-LEVEL — lives here, not in the post-order
   // screen). When the operator answers on admin/driver, the reply lands on the
@@ -643,6 +705,17 @@ export default function PenPullPrototype({
       setHeldAgentStatus("confirmed");
       setHeldAgentMessage(response.content || "Taking custody.");
       setMode("takingCustody");
+      const serviceRequestId = Number(response.booking.serviceRequestId ?? NaN);
+      if (Number.isFinite(serviceRequestId) && serviceRequestId > 0) {
+        if (profileData?.user?.email && profileData.user.emailReceiptsEnabled) {
+          void emailReceiptMutation.mutateAsync({ serviceRequestId }).catch(error =>
+            console.warn("[HELD] receipt email was not sent", error),
+          );
+        } else if (!profileData?.user?.emailReceiptPromptedAt) {
+          setPendingReceiptServiceRequestId(serviceRequestId);
+          window.setTimeout(() => setEmailPromptOpen(true), TAKING_CUSTODY_CEREMONY_MS + 500);
+        }
+      }
       // Hand off to the pen-on-canvas drawing scene right as the request
       // card's stamp → compress → lift ceremony completes. Timed from the tap
       // (takingCustodyStartRef), not from this response, so the seam is
@@ -1005,6 +1078,22 @@ export default function PenPullPrototype({
     setMode("transforming");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!bootstrapReady) {
+    return (
+      <main className="grid h-dvh place-items-center bg-[#f4ecdf] text-[#2a2520]">
+        <div className="text-center">
+          <img alt="HELD" className="mx-auto h-14 w-14 object-contain" src={HELD_ASSETS.crest} />
+          <p className="mt-5 font-serif text-[25px] italic">Opening what’s being held.</p>
+        </div>
+      </main>
+    );
+  }
+
+  const accountInitials = [profileData?.user?.firstName, profileData?.user?.lastName]
+    .filter(Boolean)
+    .map(value => String(value).trim().charAt(0).toUpperCase())
+    .join("") || "R";
 
   return (
     <main className="held-app-stage h-dvh min-h-dvh overflow-hidden bg-[#f4ecdf] text-[#2C2824] md:flex md:items-start md:justify-center md:bg-[#151311] md:px-4 md:py-2">
@@ -1520,6 +1609,50 @@ export default function PenPullPrototype({
           )}
 
         </div>
+
+        <button
+          aria-label="Open resident account"
+          className="absolute right-[6%] top-[6.5%] z-[155] grid h-11 w-11 place-items-center rounded-full border border-[#b8893c]/70 bg-[#f8efdc]/92 font-serif text-[14px] tracking-[0.08em] text-[#5b4632] shadow-[0_7px_16px_rgba(55,35,14,0.18)] backdrop-blur"
+          onClick={() => setAccountOpen(true)}
+          type="button"
+        >
+          {accountInitials}
+        </button>
+
+        <AnimatePresence>
+          {accountOpen && (
+            <motion.div className="absolute inset-0 z-[180] bg-[#251b13]/35 p-5 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.section className="absolute inset-x-5 top-[11%] rounded-[20px] border border-[#d8c19a] bg-[#fbf4e7] p-5 text-[#2a2520] shadow-2xl" initial={{ y: -18 }} animate={{ y: 0 }}>
+                <button aria-label="Close resident account" className="absolute right-4 top-3 text-2xl text-[#756452]" onClick={() => setAccountOpen(false)} type="button">×</button>
+                <div className="grid h-14 w-14 place-items-center rounded-full border border-[#b8893c]/70 bg-[#efe0bf] font-serif text-lg">{accountInitials}</div>
+                <h2 className="mt-3 font-serif text-2xl">{[profileData?.user?.firstName, profileData?.user?.lastName].filter(Boolean).join(" ") || "Resident"}</h2>
+                <dl className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between gap-4"><dt className="text-[#7a6d5f]">Phone</dt><dd>{formatHeldPhone(profileData?.user?.phoneE164)}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-[#7a6d5f]">Email</dt><dd className="truncate">{profileData?.user?.email || "Not added"}</dd></div>
+                  <div className="flex justify-between gap-4"><dt className="text-[#7a6d5f]">Residence</dt><dd>{residenceLabel}</dd></div>
+                </dl>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <button className="rounded-xl border border-[#b8893c]/45 px-4 py-3 font-serif" onClick={() => { setAccountOpen(false); setLabyrinthPanel("receipts"); }} type="button">Vault</button>
+                  <button className="rounded-xl border border-[#b8893c]/45 px-4 py-3 font-serif" onClick={() => setEmailPromptOpen(true)} type="button">Settings</button>
+                </div>
+                <button className="mt-4 w-full py-2 text-sm text-[#8b3026] underline underline-offset-4" onClick={() => void logoutResident()} type="button">Log out</button>
+              </motion.section>
+            </motion.div>
+          )}
+          {emailPromptOpen && (
+            <motion.div className="absolute inset-0 z-[190] grid place-items-center bg-[#251b13]/38 p-6 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <section className="w-full rounded-[20px] border border-[#d8c19a] bg-[#fbf4e7] p-6 shadow-2xl">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-[#8d6b35]">Digital receipts</p>
+                <h2 className="mt-2 font-serif text-2xl">Where should we send them?</h2>
+                <p className="mt-2 text-sm leading-5 text-[#6f6254]">Optional. Your phone remains your only sign-in.</p>
+                <input aria-label="Receipt email" className="mt-5 h-12 w-full rounded-xl border border-[#cbb58f] bg-white/70 px-4 text-base outline-none focus:border-[#9f6f24]" onChange={event => setEmailDraft(event.target.value)} placeholder="you@example.com" type="email" value={emailDraft} />
+                <label className="mt-4 flex items-center gap-3 text-sm"><input checked={emailReceiptsDraftEnabled} onChange={event => setEmailReceiptsDraftEnabled(event.target.checked)} type="checkbox" /> Email my receipts</label>
+                <button className="mt-5 h-12 w-full rounded-xl bg-[#2b241d] text-white disabled:opacity-50" disabled={receiptPreferencesMutation.isPending || !/^\S+@\S+\.\S+$/.test(emailDraft.trim())} onClick={() => void saveReceiptEmail()} type="button">Save receipt email</button>
+                <button className="mt-3 w-full py-2 text-sm text-[#756452]" onClick={() => void skipReceiptEmail()} type="button">Not now</button>
+              </section>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Marble labyrinth knob — OUTSIDE the overflow:hidden stage div ──
             Root cause of invisible knob: the stage div has `overflow-hidden`
@@ -2394,6 +2527,13 @@ function formatHeldResidenceLabel(
   }
 
   return `RESIDENCE ${building.toUpperCase()} · ${unit.toUpperCase()}`;
+}
+
+function formatHeldPhone(phone?: string | null) {
+  if (!phone) return "Not available";
+  const digits = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  if (digits.length !== 10) return phone;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 const PLAN_MS_PER_CHAR = 45;

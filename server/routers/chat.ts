@@ -60,6 +60,21 @@ import {
 } from "../agents/heldRequestInstructions";
 
 const BLDG_COOKIE_NAME = "bldg_session";
+const ACTIVE_REQUEST_STATUSES = new Set([
+  "pending", "paid", "confirmed", "new", "contacting-vendor",
+  "awaiting-vendor", "scheduled", "in-progress",
+]);
+export function isActiveServiceRequestStatus(status: string) {
+  return ACTIVE_REQUEST_STATUSES.has(status);
+}
+function escapeReceiptHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 const RECOVERY_NAME_BEFORE_PAYMENT =
   "Let's add your name on file first — then we'll save your card.";
@@ -3299,9 +3314,7 @@ export const chatRouter = router({
     }
 
     const requests = await getServiceRequests(bldgUserId, 50);
-    const activeBookings = requests.filter(
-      (req) => req.status === "pending" || req.status === "confirmed"
-    );
+    const activeBookings = requests.filter((req) => isActiveServiceRequestStatus(req.status));
 
     return { bookings: activeBookings };
   }),
@@ -3385,12 +3398,73 @@ export const chatRouter = router({
         unit: user.unit,
         buildingSlug: user.buildingSlug,
         phoneE164: user.phoneE164,
+        email: user.email,
+        emailReceiptsEnabled: Boolean(user.emailReceiptsEnabled),
+        emailReceiptPromptedAt: user.emailReceiptPromptedAt,
         cardLast4: user.cardLast4,
         paymentMethodSaved: user.paymentMethodSaved,
         createdAt: user.createdAt,
       },
     };
   }),
+
+  updateReceiptEmailPreferences: publicProcedure
+    .input(z.object({
+      email: z.string().email().max(320).nullable().optional(),
+      enabled: z.boolean().optional(),
+      prompted: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const updates: Record<string, unknown> = {};
+      if (input.email !== undefined) updates.email = input.email?.trim().toLowerCase() || null;
+      if (input.enabled !== undefined) updates.emailReceiptsEnabled = input.enabled ? 1 : 0;
+      if (input.prompted) updates.emailReceiptPromptedAt = new Date();
+      const user = await updateBldgUser(bldgUserId, updates);
+      return { success: true, email: user?.email ?? null, enabled: Boolean(user?.emailReceiptsEnabled) };
+    }),
+
+  emailOrderReceipt: publicProcedure
+    .input(z.object({ serviceRequestId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const bldgUserId = await getBldgUserIdFromRequest(ctx.req);
+      if (!bldgUserId) throw new TRPCError({ code: "UNAUTHORIZED" });
+      const [user, requests] = await Promise.all([
+        getBldgUserById(bldgUserId),
+        getServiceRequests(bldgUserId, 100),
+      ]);
+      const request = requests.find(item => item.id === input.serviceRequestId);
+      if (!user || !request) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!user.email || !user.emailReceiptsEnabled) return { sent: false, reason: "disabled" as const };
+      const apiKey = process.env.RESEND_API_KEY?.trim();
+      const from = process.env.RESEND_FROM_EMAIL?.trim();
+      if (!apiKey || !from) {
+        console.warn("[ReceiptEmail] Resend is not configured", { serviceRequestId: request.id });
+        return { sent: false, reason: "not_configured" as const };
+      }
+      const orderLabel = request.orderId || request.id;
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": `held-receipt-${request.id}`,
+        },
+        body: JSON.stringify({
+          from,
+          to: [user.email],
+          reply_to: process.env.RESEND_REPLY_TO_EMAIL || undefined,
+          subject: `HELD receipt · Order ${orderLabel}`,
+          html: `<div style="font-family:Georgia,serif;color:#2a2520"><h1>Held.</h1><p>Your ${escapeReceiptHtml(request.serviceType)} request is in motion.</p><p><strong>Order ${escapeReceiptHtml(orderLabel)}</strong></p><p>${escapeReceiptHtml(request.requestSummary || "Your service request")}</p><p>${escapeReceiptHtml(request.scheduledDate)} ${escapeReceiptHtml(request.scheduledWindow)}</p><p>Your receipt and live status remain available in the HELD app.</p></div>`,
+        }),
+      });
+      if (!response.ok) {
+        console.error("[ReceiptEmail] Resend failed", { status: response.status, serviceRequestId: request.id });
+        return { sent: false, reason: "provider_error" as const };
+      }
+      return { sent: true, reason: null };
+    }),
 
   /**
    * Get receipt data by JWT token.

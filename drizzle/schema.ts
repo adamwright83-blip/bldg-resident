@@ -37,6 +37,8 @@ export const bldgUsers = mysqlTable("bldg_users", {
   firstName: varchar("firstName", { length: 100 }),
   lastName: varchar("lastName", { length: 100 }),
   email: varchar("email", { length: 320 }),
+  emailReceiptsEnabled: int("emailReceiptsEnabled").default(0).notNull(),
+  emailReceiptPromptedAt: timestamp("emailReceiptPromptedAt"),
   unit: varchar("unit", { length: 50 }),
   buildingSlug: varchar("buildingSlug", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

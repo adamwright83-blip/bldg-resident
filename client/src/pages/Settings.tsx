@@ -3,13 +3,15 @@
 // UI only; reuses existing profile data and Stripe flow.
 // ============================================
 
-import { ArrowLeft, MessageCircle, FileText, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, MessageCircle, FileText, Shield, LogOut } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import { SUPPORT_PHONE_SMS } from "@/const";
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const STRIPE_PUBLISHABLE_FALLBACK =
   "pk_test_51T0xPHCs30FtFkcGlu6o0Tz9GiFtvXGwVT8mTP6NlFf2HMnZQrPxGsohxnMWifKcq6Bxy0wgoDW3VAly6IuOKr8W000xZJFVx2";
@@ -47,6 +49,22 @@ interface SettingsProps {
 export default function Settings({ onBack, onPaymentSaved }: SettingsProps) {
   const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
   const user = profileData?.user || null;
+  const [email, setEmail] = useState("");
+  const preferencesMutation = trpc.chat.updateReceiptEmailPreferences.useMutation();
+  const { logout } = useAuth();
+  useEffect(() => setEmail(user?.email ?? ""), [user?.email]);
+
+  const saveEmail = async () => {
+    const next = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(next)) return;
+    await preferencesMutation.mutateAsync({ email: next, enabled: true, prompted: true });
+  };
+
+  const logoutResident = async () => {
+    await logout();
+    localStorage.removeItem("bldg_onboarding_complete");
+    window.location.href = "/";
+  };
 
   return (
     <div className="settings-container">
@@ -82,6 +100,16 @@ export default function Settings({ onBack, onPaymentSaved }: SettingsProps) {
           </div>
         </section>
 
+        <section className="settings-section">
+          <h2 className="settings-section-title">Digital Receipts</h2>
+          <input aria-label="Receipt email" className="h-12 w-full rounded-xl border border-[#d8d0c4] bg-white px-4" onChange={event => setEmail(event.target.value)} placeholder="you@example.com" type="email" value={email} />
+          <label className="mt-4 flex items-center justify-between gap-4 text-sm">
+            <span>Email my receipts</span>
+            <input checked={user?.emailReceiptsEnabled ?? false} disabled={!user?.email} onChange={event => void preferencesMutation.mutateAsync({ enabled: event.target.checked })} type="checkbox" />
+          </label>
+          <button className="mt-4 rounded-xl bg-[#2b241d] px-5 py-3 text-sm text-white disabled:opacity-50" disabled={!/^\S+@\S+\.\S+$/.test(email.trim()) || preferencesMutation.isPending} onClick={() => void saveEmail()} type="button">Save receipt email</button>
+        </section>
+
         {/* Payment */}
         <section className="settings-section">
           <h2 className="settings-section-title">Payment</h2>
@@ -101,6 +129,13 @@ export default function Settings({ onBack, onPaymentSaved }: SettingsProps) {
               <p className="settings-payment-unavailable">Card setup is temporarily unavailable.</p>
             )}
           </div>
+        </section>
+
+        <section className="settings-section">
+          <button className="settings-link text-red-700" onClick={() => void logoutResident()} type="button">
+            <LogOut size={18} />
+            <span>Log out</span>
+          </button>
         </section>
 
         {/* Support */}
