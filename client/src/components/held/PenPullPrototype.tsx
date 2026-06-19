@@ -60,7 +60,6 @@ type PenPullPrototypeProps = {
 
 const HELD_ASSETS = {
   composerTray: "/held/audiomode-nursery-tray.png",
-  crest: "/held/crest-h-flat.png",
   courierEnvelope: "/held/held_courier_envelope.png",
   courierHorseOutbound: "/held/held_courier_horse_outbound.png",
   courierHorseReturn: "/held/held_courier_horse_return.png",
@@ -73,6 +72,7 @@ const HELD_ASSETS = {
   galleryBench: "/held/nursery-cradle.png",
   labyrinthBoard: "/held/held_labyrinth_board.png",
   labyrinthKnob: "/held/held_labyrinth_knob.png",
+  logoMark: "/held/held-logo-mark.png",
   laundryProvider: "/held/laundry-butler-provider.png",
   microphone: "/held/microphone.png",
   paper: "/held/held-paper-bg.png",
@@ -1103,7 +1103,7 @@ export default function PenPullPrototype({
     return (
       <main className="grid h-dvh place-items-center bg-[#f4ecdf] text-[#2a2520]">
         <div className="text-center">
-          <img alt="HELD" className="mx-auto h-14 w-14 object-contain" src={HELD_ASSETS.crest} />
+          <img alt="HELD" className="mx-auto h-14 w-14 object-contain" src={HELD_ASSETS.logoMark} />
           <p className="mt-5 font-serif text-[25px] italic">Opening what’s being held.</p>
         </div>
       </main>
@@ -1152,14 +1152,14 @@ export default function PenPullPrototype({
             />
           )}
 
-          {showHomeWorld && <header className="held-home-header pointer-events-none absolute left-[8%] top-[8%] z-20">
-            <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
+          {showHomeWorld && <header className="held-home-header pointer-events-none absolute left-[8%] top-[7%] z-20">
+            <img alt="HELD" className="h-10 w-10 object-contain" src={HELD_ASSETS.logoMark} />
             <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
               {residenceLabel}
             </p>
           </header>}
 
-          {showHomeWorld && <section className="held-home-copy pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
+          {showHomeWorld && mode !== "collectName" && mode !== "collectPayment" && <section className="held-home-copy pointer-events-none absolute left-[8%] top-[17%] z-10 max-w-[210px]">
             <h1 className="font-serif text-[42px] leading-none text-[#2d251d]">
               Held.
             </h1>
@@ -1386,9 +1386,7 @@ export default function PenPullPrototype({
 
           {mode === "collectName" && (
             <HeldLaunchRecoveryCard
-              actionLabel={saveNameMutation.isPending ? "Saving..." : "Continue →"}
               message={heldAgentMessage}
-              onRetry={retryPendingOrder}
               title="Your name"
             >
               <form className="mt-4 space-y-3" onSubmit={submitHeldName}>
@@ -2316,11 +2314,11 @@ function HeldLaunchRecoveryCard({
   onRetry,
   title,
 }: {
-  actionLabel: string;
+  actionLabel?: string;
   children?: ReactNode;
   message: string;
   onEdit?: () => void;
-  onRetry: () => void;
+  onRetry?: () => void;
   title: string;
 }) {
   return (
@@ -2333,7 +2331,7 @@ function HeldLaunchRecoveryCard({
           {message || "I have the pickup ready."}
         </p>
         {children}
-        <div className="mt-4 flex min-h-12 items-center justify-between gap-4">
+        {(onEdit || onRetry) && <div className="mt-4 flex min-h-12 items-center justify-between gap-4">
           {onEdit ? (
             <button
               className="text-left font-serif text-[13px] italic text-[#7a6d5f] underline decoration-[#b78a38]/30 underline-offset-4"
@@ -2345,14 +2343,14 @@ function HeldLaunchRecoveryCard({
           ) : (
             <span />
           )}
-          <button
+          {onRetry && <button
             className="min-h-12 flex-1 text-right font-serif text-[16px] text-[#9a681f] transition-transform active:scale-[0.98]"
             onClick={onRetry}
             type="button"
           >
             {actionLabel}
-          </button>
-        </div>
+          </button>}
+        </div>}
       </div>
     </section>
   );
@@ -4487,14 +4485,8 @@ function HeldTransformingState({
       />
       <header className="pointer-events-none absolute left-[8%] right-[8%] top-[5.2%] z-30 flex items-start justify-between text-[#2a2520]">
         <div>
-          <p className="text-[14px] uppercase tracking-[0.16em]">HELD.chat</p>
+          <img alt="HELD" className="h-10 w-10 object-contain" src={HELD_ASSETS.logoMark} />
           <p className="mt-1 text-[11px] uppercase tracking-[0.28em]">{residenceLabel}</p>
-        </div>
-        <div
-          aria-hidden="true"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#b8893c] font-serif text-[17px] leading-none text-[#b8893c]"
-        >
-          H
         </div>
       </header>
 
@@ -4932,7 +4924,7 @@ function HeldServiceVitrine({
         H
       </button>
       <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[8%]">
-        <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
+        <img alt="HELD" className="h-10 w-10 object-contain" src={HELD_ASSETS.logoMark} />
         <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
           Vitrine
         </p>
@@ -5090,7 +5082,7 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
 
           <header className="text-center">
             <p className="held-fine text-[8.5px] uppercase tracking-[0.4em] text-[#8a755a]">
-              HELD.chat — {residence}
+              HELD — {residence}
             </p>
             <h1 className="held-press mt-4 text-[27px] font-bold leading-none tracking-[0.14em] text-[#3f3022]">
               LAUNDRY BUTLER
