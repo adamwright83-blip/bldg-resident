@@ -55,6 +55,11 @@ export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmit
         <h1>Your concierge<br />is ready.</h1>
         <p className="identity-intro">Tell us where you live and we’ll<br />connect you to your building.</p>
 
+        <div className="identity-mobile-services" aria-hidden="true">
+          <span><i />Laundry</span>
+          <span><i />Groom my dog</span>
+        </div>
+
         <div className="identity-form">
           {!preselectedBuilding && (
             <label className="identity-field">
