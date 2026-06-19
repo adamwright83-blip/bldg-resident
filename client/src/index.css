@@ -4168,6 +4168,40 @@
   }
 }
 
+/* Some Android browsers expose a ~980px layout viewport even though they are
+   still touch-only phones. HELD is authored on a 430px composition canvas;
+   keep that coordinate system intact and scale the whole canvas uniformly,
+   instead of stretching the frame while leaving every fixed-size object tiny. */
+.held-wide-touch-viewport .held-app-stage {
+  position: fixed !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  padding: 0 !important;
+  background: #f4ecdf !important;
+  overflow: hidden !important;
+}
+
+.held-wide-touch-viewport .held-app-frame {
+  position: relative !important;
+  width: 430px !important;
+  max-width: none !important;
+  height: var(--held-wide-touch-height) !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transform: scale(var(--held-wide-touch-scale)) !important;
+  transform-origin: left top !important;
+}
+
+.held-wide-touch-viewport .held-device-notch {
+  display: none !important;
+}
+
 @media (max-width: 767px) and (max-height: 620px), (hover: none) and (pointer: coarse) and (max-height: 620px) {
   .held-home-copy {
     top: clamp(70px, 14%, 94px) !important;

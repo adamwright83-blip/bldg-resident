@@ -93,9 +93,12 @@ function getLocalPoint(
     return { x: event.clientX, y: event.clientY };
   }
 
+  const scaleX = stage?.offsetWidth ? rect.width / stage.offsetWidth : 1;
+  const scaleY = stage?.offsetHeight ? rect.height / stage.offsetHeight : 1;
+
   return {
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top,
+    x: (event.clientX - rect.left) / scaleX,
+    y: (event.clientY - rect.top) / scaleY,
   };
 }
 
@@ -388,16 +391,20 @@ export function usePenPhysics({
     }
 
     const measure = () => {
-      const rect = stage.getBoundingClientRect();
+      // Use the stage's logical canvas dimensions. getBoundingClientRect()
+      // includes the wide-touch compatibility transform and would otherwise
+      // make physics believe the 430px composition is ~980px wide.
+      const width = stage.offsetWidth;
+      const height = stage.offsetHeight;
 
-      if (!rect.width || !rect.height) {
+      if (!width || !height) {
         return;
       }
 
       const previousMetrics = metricsRef.current;
       const nextMetrics = getPenMetrics(
-        rect.width,
-        rect.height,
+        width,
+        height,
         tuningRef.current
       );
       const sizeChanged =

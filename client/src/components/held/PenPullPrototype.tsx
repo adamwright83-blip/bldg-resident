@@ -125,15 +125,44 @@ function useHeldOneTimeTutorial(storageKey: string) {
   return [isVisible, dismiss] as const;
 }
 
-function useHeldMountedClass() {
-  useEffect(() => {
+function useHeldMountedClass(forceWideTouchQa = false) {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     root.classList.add("held-app-mounted");
 
-    return () => {
-      root.classList.remove("held-app-mounted");
+    const syncWideTouchViewport = () => {
+      const isWideTouchViewport =
+        forceWideTouchQa ||
+        (window.innerWidth > 767 &&
+          window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+
+      root.classList.toggle("held-wide-touch-viewport", isWideTouchViewport);
+      if (isWideTouchViewport) {
+        const scale = window.innerWidth / 430;
+        root.style.setProperty("--held-wide-touch-scale", String(scale));
+        root.style.setProperty(
+          "--held-wide-touch-height",
+          `${window.innerHeight / scale}px`,
+        );
+      } else {
+        root.style.removeProperty("--held-wide-touch-scale");
+        root.style.removeProperty("--held-wide-touch-height");
+      }
     };
-  }, []);
+
+    syncWideTouchViewport();
+    window.addEventListener("resize", syncWideTouchViewport);
+    window.visualViewport?.addEventListener("resize", syncWideTouchViewport);
+
+    return () => {
+      window.removeEventListener("resize", syncWideTouchViewport);
+      window.visualViewport?.removeEventListener("resize", syncWideTouchViewport);
+      root.classList.remove("held-app-mounted");
+      root.classList.remove("held-wide-touch-viewport");
+      root.style.removeProperty("--held-wide-touch-scale");
+      root.style.removeProperty("--held-wide-touch-height");
+    };
+  }, [forceWideTouchQa]);
 }
 
 const COMPOSER_KEY_ROWS = [
@@ -257,7 +286,11 @@ export default function PenPullPrototype({
   showDebugControls = false,
   tuning,
 }: PenPullPrototypeProps) {
-  useHeldMountedClass();
+  const forceWideTouchQa =
+    showDebugControls &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("wide-touch-qa") === "1";
+  useHeldMountedClass(forceWideTouchQa);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
