@@ -1046,7 +1046,7 @@ export default function PenPullPrototype({
           {showHomeWorld && <header className="held-home-header pointer-events-none absolute left-[8%] top-[8%] z-20">
             <p className="text-[15px] tracking-[0.08em]">HELD.chat</p>
             <p className="mt-1 text-[10px] uppercase tracking-[0.32em] text-[#7a6d5f]">
-              Residence 1807 · 12A
+              {residenceLabel}
             </p>
           </header>}
 
@@ -1677,7 +1677,7 @@ function HeldLabyrinthDrawer({
         animate={
           isOpen
             ? { x: "-50%", y: "-50%", rotateX: 3, scale: 1 }
-            : { x: "56%", y: "-50%", rotateX: 0, scale: 0.94 }
+            : { x: "48%", y: "-50%", rotateX: 0, scale: 0.94 }
         }
         className={`absolute left-1/2 top-[46%] w-[min(94vw,392px)] max-w-[96%] origin-center touch-none ${
           guideActive ? "z-[136]" : "z-[122]"
@@ -2682,7 +2682,7 @@ function HeldCourierGesture({
           </aside>
           <button
             aria-label="Open courier dispatch slip"
-            className="pointer-events-auto absolute left-[-32px] top-[25%] z-[4] h-[57%] w-[92px] touch-none border-0 bg-transparent p-0 opacity-[0.94] outline-none transition-[filter,opacity,transform] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
+            className="pointer-events-auto absolute left-[-18px] top-[25%] z-[4] h-[57%] w-[92px] touch-none border-0 bg-transparent p-0 opacity-[0.94] outline-none transition-[filter,opacity,transform] hover:opacity-100 focus-visible:ring-2 focus-visible:ring-[#b8893c]/70"
             onClick={() => onOpenSlip("summary")}
             onContextMenu={event => event.preventDefault()}
             onPointerCancel={finishTailDrag}
@@ -3835,6 +3835,7 @@ function HeldTransformingState({
   const [highlightedServiceType, setHighlightedServiceType] = useState<string | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
   const composerInputRef = useRef<HTMLInputElement | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
   // Server-owned post-order intelligence: classify + (for cancel/timing) create a
   // REAL operator task. The horse rides only when the server confirms a task.
   const postOrderFollowupMutation = trpc.chat.postOrderFollowup.useMutation();
@@ -4190,6 +4191,44 @@ function HeldTransformingState({
       });
     }
   };
+
+  useEffect(() => {
+    if (!isPhoneEngaged || typeof window === "undefined") return undefined;
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return undefined;
+    const recognition = new Recognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      let final = false;
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index][0]?.transcript || "";
+        final ||= event.results[index].isFinal === true;
+      }
+      const nextValue = transcript.trim();
+      if (nextValue) setComposerValue(nextValue);
+      if (final && nextValue) void submitFollowupValue(nextValue);
+    };
+    recognition.onerror = (event: any) => {
+      if (event.error !== "aborted" && event.error !== "no-speech") {
+        console.warn("[HELD] phone speech recognition error", event.error);
+      }
+    };
+    speechRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (error) {
+      console.warn("[HELD] phone speech recognition did not start", error);
+    }
+    return () => {
+      recognition.abort();
+      speechRecognitionRef.current = null;
+    };
+    // The lift gesture is the permission-bearing interaction that starts the mic.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPhoneEngaged]);
   const startTokenPress = (token: HeldTokenAsset, event: PointerEvent<HTMLButtonElement>) => {
     clearLongPress();
     longPressOpenedRef.current = false;
@@ -4806,8 +4845,34 @@ function HeldServiceVitrine({
   );
 }
 
+export function getLaundryButlerCompletedServices(
+  residentOrders: Array<{ id: number; createdAt: Date | string }>,
+  now = new Date(),
+) {
+  const baseline = new Date("2026-06-19T07:00:00-07:00");
+  let gymPickups = 0;
+  const cursor = new Date(baseline);
+  cursor.setHours(12, 0, 0, 0);
+  while (cursor <= now) {
+    if ([1, 3, 5].includes(cursor.getDay())) gymPickups += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const residentOrderIds = new Set(
+    residentOrders
+      .filter(order => new Date(order.createdAt) >= baseline)
+      .map(order => order.id),
+  );
+  return 127 + gymPickups + residentOrderIds.size;
+}
+
 function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
   const swipeStartYRef = useRef<number | null>(null);
+  const { data: profileData } = trpc.chat.getVaultProfile.useQuery();
+  const { data: requestsData } = trpc.chat.getRequests.useQuery(undefined, { refetchOnMount: "always" });
+  const residence = formatHeldResidenceLabel(profileData?.user);
+  const completedServices = getLaundryButlerCompletedServices(
+    requestsData?.requests.map(request => ({ id: request.id, createdAt: request.createdAt })) ?? [],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -4860,17 +4925,6 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
           backgroundSize: "cover, 420px 420px",
         }}
       />
-      <button
-        aria-label="Return to held home"
-        className="absolute left-[7%] top-[6.2%] z-30 flex h-11 items-center gap-2 rounded-full border border-[#b8893c]/80 bg-[#fff8ec]/78 px-4 font-serif text-[15px] italic text-[#8d6322] shadow-[0_8px_18px_rgba(68,45,20,0.12)] backdrop-blur-[2px] transition-transform active:scale-[0.98]"
-        onClick={onClose}
-        type="button"
-      >
-        <span aria-hidden="true" className="text-[22px] leading-none">
-          ‹
-        </span>
-        <span>Back to Held</span>
-      </button>
       <motion.div
         animate={{ opacity: 1, y: 0 }}
         className="absolute inset-x-[7.5%] bottom-0 top-[12%] z-20 overflow-y-auto pb-[178px] pr-1"
@@ -4889,7 +4943,7 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
           }}
         >
           {/* The clay token you tapped, resting on the card's corner. */}
-          <div className="pointer-events-none absolute -top-3 right-1 z-10 w-[72px] rotate-[9deg]">
+          <button aria-label="Return to Held home" className="absolute -top-3 right-1 z-30 w-[72px] rotate-[9deg]" onClick={onClose} type="button">
             <span className="absolute left-1/2 top-[60%] h-[16px] w-[54px] -translate-x-1/2 rounded-full bg-[#3a2a16]/28 blur-[5px]" />
             <img
               alt=""
@@ -4897,11 +4951,11 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
               draggable={false}
               src={HELD_ASSETS.tokenLaundry}
             />
-          </div>
+          </button>
 
           <header className="text-center">
             <p className="held-fine text-[8.5px] uppercase tracking-[0.4em] text-[#8a755a]">
-              HELD.chat — Residence 1807 · 12A
+              HELD.chat — {residence}
             </p>
             <h1 className="held-press mt-4 text-[27px] font-bold leading-none tracking-[0.14em] text-[#3f3022]">
               LAUNDRY BUTLER
@@ -4952,10 +5006,10 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
                 Adam
               </p>
               <p className="held-fine mt-1.5 text-[8.5px] uppercase tracking-[0.28em] text-[#6b5a44]">
-                Your driver — in motion
+                Your driver
               </p>
               <p className="mt-2 font-serif text-[12px] italic leading-[1.45] text-[#6f6254]">
-                Trusted vendor · 4 services completed at your residence
+                Trusted vendor · {completedServices} services completed
               </p>
             </div>
           </section>
@@ -4965,7 +5019,7 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
               Current status
             </p>
             <h2 className="mt-1.5 max-w-[55%] font-serif text-[18px] italic leading-[1.2] text-[#201b17]">
-              Driver is en route to pickup
+              Pickup scheduled for tomorrow
             </h2>
             <div
               className="absolute right-0 top-2 rotate-[-6deg]"
@@ -4985,10 +5039,10 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
                     className="text-[17px] font-bold leading-none tracking-[0.18em]"
                     style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                   >
-                    EN ROUTE
+                    SCHEDULED
                   </p>
                   <p className="mt-[3px] text-[6.5px] font-semibold uppercase tracking-[0.3em]">
-                    In motion · HELD
+                    Tomorrow · HELD
                   </p>
                 </div>
               </div>
@@ -4996,9 +5050,9 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
           </section>
 
           <section className="mt-3">
-            <StatusDetailRow label="Pickup window" value="Today · 4:00–5:00 PM" />
-            <StatusDetailRow label="Driver ETA" value="18 minutes" />
-            <StatusDetailRow label="Residence" value="1807 · 12A" />
+            <StatusDetailRow label="Pickup window" value="Tomorrow · 7:00–9:00 AM" />
+            <StatusDetailRow label="Driver status" value="Not dispatched" />
+            <StatusDetailRow label="Residence" value={residence} />
             <StatusDetailRow label="Estimated return" value="Tomorrow · 6:00 PM" />
             <StatusDetailRow label="Estimated total" value="$44.00" />
             <StatusDetailRow label="Order number" value="L-30218" />
@@ -5012,12 +5066,12 @@ function LaundryServiceDetail({ onClose }: { onClose: () => void }) {
               Pickup · Wash &amp; fold · Dry clean on request · Return delivery
             </p>
             <div className="mt-3 flex justify-center gap-3">
-              <button className="held-chip" type="button">
+              <a className="held-chip" href="tel:+13238074661">
                 Call driver
-              </button>
-              <button className="held-chip" type="button">
+              </a>
+              <a className="held-chip" href="sms:+13238074661">
                 Text driver
-              </button>
+              </a>
             </div>
           </section>
 
@@ -5151,8 +5205,8 @@ function VitrineJourneyList() {
   const steps = [
     { label: "Requested", meta: "Mon 9:14 AM ✓", state: "done" },
     { label: "Scheduled", meta: "Mon 9:18 AM ✓", state: "done" },
-    { label: "Confirmed", meta: "Mon 9:22 AM ✓", state: "done" },
-    { label: "En route", meta: "now", state: "current" },
+    { label: "Confirmed", meta: "pickup set", state: "current" },
+    { label: "En route", meta: "not dispatched", state: "future" },
     { label: "In progress", meta: "pending", state: "future" },
     { label: "Complete", meta: "pending", state: "future" },
   ] as const;
