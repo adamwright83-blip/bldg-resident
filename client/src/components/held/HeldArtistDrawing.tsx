@@ -166,6 +166,14 @@ function getDuration(services: HeldParsedService[] = []) {
   return 3200;
 }
 
+// Every visible mark belongs to the nib route. Keeping detail paths separate
+// made the laundry drawing read as two large animated shapes followed by lines
+// that simply appeared. Joining the authored paths preserves their order while
+// letting the existing stroke/hop timeline physically draw each one.
+export function getPenTracePath(drawing: HeldDrawing) {
+  return [drawing.main, ...(drawing.details ?? [])].join(" ");
+}
+
 export function HeldArtistDrawing({
   displayRequest,
   onDrawingComplete,
@@ -191,8 +199,7 @@ export function HeldArtistDrawing({
     () => getHeldCompositePath(displayRequest, services),
     [displayRequest, services]
   );
-  const path = drawing.main;
-  const details = drawing.details ?? [];
+  const path = useMemo(() => getPenTracePath(drawing), [drawing]);
   const isLaundryDrawing = drawing.id === "laundry_pickup" || drawing.id === "laundry_pickup_deadline";
   const canvasX = isLaundryDrawing ? 150 : 0;
   const canvasY = isLaundryDrawing ? 100 : 0;
@@ -569,21 +576,6 @@ export function HeldArtistDrawing({
               strokeLinejoin="round"
               strokeWidth="2"
             />
-            {details.map((detail, index) => (
-              <path
-                key={index}
-                d={detail}
-                fill="none"
-                stroke="#1A1A1A"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                style={{
-                  opacity: isComplete ? 0.92 : 0,
-                  transition: `opacity 320ms ease ${120 + index * 70}ms`,
-                }}
-              />
-            ))}
           </svg>
           <img
             alt=""
