@@ -16,6 +16,7 @@ import {
 } from "@shared/buildingHostMap";
 import IdentityScreen from "./IdentityScreen";
 import OTPScreen from "./OTPScreen";
+import { POST_OTP_PROFILE_ONBOARDING_KEY } from "@/components/held/heldProfileOnboarding";
 
 const ONBOARDING_KEY = "bldg_onboarding_complete";
 const SETUP_PATH = "/setup";
@@ -175,6 +176,7 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
           setOtpError(json.error || "Verification failed.");
           return;
         }
+        sessionStorage.setItem(POST_OTP_PROFILE_ONBOARDING_KEY, "true");
         markOnboardingComplete();
         setStep("done");
         setLocation("/");

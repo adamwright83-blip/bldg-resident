@@ -13,6 +13,10 @@ import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import { AnimatePresence, motion } from "framer-motion";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
+import {
+  getProfileOnboardingStep,
+  POST_OTP_PROFILE_ONBOARDING_KEY,
+} from "./heldProfileOnboarding";
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
 import { receiptNicheBg } from "./heldReceiptAssets";
@@ -328,6 +332,7 @@ export default function PenPullPrototype({
       : [],
   );
   const [debugOpenLaundryVitrine, setDebugOpenLaundryVitrine] = useState(false);
+  const [profileOnboardingActive, setProfileOnboardingActive] = useState(false);
   const [rootVitrineToken, setRootVitrineToken] = useState<HeldTokenAsset | null>(null);
   const [heldAgentMessage, setHeldAgentMessage] = useState("");
   const [heldAgentStatus, setHeldAgentStatus] = useState<
@@ -405,6 +410,24 @@ export default function PenPullPrototype({
       setHeldAgentStatus("confirmed");
       setHeldAgentMessage("Your services are in motion.");
       setMode("held");
+    } else {
+      const forceFullOnboarding =
+        sessionStorage.getItem(POST_OTP_PROFILE_ONBOARDING_KEY) === "true";
+      const profileStep = getProfileOnboardingStep(
+        profileQuery.data?.user,
+        forceFullOnboarding,
+      );
+      if (profileStep === "name") {
+        setProfileOnboardingActive(true);
+        setHeldAgentStatus("needs_name");
+        setHeldAgentMessage("First, tell Held who you are.");
+        setMode("collectName");
+      } else if (profileStep === "payment") {
+        setProfileOnboardingActive(true);
+        setHeldAgentStatus("needs_payment");
+        setHeldAgentMessage("Add your debit card once to finish setting up Held.");
+        setMode("collectPayment");
+      }
     }
     setEmailDraft(profileQuery.data?.user?.email ?? "");
     setBootstrapReady(true);
@@ -825,6 +848,13 @@ export default function PenPullPrototype({
         firstName,
         lastName,
       });
+      if (profileOnboardingActive) {
+        setHeldAgentStatus("needs_payment");
+        setHeldAgentMessage("Add your debit card once to finish setting up Held.");
+        setMode("collectPayment");
+        await profileQuery.refetch();
+        return;
+      }
       setHeldAgentMessage(`Good to meet you, ${firstName}. Taking custody.`);
       retryPendingOrder();
     } catch (error) {
@@ -833,6 +863,14 @@ export default function PenPullPrototype({
       setHeldAgentMessage("I could not save the name yet. Try once more.");
       setMode("orderError");
     }
+  };
+  const finishProfileOnboarding = async () => {
+    sessionStorage.removeItem(POST_OTP_PROFILE_ONBOARDING_KEY);
+    setProfileOnboardingActive(false);
+    setHeldAgentStatus("idle");
+    setHeldAgentMessage("");
+    setMode("rest");
+    await profileQuery.refetch();
   };
   const physicsTuning = useMemo(
     () => ({
@@ -1444,7 +1482,7 @@ export default function PenPullPrototype({
                   <PaymentMethodForm
                     dark
                     defaultCardholderName={[nameFirst, nameLast].filter(Boolean).join(" ")}
-                    onSuccess={retryPendingOrder}
+                    onSuccess={profileOnboardingActive ? finishProfileOnboarding : retryPendingOrder}
                   />
                 </Elements>
               </div>
