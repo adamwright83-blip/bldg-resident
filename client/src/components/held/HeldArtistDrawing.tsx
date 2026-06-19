@@ -73,6 +73,20 @@ const COMPOSITE_PATHS: Record<string, HeldDrawing> = {
       "M493 219 C511 207 533 202 551 204 M490 275 C510 268 529 268 541 273",
     ],
   },
+  // DRY CLEANING — traced from the supplied hanger-and-shirt reference. The
+  // route is authored in nib order: garment silhouette first, then hanger,
+  // hook, collar and placket. Every visible stroke is therefore drawn by the
+  // fountain pen instead of appearing ahead of it.
+  dry_cleaning: {
+    id: "dry_cleaning",
+    main: "M38 193 C72 194 102 193 127 189 C145 186 155 178 163 163 C172 145 186 139 205 135 C232 129 252 118 274 105 C294 93 311 87 325 89 C342 91 354 105 372 113 C391 122 410 127 430 130 C451 134 467 144 478 162 C487 177 500 184 521 186 C546 188 572 188 604 191",
+    details: [
+      "M205 135 L270 101 C289 91 305 84 321 83 C339 82 355 91 372 104 L430 130",
+      "M321 83 C319 73 320 63 330 57 C341 50 354 57 355 68 C356 79 347 87 337 94 L337 103",
+      "M270 101 C278 117 291 128 309 134 C321 139 327 148 326 163 M372 104 C366 125 357 139 344 149 C335 156 332 170 332 190",
+      "M270 101 C284 114 298 122 321 126 C342 123 357 116 372 104 M321 126 L326 163",
+    ],
+  },
   // SCISSORS — two crossing blades with finger rings; pivot screw accent.
   haircut: {
     id: "haircut",
@@ -123,11 +137,12 @@ export function getHeldCompositePath(
   // that holds each subject on the one card — not just the first match. This
   // matches the vision board's composed portrait. We detect distinct subjects
   // from the haystack and pick the closest pre-composed weave.
-  const hasLaundry = /laundry|shirt|fold|dry\s*clean/.test(haystack);
+  const hasDryCleaning = /dry[_\s-]*clean/.test(haystack);
+  const hasLaundry = /laundry|wash[_\s-]*fold|folded\s+shirt/.test(haystack);
   const hasDog = /dog|groom|pet/.test(haystack);
   const hasCar = /car|detail|wash/.test(haystack);
   const hasRide = /airport|ride|uber|waymo|lax/.test(haystack);
-  const subjectCount = [hasLaundry, hasDog, hasCar, hasRide].filter(Boolean).length;
+  const subjectCount = [hasLaundry, hasDryCleaning, hasDog, hasCar, hasRide].filter(Boolean).length;
 
   if (subjectCount >= 2) {
     // Prefer the richest available weave for the detected subjects. Do not use
@@ -146,6 +161,8 @@ export function getHeldCompositePath(
     }
     return COMPOSITE_PATHS.multi_service_default;
   }
+
+  if (hasDryCleaning && !hasLaundry) return COMPOSITE_PATHS.dry_cleaning;
 
   if (/laundry/.test(haystack) && /deadline|friday|returned?|before|by\s+\w+/.test(haystack)) {
     return COMPOSITE_PATHS.laundry_pickup_deadline;
@@ -206,15 +223,16 @@ export function HeldArtistDrawing({
   const path = useMemo(() => getPenTracePath(drawing), [drawing]);
   const traceSegments = useMemo(() => getPenTraceSegments(drawing), [drawing]);
   const isLaundryDrawing = drawing.id === "laundry_pickup" || drawing.id === "laundry_pickup_deadline";
-  const canvasX = isLaundryDrawing ? 150 : 0;
-  const canvasY = isLaundryDrawing ? 100 : 0;
-  const canvasWidth = isLaundryDrawing ? 500 : 430;
-  const canvasHeight = isLaundryDrawing ? 430 : 260;
+  const isWideGarmentDrawing = drawing.id === "dry_cleaning";
+  const canvasX = isLaundryDrawing ? 150 : isWideGarmentDrawing ? 20 : 0;
+  const canvasY = isLaundryDrawing ? 100 : isWideGarmentDrawing ? 35 : 0;
+  const canvasWidth = isLaundryDrawing ? 500 : isWideGarmentDrawing ? 620 : 430;
+  const canvasHeight = isLaundryDrawing ? 430 : isWideGarmentDrawing ? 190 : 260;
   // Laundry has several long sculptural passes. Giving it a real five-second
   // ink budget keeps the basket from materializing ahead of the nib.
   const duration = useMemo(
-    () => (isLaundryDrawing ? 5200 : getDuration(services)),
-    [isLaundryDrawing, services],
+    () => (isLaundryDrawing ? 5200 : isWideGarmentDrawing ? 4400 : getDuration(services)),
+    [isLaundryDrawing, isWideGarmentDrawing, services],
   );
   onDrawingCompleteRef.current = onDrawingComplete;
 

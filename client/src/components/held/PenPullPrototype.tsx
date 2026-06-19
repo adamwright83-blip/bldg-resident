@@ -20,6 +20,7 @@ import {
 import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
 import { receiptNicheBg } from "./heldReceiptAssets";
+import { mergeHeldServices } from "./heldServiceCollection";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -82,6 +83,7 @@ const HELD_ASSETS = {
   requestCard: "/held/your-request-card.png",
   tokenCarDetail: "/held/token-cardetail.png",
   tokenDogGroom: "/held/token-doggroom.png",
+  tokenDryCleaning: "/held/token-dry-cleaning.png",
   tokenHaircut: "/held/token-haircut.png",
   tokenLaundry: "/held/token-laundry.png",
   tokenRide: "/held/token-uber_waymo.png",
@@ -282,6 +284,33 @@ function clampNumber(value: number, min: number, max: number) {
 // as that completes, measured from the moment the user taps "Set it in motion".
 const TAKING_CUSTODY_CEREMONY_MS = 580;
 
+function getHeldDebugScenario() {
+  if (typeof window === "undefined" || !import.meta.env.DEV) return null;
+  const scenario = new URLSearchParams(window.location.search).get("helddrawing");
+  if (scenario === "drycleaning") {
+    return {
+      request: "Dry cleaning in two days",
+      services: [{ type: "dry_cleaning" }] as HeldParsedService[],
+    };
+  }
+  if (scenario === "laundry-drycleaning") {
+    return {
+      request: "Laundry pickup and dry cleaning in two days",
+      services: [
+        { type: "laundry_pickup", orderId: 101, status: "booked" },
+        { type: "dry_cleaning", orderId: 202, status: "booked" },
+      ] as HeldParsedService[],
+    };
+  }
+  if (scenario === "laundry") {
+    return {
+      request: "Laundry pickup in two days",
+      services: [{ type: "laundry" }] as HeldParsedService[],
+    };
+  }
+  return null;
+}
+
 export default function PenPullPrototype({
   composerOpen: controlledComposerOpen,
   debug: defaultDebug = false,
@@ -298,6 +327,7 @@ export default function PenPullPrototype({
   useHeldMountedClass(forceWideTouchQa);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const debugScenario = getHeldDebugScenario();
   const editRequestInputRef = useRef<HTMLTextAreaElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [debug, setDebug] = useState(defaultDebug);
@@ -321,16 +351,11 @@ export default function PenPullPrototype({
     (window as unknown as { __setHeldMode?: (m: string) => void }).__setHeldMode = (m: string) =>
       setMode(m as PrototypeMode);
   }
-  const [confirmedRequest, setConfirmedRequest] = useState(() =>
-    typeof window !== "undefined" && import.meta.env.DEV && new URLSearchParams(window.location.search).get("helddrawing") === "laundry"
-      ? "Laundry pickup in two days"
-      : "",
+  const [confirmedRequest, setConfirmedRequest] = useState(() => debugScenario?.request ?? "");
+  const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>(
+    () => debugScenario?.services ?? [],
   );
-  const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>(() =>
-    typeof window !== "undefined" && import.meta.env.DEV && new URLSearchParams(window.location.search).get("helddrawing") === "laundry"
-      ? [{ type: "laundry" }]
-      : [],
-  );
+  const [ceremonyServices, setCeremonyServices] = useState<HeldParsedService[]>([]);
   const [debugOpenLaundryVitrine, setDebugOpenLaundryVitrine] = useState(false);
   const [profileOnboardingActive, setProfileOnboardingActive] = useState(false);
   const [rootVitrineToken, setRootVitrineToken] = useState<HeldTokenAsset | null>(null);
@@ -717,8 +742,11 @@ export default function PenPullPrototype({
         ? services
         : inferServicesFromRequest(`${request} ${response.booking.service ?? ""}`);
       const bookedServices = markBookableDemoServices(nextServices, request, bookingId);
+      const allBookedServices = lastOrderId
+        ? mergeHeldServices(confirmedServices, bookedServices)
+        : bookedServices;
       setConfirmedRequest(request);
-      setConfirmedServices(bookedServices);
+      setConfirmedServices(allBookedServices);
       setPendingOrderRequest("");
       setPendingOrderServices([]);
       setLastOrderId(bookingId);
@@ -777,7 +805,10 @@ export default function PenPullPrototype({
     console.debug("[HELD] intent flow chosen", { orderMode });
     setConfirmedRequest(nextRequest);
     const nextServices = services.length ? services : inferServicesFromRequest(nextRequest);
-    setConfirmedServices(nextServices);
+    setCeremonyServices(nextServices);
+    setConfirmedServices(current =>
+      lastOrderId ? mergeHeldServices(current, nextServices) : nextServices,
+    );
     setPendingOrderRequest(nextRequest);
     setPendingOrderServices(nextServices);
     setHeldAgentStatus("booking");
@@ -1507,7 +1538,7 @@ export default function PenPullPrototype({
             <HeldArtistDrawing
               displayRequest={confirmedRequest}
               onDrawingComplete={() => setMode("transforming")}
-              services={confirmedServices}
+              services={ceremonyServices.length ? ceremonyServices : confirmedServices}
             />
           )}
 
@@ -5521,7 +5552,8 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
   const haystack = `${serviceTypes} ${request}`.toLowerCase();
   const assets: HeldTokenAsset[] = [];
 
-  if (/laundry/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
+  if (/laundry|wash[_\s-]*fold/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
+  if (/dry[_\s-]*clean/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenDryCleaning, type: "dry_cleaning" });
   if (/dog|groom/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenDogGroom, type: "dog_grooming" });
   if (/car|detail|wash/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenCarDetail, type: "car_detail" });
   if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenRide, type: "ride_airport" });
@@ -5532,6 +5564,7 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
 
 function getServiceLabel(type: string) {
   if (type === "laundry_pickup") return "Laundry pickup";
+  if (type === "dry_cleaning") return "Dry cleaning";
   if (type === "dog_grooming") return "Dog grooming";
   if (type === "car_detail") return "Car detail";
   if (type === "ride_airport") return "Airport pickup";
@@ -5795,6 +5828,7 @@ function inferServicesFromRequest(request: string): HeldParsedService[] {
   const lower = request.toLowerCase();
   const services: HeldParsedService[] = [];
 
+  if (/dry[\s-]?clean/.test(lower)) services.push({ type: "dry_cleaning" });
   if (/laundry/.test(lower)) services.push({ type: "laundry_pickup" });
   if (/dog|groom/.test(lower)) services.push({ type: "dog_grooming" });
   if (/car|detail|wash/.test(lower)) services.push({ type: "car_detail" });
