@@ -14,10 +14,14 @@ const OTP_MAX_ATTEMPTS = 5;
 const OTP_RESEND_COOLDOWN_MS = 30 * 1000; // 30 seconds
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX_SENDS = 5;
+// Temporary onboarding preview escape hatch. Keep the environment override so
+// this can be changed or disabled when Twilio is ready without touching code.
+const OTP_BYPASS_CODE = process.env.OTP_BYPASS_CODE || "000000";
+const OTP_PREVIEW_BYPASS_ENABLED = process.env.OTP_PREVIEW_BYPASS !== "false";
 
 // ─── Dev Test Phone ───────────────────────────────────────────────────────────
 // Typing "5550000000" as the phone number always creates a brand-new user and
-// auto-accepts the OTP bypass code ("00000"). Useful for testing the new-user
+// auto-accepts the OTP bypass code ("000000"). Useful for testing the new-user
 // flow without contaminating real accounts.
 const DEV_TEST_PHONE_NORMALIZED = "+15550000000";
 // Maps the magic phone to the unique internal phone created for this session
@@ -85,10 +89,9 @@ export async function sendOTP(
       buildingSlug,
     });
     await updateBldgUser(freshUser.id, { unit } as any);
-    // Store bypass code so verifyOTP accepts "00000"
-    const bypass = process.env.OTP_BYPASS_CODE || "00000";
+    // Store bypass code so verifyOTP accepts "000000"
     await updateBldgUser(freshUser.id, {
-      otpCode: bypass,
+      otpCode: OTP_BYPASS_CODE,
       otpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
       otpAttempts: 0,
     } as any);
@@ -98,7 +101,7 @@ export async function sendOTP(
     return { ok: true, maskedPhone: "(555) ***-**00" };
   }
 
-  if (isRateLimited(phone)) {
+  if (!OTP_PREVIEW_BYPASS_ENABLED && isRateLimited(phone)) {
     return { ok: false, error: "Too many requests. Try again later." };
   }
 
@@ -142,11 +145,17 @@ export async function sendOTP(
       console.log(`[OTP] Sent to ${maskPhone(phone)}`);
     } catch (err) {
       console.error("[OTP] Twilio send failed:", err);
-      return { ok: false, error: "Failed to send verification code." };
+      // Preview fallback: the resident can continue and use the bypass code.
+      if (!OTP_PREVIEW_BYPASS_ENABLED) {
+        return { ok: false, error: "Failed to send verification code." };
+      }
+      await updateBldgUser(user.id, { otpCode: OTP_BYPASS_CODE, otpExpiresAt: expiresAt, otpAttempts: 0 } as any);
+      console.log(`[OTP] Twilio unavailable; bypass enabled for ${maskPhone(phone)}`);
     }
   } else {
-    // No Twilio — log code for dev
-    console.log(`[OTP] (no Twilio) Code for ${phone}: ${code}`);
+    // No Twilio — store the preview bypass so onboarding remains usable.
+    await updateBldgUser(user.id, { otpCode: OTP_BYPASS_CODE, otpExpiresAt: expiresAt, otpAttempts: 0 } as any);
+    console.log(`[OTP] (no Twilio) Bypass enabled for ${maskPhone(phone)}`);
   }
 
   recordSend(phone);
@@ -171,8 +180,7 @@ export async function verifyOTP(
   }
 
   // Admin bypass for testing
-  const bypass = process.env.OTP_BYPASS_CODE;
-  if (bypass && code === bypass) {
+  if (OTP_PREVIEW_BYPASS_ENABLED && code === OTP_BYPASS_CODE) {
     await updateBldgUser(user.id, { onboardingStep: 5, otpCode: null, otpAttempts: 0 } as any);
     return { ok: true, userId: user.id };
   }
