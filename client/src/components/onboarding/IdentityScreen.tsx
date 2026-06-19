@@ -8,15 +8,6 @@ const BUILDINGS = [
   { slug: "cpe-south", name: "2170 Century Park East" },
 ];
 
-const SERVICES = [
-  { label: "Laundry", position: "top-left" },
-  { label: "Dry cleaning", position: "mid-left" },
-  { label: "Groceries", position: "bottom-left" },
-  { label: "Groom my dog", position: "top-right" },
-  { label: "Car wash & detail", position: "mid-right" },
-  { label: "Errands", position: "bottom-right" },
-];
-
 interface IdentityScreenProps {
   onSubmit: (data: { phone: string; unit: string; buildingSlug: string }) => Promise<void>;
   preselectedBuilding?: { slug: string; displayName: string };
@@ -45,20 +36,12 @@ export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmit
     <main className="identity-screen">
       <div className="identity-orbit identity-orbit-left" aria-hidden="true" />
       <div className="identity-orbit identity-orbit-right" aria-hidden="true" />
-      <div className="identity-services" aria-hidden="true">
-        {SERVICES.map(({ label, position }) => <span key={label} className={`identity-service ${position}`}><i />{label}</span>)}
-      </div>
 
       <section className="identity-content">
         <img className="identity-logo" src="/held/held-logo-mark.png" alt="HELD" />
         {preselectedBuilding && <p className="identity-building-name">{preselectedBuilding.displayName}</p>}
         <h1>Your concierge<br />is ready.</h1>
         <p className="identity-intro">Tell us where you live and we’ll<br />connect you to your building.</p>
-
-        <div className="identity-mobile-services" aria-hidden="true">
-          <span><i />Laundry</span>
-          <span><i />Groom my dog</span>
-        </div>
 
         <div className="identity-form">
           {!preselectedBuilding && (

@@ -17,35 +17,23 @@
 .identity-form button:hover { background:#151310; transform:translateY(-1px); }
 .identity-form button:disabled { cursor:wait; opacity:.58; transform:none; }
 .identity-microcopy { margin:-7px 0 0; color:#aaa49b; font-size:12px; text-align:center; }
-.identity-mobile-services { display:none; }
-.identity-services { position:fixed; inset:0; z-index:1; pointer-events:none; }
-.identity-service { position:absolute; display:flex; align-items:center; gap:9px; min-height:46px; padding:0 20px; border-radius:16px; background:rgba(255,255,255,.82); color:#77726b; font-size:14px; box-shadow:0 10px 28px rgba(71,56,39,.1); backdrop-filter:blur(8px); white-space:nowrap; }
-.identity-service i { width:8px; height:8px; border-radius:50%; background:#c5a464; }
-.identity-service.top-left{left:4%;top:28%;transform:rotate(5deg)} .identity-service.mid-left{left:1.5%;top:43%;transform:rotate(7deg)} .identity-service.bottom-left{left:4%;top:66%;transform:rotate(-2deg)}
-.identity-service.top-right{right:3%;top:33%;transform:rotate(-6deg)} .identity-service.mid-right{right:1.5%;top:55%;transform:rotate(3deg)} .identity-service.bottom-right{right:4%;top:75%;transform:rotate(5deg)}
 .identity-orbit { position:fixed; z-index:0; width:230px; height:130%; top:-13%; border:1px solid rgba(195,155,85,.22); border-radius:50%; pointer-events:none; }
 .identity-orbit-left { left:-170px; } .identity-orbit-right { right:-170px; }
 .identity-screen footer { position:fixed; z-index:2; bottom:27px; left:50%; display:flex; flex-direction:column; align-items:center; gap:14px; transform:translateX(-50%); color:#aaa49b; font-size:11px; letter-spacing:.02em; }
 .identity-screen footer span { width:44px; height:2px; background:#c99c46; }
 @media (max-height:760px) { .identity-content{padding-top:25px;padding-bottom:100px}.identity-logo{width:52px;height:52px;margin-bottom:20px}.identity-content h1{font-size:38px}.identity-intro{margin:15px 0 28px}.identity-form{gap:17px}.identity-field input,.identity-field select{height:57px}.identity-form button{height:57px} }
 @media (max-width:760px) {
-  .identity-services { display:none; }
   .identity-content { width:min(430px,calc(100% - 32px)); padding:32px 0 110px; }
-  .identity-logo { width:72px; height:72px; margin-bottom:24px; }
+  .identity-logo { width:58px; height:58px; margin-bottom:25px; }
   .identity-building-name { margin:-10px 0 20px; font-size:13px; }
-  .identity-content h1 { font-size:clamp(48px,13vw,58px); line-height:1.06; }
-  .identity-intro { margin:22px 0 25px; font-size:19px; line-height:1.48; }
-  .identity-mobile-services { display:flex; width:100%; justify-content:space-between; align-items:center; margin:0 0 27px; }
-  .identity-mobile-services span { display:flex; align-items:center; gap:9px; min-height:48px; box-sizing:border-box; padding:0 15px; border-radius:16px; background:rgba(255,255,255,.86); color:#6f6a63; font-size:15px; box-shadow:0 8px 24px rgba(71,56,39,.1); white-space:nowrap; }
-  .identity-mobile-services span:first-child { transform:rotate(2deg); }
-  .identity-mobile-services span:last-child { transform:rotate(-2deg); }
-  .identity-mobile-services i { width:9px; height:9px; flex:none; border-radius:50%; background:#c5a464; }
-  .identity-form { gap:27px; }
-  .identity-field > span { margin-bottom:11px; font-size:13px; }
-  .identity-field input,.identity-field select { height:80px; border-radius:14px; padding:0 21px; font-size:20px; }
+  .identity-content h1 { font-size:clamp(47px,12.5vw,54px); line-height:1.06; }
+  .identity-intro { margin:22px 0 50px; font-size:17px; line-height:1.48; }
+  .identity-form { gap:25px; }
+  .identity-field > span { margin-bottom:10px; font-size:12px; }
+  .identity-field input,.identity-field select { height:64px; border-radius:11px; padding:0 18px; font-size:17px; }
   .identity-field select { padding-right:54px; background-position:right 21px center; background-size:17px; }
-  .identity-form button { height:78px; margin-top:5px; border-radius:13px; font-size:21px; }
-  .identity-microcopy { margin:-8px 0 0; font-size:14px; }
+  .identity-form button { height:60px; margin-top:4px; border-radius:10px; font-size:17px; }
+  .identity-microcopy { margin:-6px 0 0; font-size:12px; }
   .identity-error { margin:-10px 0; font-size:14px; }
   .identity-screen footer { position:absolute; bottom:24px; font-size:12px; }
   .identity-orbit { opacity:.8; }
@@ -54,5 +42,17 @@
   .identity-content { width:calc(100% - 24px); }
   .identity-content h1 { font-size:44px; }
   .identity-intro { font-size:17px; }
-  .identity-mobile-services span { padding:0 11px; font-size:14px; }
+}
+@media (pointer:coarse) and (min-width:761px) {
+  .identity-content { width:740px; padding-top:90px; }
+  .identity-logo { width:105px; height:105px; margin-bottom:48px; }
+  .identity-content h1 { font-size:92px; line-height:1.04; }
+  .identity-intro { margin:38px 0 82px; font-size:31px; line-height:1.48; }
+  .identity-form { gap:45px; }
+  .identity-field > span { margin-bottom:17px; font-size:21px; }
+  .identity-field input,.identity-field select { height:118px; border-radius:20px; padding:0 34px; font-size:31px; }
+  .identity-field select { padding-right:80px; background-position:right 35px center; background-size:26px; }
+  .identity-form button { height:108px; border-radius:18px; font-size:31px; }
+  .identity-microcopy { font-size:21px; }
+  .identity-screen footer { display:none; }
 }
