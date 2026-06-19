@@ -91,6 +91,7 @@ const HELD_ASSETS = {
 
 const HELD_TUTORIAL_STORAGE_KEYS = {
   instructionsBook: "held.tutorial.instructionsBook.dismissed",
+  audioSwipe: "held.tutorial.audioSwipe.dismissed",
   pen: "held.tutorial.penPull.dismissed",
   phone: "held.tutorial.phoneLift.dismissed",
   token: "held.tutorial.clayToken.dismissed",
@@ -347,6 +348,9 @@ export default function PenPullPrototype({
   const [showPenTutorial, dismissPenTutorial] = useHeldOneTimeTutorial(
     HELD_TUTORIAL_STORAGE_KEYS.pen,
   );
+  const [showAudioSwipeTutorial, dismissAudioSwipeTutorial] = useHeldOneTimeTutorial(
+    HELD_TUTORIAL_STORAGE_KEYS.audioSwipe,
+  );
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
   // Timestamp (ms) when the takingCustody ceremony began, i.e. when the user
   // tapped "Set it in motion" and the request card mounted in its stamped
@@ -463,6 +467,7 @@ export default function PenPullPrototype({
   const enterSpeechMode = () => {
     inputRef.current?.blur();
     editRequestInputRef.current?.blur();
+    dismissAudioSwipeTutorial();
     console.debug("[HELD] entering speech mode");
     setMode("speech");
 
@@ -1195,9 +1200,21 @@ export default function PenPullPrototype({
           </div>
 
           {mode === "choice" && !physics.isPointerActive && (
-            <p className="pointer-events-none absolute bottom-[252px] left-[22%] z-[44] w-[170px] whitespace-nowrap text-center font-serif text-[14px] italic leading-6 text-[#745b45]/88">
+            <p className="pointer-events-none absolute bottom-[218px] left-[22%] z-[44] w-[170px] whitespace-nowrap text-center font-serif text-[14px] italic leading-6 text-[#745b45]/88">
               Tap & type your request
             </p>
+          )}
+
+          {mode === "choice" && showAudioSwipeTutorial && !physics.isPointerActive && (
+            <HeldTutorialHint
+              arrowClassName="held-tutorial-arrow-point-right"
+              arrowShape="right"
+              className="left-[10%] top-[39%] z-[74] w-[190px] text-center"
+              compact
+              label="AUDIO MODE"
+              message="tap and pull the pen right."
+              stepNumber={2}
+            />
           )}
 
           {(mode === "choice" || mode === "typing") && (
@@ -1207,7 +1224,7 @@ export default function PenPullPrototype({
               autoCapitalize="sentences"
               autoComplete="off"
               className={`pointer-events-auto absolute left-[14%] right-[14%] z-[96] resize-none rounded-[6px] border px-4 py-3 text-center font-serif text-[17px] italic leading-6 text-[#2c2824] caret-[#9a681f] outline-none transition-[background,border,bottom,box-shadow,opacity] ${
-                mode === "typing" ? "bottom-[278px] min-h-[104px]" : "bottom-[220px] min-h-[84px]"
+                mode === "typing" ? "bottom-[278px] min-h-[104px]" : "bottom-[186px] min-h-[84px]"
               } ${
                 mode === "typing"
                   ? "border-[#cdb792]/45 bg-[#fff8ec]/86 opacity-100 shadow-[0_4px_14px_rgba(50,35,20,0.06)] placeholder:text-[#8a6f55]/58 focus:border-[#b78a38]/50 focus:bg-[#fff9ef]/92"
@@ -3603,7 +3620,7 @@ function HeldTutorialHint({
   stepNumber = 1,
 }: {
   arrowClassName?: string;
-  arrowShape?: "down" | "longDown" | "downRight";
+  arrowShape?: "down" | "longDown" | "downRight" | "right";
   className: string;
   compact?: boolean;
   label: string;
@@ -3611,7 +3628,13 @@ function HeldTutorialHint({
   stepNumber?: number;
 }) {
   const arrow =
-    arrowShape === "longDown"
+    arrowShape === "right"
+      ? {
+          className: "h-10 w-20",
+          path: "M3 18 C22 17 44 17 62 18 M52 8 L67 18 L52 28",
+          viewBox: "0 0 72 36",
+        }
+      : arrowShape === "longDown"
       ? {
           className: "h-[280px] w-11",
           path: "M18 3 C17 47 16 92 17 150 M8 140 L18 156 L29 140",

@@ -4048,6 +4048,13 @@
 .held-tutorial-arrow-right {
   animation: held-tutorial-arrow-bob-right 1.35s ease-in-out infinite;
 }
+.held-tutorial-arrow-point-right {
+  animation: held-tutorial-arrow-point-right 1.35s ease-in-out infinite;
+}
+@keyframes held-tutorial-arrow-point-right {
+  0%, 100% { opacity: 0.78; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(9px); }
+}
 .held-tutorial-arrow-down-right {
   animation: held-tutorial-arrow-bob-down-right 1.35s ease-in-out infinite;
 }
@@ -4062,6 +4069,7 @@
   .held-tutorial-arrow-down,
   .held-tutorial-arrow-up,
   .held-tutorial-arrow-right,
+  .held-tutorial-arrow-point-right,
   .held-tutorial-arrow-down-right,
   .held-tutorial-pen-nudge,
   .held-tutorial-phone-nudge {
