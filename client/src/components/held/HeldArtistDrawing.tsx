@@ -194,7 +194,7 @@ export function HeldArtistDrawing({
   const [penStyle, setPenStyle] = useState({
     left: "50%",
     top: "-14%",
-    transform: "translate(-30%, -86%) rotate(8deg)",
+    transform: "translate(-50%, -92%) rotate(8deg)",
     transition: `left ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), top ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
   });
   const [hasEntered, setHasEntered] = useState(false);
@@ -370,7 +370,7 @@ export function HeldArtistDrawing({
       setPenStyle({
         left: `${((pose.x - canvasX) / canvasWidth) * 100}%`,
         top: `${((pose.y - canvasY) / canvasHeight) * 100}%`,
-        transform: `translate(-30%, -86%) rotate(${pose.tilt.toFixed(2)}deg)${
+        transform: `translate(-50%, -92%) rotate(${pose.tilt.toFixed(2)}deg)${
           lifted ? " translateY(-7px) scale(1.03)" : ""
         }`,
         transition: "none",
@@ -434,7 +434,7 @@ export function HeldArtistDrawing({
     setPenStyle({
       left: `${((startPose.x - canvasX) / canvasWidth) * 100}%`,
       top: `${((startPose.y - canvasY) / canvasHeight) * 100}%`,
-      transform: `translate(-30%, -86%) rotate(${startPose.tilt.toFixed(2)}deg)`,
+      transform: `translate(-50%, -92%) rotate(${startPose.tilt.toFixed(2)}deg)`,
       transition: `left ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), top ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${APPROACH_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
     });
     setHasEntered(true);
@@ -615,15 +615,21 @@ export function HeldArtistDrawing({
               />
             ))}
           </svg>
-          <img
-            alt=""
-            className="pointer-events-none absolute z-20 h-[42%] select-none drop-shadow-[0_14px_20px_rgba(35,24,12,0.24)] transition-[opacity] duration-500"
-            decoding="sync"
-            draggable={false}
-            loading="eager"
-            src={ASSETS.pen}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-20 h-[78%] w-[68px] overflow-hidden drop-shadow-[0_14px_20px_rgba(35,24,12,0.24)] transition-[opacity] duration-500"
+            data-held-drawing-pen="true"
             style={penStyle}
-          />
+          >
+            <img
+              alt=""
+              className="absolute left-1/2 top-[-3%] h-[106%] w-auto max-w-none -translate-x-1/2 select-none"
+              decoding="sync"
+              draggable={false}
+              loading="eager"
+              src={ASSETS.pen}
+            />
+          </div>
           <p className="pointer-events-none absolute bottom-[8%] right-[12%] z-10 font-serif text-[18px] italic text-[#2a2520]/75">
             Held.
           </p>
