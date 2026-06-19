@@ -17,7 +17,8 @@ describe("HELD dry-cleaning second order", () => {
     expect(existsSync(tokenPath)).toBe(true);
     expect(prototypeSource).toContain('tokenDryCleaning: "/held/token-dry-cleaning.png"');
     expect(prototypeSource).toContain('type: "dry_cleaning"');
-    expect(prototypeSource).toContain('"h-[120px] w-[120px]"');
+    expect(prototypeSource).toContain('"h-[clamp(160px,22dvh,210px)] w-[clamp(160px,22dvh,210px)]"');
+    expect(prototypeSource).toContain("tokens.length === 2");
   });
 
   it("uses the dedicated pen-trace drawing", () => {

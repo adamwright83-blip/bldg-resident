@@ -11,7 +11,13 @@ import {
 } from "react";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+} from "framer-motion";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
 import {
   getProfileOnboardingStep,
@@ -21,6 +27,10 @@ import { isResidentAppTestMode } from "@/lib/residentTestMode";
 import { trpc } from "@/lib/trpc";
 import { receiptNicheBg } from "./heldReceiptAssets";
 import { mergeHeldServices } from "./heldServiceCollection";
+import {
+  buildHeldServiceLedgerStage,
+  isTerminalHeldService,
+} from "./heldServiceLedger";
 import {
   getHeldCompositePath,
   HeldArtistDrawing,
@@ -384,6 +394,7 @@ export default function PenPullPrototype({
   const [emailReceiptsDraftEnabled, setEmailReceiptsDraftEnabled] = useState(true);
   const [pendingReceiptServiceRequestId, setPendingReceiptServiceRequestId] = useState<number | null>(null);
   const restoredOrdersRef = useRef(false);
+  const hadActiveBookingsRef = useRef(false);
   // True while the courier horse is crossing or the dispatch slip is open —
   // the Labyrinth knob yields the foreground during that ceremony only.
   const [courierForeground, setCourierForeground] = useState(false);
@@ -406,7 +417,11 @@ export default function PenPullPrototype({
   const drawingHandoffTimerRef = useRef<number | null>(null);
   const saveNameMutation = trpc.chat.saveName.useMutation();
   const profileQuery = trpc.chat.getVaultProfile.useQuery();
-  const activeBookingsQuery = trpc.chat.getActiveBookings.useQuery();
+  const activeBookingsQuery = trpc.chat.getActiveBookings.useQuery(undefined, {
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
   const profileData = profileQuery.data;
   const receiptPreferencesMutation = trpc.chat.updateReceiptEmailPreferences.useMutation();
   const emailReceiptMutation = trpc.chat.emailOrderReceipt.useMutation();
@@ -419,6 +434,7 @@ export default function PenPullPrototype({
     restoredOrdersRef.current = true;
     const bookings = activeBookingsQuery.data?.bookings ?? [];
     if (bookings.length > 0) {
+      hadActiveBookingsRef.current = true;
       const services = bookings.map(booking => ({
         type: booking.serviceType,
         status: booking.status,
@@ -457,6 +473,28 @@ export default function PenPullPrototype({
     setEmailDraft(profileQuery.data?.user?.email ?? "");
     setBootstrapReady(true);
   }, [activeBookingsQuery.data, activeBookingsQuery.isLoading, profileQuery.data, profileQuery.isLoading, showDebugControls]);
+
+  useEffect(() => {
+    if (!bootstrapReady || showDebugControls || !hadActiveBookingsRef.current) return;
+    if (mode !== "held") return;
+    const bookings = activeBookingsQuery.data?.bookings ?? [];
+    if (bookings.length === 0) {
+      hadActiveBookingsRef.current = false;
+      setConfirmedRequest("");
+      setConfirmedServices([]);
+      setLastOrderId(null);
+      setHeldAgentStatus("idle");
+      setHeldAgentMessage("");
+      setMode("rest");
+      return;
+    }
+    setConfirmedServices(bookings.map(booking => ({
+      type: booking.serviceType,
+      status: booking.status,
+      orderId: booking.orderId ?? booking.id,
+      pickupWindow: booking.scheduledWindow,
+    })) as HeldParsedService[]);
+  }, [activeBookingsQuery.data, bootstrapReady, mode, showDebugControls]);
 
   const saveReceiptEmail = async () => {
     const email = emailDraft.trim().toLowerCase();
@@ -3926,6 +3964,75 @@ function HeldInstructionBook({
   );
 }
 
+function HeldSuspendedPen({ penAssetSrc }: { penAssetSrc: string }) {
+  const reducedMotion = useReducedMotion();
+  const rotationTarget = useMotionValue(0);
+  const rotation = useSpring(rotationTarget, { damping: 11, mass: 2.4, stiffness: 28 });
+  const impulseRef = useRef(0);
+  const [chainBend, setChainBend] = useState(0);
+  const lowPower = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const device = navigator as Navigator & { deviceMemory?: number };
+    return (device.hardwareConcurrency ?? 8) <= 4 || (device.deviceMemory ?? 8) <= 4;
+  }, []);
+
+  useEffect(() => {
+    if (reducedMotion || lowPower) return;
+    let frame = 0;
+    let lastScrollY = window.scrollY;
+    const clamp = (value: number) => Math.max(-3.5, Math.min(3.5, value));
+    const react = (value: number) => {
+      impulseRef.current = clamp(value);
+      setChainBend(clamp(value) * 1.7);
+    };
+    const onPointerMove = (event: globalThis.PointerEvent) =>
+      react((event.clientX / Math.max(window.innerWidth, 1) - 0.5) * 3.8);
+    const onOrientation = (event: DeviceOrientationEvent) => react((event.gamma ?? 0) * 0.075);
+    const onScroll = () => {
+      react((window.scrollY - lastScrollY) * 0.045);
+      lastScrollY = window.scrollY;
+    };
+    const tick = (time: number) => {
+      impulseRef.current *= 0.976;
+      rotationTarget.set(clamp(Math.sin(time / 4200) * 0.62 + impulseRef.current));
+      setChainBend(current => current * 0.985);
+      frame = window.requestAnimationFrame(tick);
+    };
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("deviceorientation", onOrientation, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    frame = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("deviceorientation", onOrientation);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [lowPower, reducedMotion, rotationTarget]);
+
+  return (
+    <motion.div
+      aria-hidden="true"
+      animate={lowPower && !reducedMotion ? { rotate: [0, 0.45, 0, -0.45, 0] } : undefined}
+      className="pointer-events-none absolute left-1/2 top-[1.2%] z-20 h-[132px] w-[min(76%,360px)] -translate-x-1/2 origin-top"
+      style={!lowPower && !reducedMotion ? { rotate: rotation } : undefined}
+      transition={{ duration: 15, ease: "easeInOut", repeat: Infinity }}
+    >
+      <span className="absolute left-1/2 top-0 z-10 h-[13px] w-[13px] -translate-x-1/2 rounded-full border border-[#8c6126] bg-[radial-gradient(circle_at_35%_30%,#f6df9e,#9d6a24_60%,#5e3a12)] shadow-[0_2px_5px_rgba(58,36,13,0.34)]" />
+      <svg className="absolute inset-x-0 top-[6px] h-[146px] w-full overflow-visible" viewBox="0 0 300 150">
+        <path d={`M150 2 C${132 + chainBend} 42 ${91 + chainBend} 99 43 143`} fill="none" stroke="#a8752d" strokeLinecap="round" strokeWidth="2" />
+        <path d={`M150 2 C${168 + chainBend} 42 ${209 + chainBend} 99 257 143`} fill="none" stroke="#a8752d" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+      <img
+        alt=""
+        className="absolute left-1/2 top-[22px] h-[268px] w-auto max-w-none -translate-x-1/2 rotate-90 select-none drop-shadow-[0_7px_9px_rgba(31,21,13,0.28)]"
+        draggable={false}
+        src={penAssetSrc}
+      />
+    </motion.div>
+  );
+}
+
 function HeldTransformingState({
   debugOpenLaundryVitrine = false,
   displayRequest,
@@ -4147,6 +4254,10 @@ function HeldTransformingState({
         displayRequest,
       ),
     [servicesForCopy, displayRequest],
+  );
+  const ledgerStage = useMemo(
+    () => buildHeldServiceLedgerStage(servicesForCopy),
+    [servicesForCopy],
   );
   const ghostPaths = [drawing.main, ...(drawing.details ?? [])];
   const tokenPositions = TOKEN_POSITIONS[Math.min(tokens.length, 4)] ?? TOKEN_POSITIONS[1];
@@ -4514,8 +4625,9 @@ function HeldTransformingState({
           backgroundSize: "cover, 420px 420px",
         }}
       />
-      <header className="pointer-events-none absolute left-[8%] right-[8%] top-[5.2%] z-30 flex items-start justify-between text-[#2a2520]">
-        <div>
+      {isSettled && <HeldSuspendedPen penAssetSrc={penAssetSrc} />}
+      <header className={`pointer-events-none absolute z-30 text-[#2a2520] ${isSettled ? "left-1/2 top-[22%] w-[76%] -translate-x-1/2 text-center" : "left-[8%] right-[8%] top-[5.2%] flex items-start justify-between"}`}>
+        <div className={isSettled ? "flex flex-col items-center" : ""}>
           <img alt="HELD" className="h-10 w-10 object-contain" src={HELD_ASSETS.logoMark} />
           <p className="mt-1 text-[11px] uppercase tracking-[0.28em]">{residenceLabel}</p>
         </div>
@@ -4589,10 +4701,10 @@ function HeldTransformingState({
 
       {isSettled && (
         <section
-          className={`pointer-events-auto absolute top-[11%] bottom-[44%] z-20 flex flex-col text-[#2a2520] transition-all duration-[350ms] ease-out overflow-y-auto no-scrollbar ${
+          className={`pointer-events-auto absolute top-[29%] bottom-[40%] z-20 flex flex-col text-[#2a2520] transition-all duration-[350ms] ease-out overflow-y-auto no-scrollbar ${
             courierRailActive
               ? "left-[54px] right-[8%] items-start text-left"
-              : "left-1/2 w-[84%] -translate-x-1/2 items-center text-center"
+              : "left-1/2 w-[82%] -translate-x-1/2 items-center text-center"
           } ${
             isPhoneEngaged
               ? "opacity-0 blur-[8px] pointer-events-none"
@@ -4601,48 +4713,19 @@ function HeldTransformingState({
                 : "opacity-100"
           }`}
         >
-          {/* Courier ceremony: chief-of-staff prose recedes to 20%, operational
-              rows stay faintly legible at 40% — the horse crosses an already
-              quieted page, never over full-opacity copy. */}
-          {/* Headline is short by contract (hard facts live in the rows) and
-              sized so it can never clip under the header or crowd the rows. */}
-          <PlanLine
-            className={`max-w-full font-serif text-[clamp(20px,6vw,27px)] italic leading-[1.24] text-[#2a2520] transition-opacity duration-[350ms] ease-out ${
-              courierRailActive ? "pr-2" : ""
-            } ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}
-            delay={900}
-            text={postOrderCopy.opening}
-          />
-          <PlanLine
-            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#2a2520] transition-opacity duration-[350ms] ease-out ${
-              courierRailActive ? "pr-2" : ""
-            } ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}
-            delay={3000}
-            text={postOrderCopy.subhead}
-          />
-          <div
-            className={`pointer-events-auto mt-5 w-full text-left transition-opacity duration-[350ms] ease-out ${
-              courierDimsCopy ? "opacity-40" : "opacity-100"
-            }`}
-          >
-            {postOrderCopy.serviceRows.map((row, index) => (
-              <PlanServiceRow
-                details={row.details}
-                key={`${row.label}-${index}`}
-                delay={5200 + index * 2600}
-                label={row.label}
-                onHighlight={emphasizeServiceType}
-                serviceType={row.serviceType}
-              />
-            ))}
+          <div className={`w-full transition-opacity duration-[350ms] ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}>
+            <p className="text-[10px] uppercase tracking-[0.34em] text-[#9b6b2c]">{ledgerStage.serviceName}</p>
+            <h1 className="mt-2 font-serif text-[clamp(25px,7vw,34px)] leading-[1.08]">{ledgerStage.stage}</h1>
+            <p className="mt-3 font-serif text-[clamp(14px,4vw,17px)] italic leading-[1.35] text-[#5d5145]">{ledgerStage.sentence}</p>
+            <div className="mx-auto my-5 h-px w-12 bg-[#b8893c]/75" />
+            <dl className="mx-auto grid w-full max-w-[310px] grid-cols-[88px_1fr] gap-x-4 gap-y-3 text-left text-[13px] leading-tight">
+              <dt className="uppercase tracking-[0.2em] text-[#8a7d70]">Status:</dt><dd>{ledgerStage.status}</dd>
+              <dt className="uppercase tracking-[0.2em] text-[#8a7d70]">Pending:</dt><dd>{ledgerStage.pending}</dd>
+              <dt className="uppercase tracking-[0.2em] text-[#8a7d70]">Service:</dt><dd>{ledgerStage.serviceName}</dd>
+            </dl>
+            <div className="mx-auto my-5 h-px w-12 bg-[#b8893c]/75" />
+            <p className="font-serif text-[15px] italic text-[#9b6b2c]">No action required.</p>
           </div>
-          <PlanLine
-            className={`mt-4 max-w-full font-serif text-[16px] italic leading-[1.32] text-[#a06a2b] transition-opacity duration-[350ms] ease-out ${
-              courierRailActive ? "pr-2 text-left" : ""
-            } ${courierDimsCopy ? "opacity-20" : "opacity-100"}`}
-            delay={5200 + postOrderCopy.serviceRows.length * 2600 + 1200}
-            text={postOrderCopy.closing}
-          />
         </section>
       )}
 
@@ -4732,29 +4815,13 @@ function HeldTransformingState({
         alt=""
         className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 select-none transition-all duration-700 ${
           !isInk
-            ? "bottom-[calc(46px+env(safe-area-inset-bottom))] w-[58%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
+            ? "bottom-[calc(46px+env(safe-area-inset-bottom))] w-[66%] opacity-100 drop-shadow-[0_16px_16px_rgba(45,29,16,0.32)]"
             : "bottom-[-6%] w-[108%] opacity-80 drop-shadow-[0_22px_30px_rgba(45,29,16,0.26)]"
         }`}
         data-held-home-cradle="true"
         draggable={false}
         src={HELD_ASSETS.trayHeldBox}
       />
-      {isSettled && (
-        <>
-          <div
-            aria-hidden="true"
-            className="absolute bottom-[calc(36px+6.5%+env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 font-serif text-[16px] font-semibold leading-none text-[#b8893c] drop-shadow-[0_1px_0_rgba(255,244,220,0.35)]"
-          >
-            H
-          </div>
-          <img
-            alt=""
-            className="pointer-events-none absolute bottom-[calc(36px+1.5%+env(safe-area-inset-bottom))] left-1/2 z-40 w-[170px] -translate-x-1/2 rotate-90 select-none drop-shadow-[0_7px_10px_rgba(31,21,13,0.30)]"
-            draggable={false}
-            src={penAssetSrc}
-          />
-        </>
-      )}
       {isSettled && (
         <>
           <img
@@ -4822,7 +4889,7 @@ function HeldTransformingState({
       <div
         className={`absolute left-1/2 -translate-x-1/2 ${
           isSettled
-            ? "bottom-[calc(36px+3.8%+env(safe-area-inset-bottom))] z-[115] h-[13%] w-[43%]"
+            ? "bottom-[calc(36px+3.8%+env(safe-area-inset-bottom))] z-[115] h-[17%] w-[55%]"
             : "bottom-[35%] z-20 h-[32%] w-[88%]"
         }`}
       >
@@ -4835,9 +4902,11 @@ function HeldTransformingState({
             aria-label={token.type === "laundry_pickup" ? "Open Laundry Butler service details" : "Open service details"}
             className={`pointer-events-auto absolute touch-manipulation transition-[transform,filter] duration-200 active:scale-[0.94] ${
               isSettled
-                ? isDryCleaningToken
-                  ? "h-[120px] w-[120px]"
-                  : "h-[72px] w-[72px]"
+                ? tokens.length === 1
+                  ? "h-[clamp(160px,22dvh,210px)] w-[clamp(160px,22dvh,210px)]"
+                  : tokens.length === 2
+                    ? "h-[clamp(96px,13dvh,124px)] w-[clamp(96px,13dvh,124px)]"
+                    : "h-[clamp(68px,9dvh,88px)] w-[clamp(68px,9dvh,88px)]"
                 : isDryCleaningToken
                   ? "h-[140px] w-[140px]"
                   : "h-[96px] w-[96px]"
@@ -5555,8 +5624,12 @@ function JourneyGlyph({
 }
 
 function getTokenAssets(services: HeldParsedService[], request: string): HeldTokenAsset[] {
-  const serviceTypes = services.map(service => service.type).join(" ");
-  const haystack = `${serviceTypes} ${request}`.toLowerCase();
+  const activeServices = services.filter(service => !isTerminalHeldService(service));
+  const serviceTypes = activeServices.map(service => service.type).join(" ");
+  // Once persisted services exist, they are authoritative. In particular, do
+  // not resurrect a delivered token merely because the original request text
+  // still mentions laundry or dry cleaning.
+  const haystack = (services.length > 0 ? serviceTypes : request).toLowerCase();
   const assets: HeldTokenAsset[] = [];
 
   if (/laundry|wash[_\s-]*fold/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" });
@@ -5566,7 +5639,8 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
   if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenRide, type: "ride_airport" });
   if (/haircut|hair cut|barber|blowout/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenHaircut, type: "haircut" });
 
-  return assets.length ? assets : [{ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" }];
+  if (assets.length || services.length > 0) return assets;
+  return [{ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" }];
 }
 
 function getServiceLabel(type: string) {
