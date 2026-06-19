@@ -317,8 +317,16 @@ export default function PenPullPrototype({
     (window as unknown as { __setHeldMode?: (m: string) => void }).__setHeldMode = (m: string) =>
       setMode(m as PrototypeMode);
   }
-  const [confirmedRequest, setConfirmedRequest] = useState("");
-  const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>([]);
+  const [confirmedRequest, setConfirmedRequest] = useState(() =>
+    typeof window !== "undefined" && import.meta.env.DEV && new URLSearchParams(window.location.search).get("helddrawing") === "laundry"
+      ? "Laundry pickup in two days"
+      : "",
+  );
+  const [confirmedServices, setConfirmedServices] = useState<HeldParsedService[]>(() =>
+    typeof window !== "undefined" && import.meta.env.DEV && new URLSearchParams(window.location.search).get("helddrawing") === "laundry"
+      ? [{ type: "laundry" }]
+      : [],
+  );
   const [debugOpenLaundryVitrine, setDebugOpenLaundryVitrine] = useState(false);
   const [rootVitrineToken, setRootVitrineToken] = useState<HeldTokenAsset | null>(null);
   const [heldAgentMessage, setHeldAgentMessage] = useState("");

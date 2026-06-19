@@ -174,6 +174,10 @@ export function getPenTracePath(drawing: HeldDrawing) {
   return [drawing.main, ...(drawing.details ?? [])].join(" ");
 }
 
+export function getPenTraceSegments(drawing: HeldDrawing) {
+  return getPenTracePath(drawing).split(/(?=M)/).map(segment => segment.trim()).filter(Boolean);
+}
+
 export function HeldArtistDrawing({
   displayRequest,
   onDrawingComplete,
@@ -200,17 +204,26 @@ export function HeldArtistDrawing({
     [displayRequest, services]
   );
   const path = useMemo(() => getPenTracePath(drawing), [drawing]);
+  const traceSegments = useMemo(() => getPenTraceSegments(drawing), [drawing]);
   const isLaundryDrawing = drawing.id === "laundry_pickup" || drawing.id === "laundry_pickup_deadline";
   const canvasX = isLaundryDrawing ? 150 : 0;
   const canvasY = isLaundryDrawing ? 100 : 0;
   const canvasWidth = isLaundryDrawing ? 500 : 430;
   const canvasHeight = isLaundryDrawing ? 430 : 260;
-  const duration = useMemo(() => getDuration(services), [services]);
+  // Laundry has several long sculptural passes. Giving it a real five-second
+  // ink budget keeps the basket from materializing ahead of the nib.
+  const duration = useMemo(
+    () => (isLaundryDrawing ? 5200 : getDuration(services)),
+    [isLaundryDrawing, services],
+  );
   onDrawingCompleteRef.current = onDrawingComplete;
 
   useLayoutEffect(() => {
     const svgPath = pathRef.current;
     if (!svgPath) return undefined;
+    const visiblePaths = Array.from(
+      svgPath.parentElement?.querySelectorAll<SVGPathElement>("[data-held-trace-stroke]") ?? [],
+    );
 
     completedRef.current = false;
     setIsComplete(false);
@@ -242,7 +255,9 @@ export function HeldArtistDrawing({
         approachTimer = null;
       }
 
-      svgPath.style.strokeDashoffset = "0";
+      visiblePaths.forEach(visiblePath => {
+        visiblePath.style.strokeDashoffset = "0";
+      });
       setIsComplete(true);
       if (reason !== "complete") {
         console.warn("[HELD][Drawing] fallback used", { reason });
@@ -276,8 +291,11 @@ export function HeldArtistDrawing({
       };
     }
 
-    svgPath.style.strokeDasharray = `${totalLength}`;
-    svgPath.style.strokeDashoffset = `${totalLength}`;
+    visiblePaths.forEach(visiblePath => {
+      const length = visiblePath.getTotalLength();
+      visiblePath.style.strokeDasharray = `${length}`;
+      visiblePath.style.strokeDashoffset = `${length}`;
+    });
 
     // ── Stroke map ─────────────────────────────────────────────────────────
     // A one-line drawing is still made of a few distinct strokes (each `M`
@@ -285,18 +303,19 @@ export function HeldArtistDrawing({
     // between them — getPointAtLength alone teleports across M-gaps, which is
     // exactly what made the pen look possessed. We measure each subpath with a
     // detached path element to find the cumulative length boundaries.
-    type Stroke = { from: number; to: number };
+    type Stroke = { from: number; to: number; index: number };
     const strokes: Stroke[] = [];
     try {
       const segments = path.split(/(?=M)/).map(s => s.trim()).filter(Boolean);
       const ns = "http://www.w3.org/2000/svg";
       let cursor = 0;
-      for (const segment of segments) {
+      for (let index = 0; index < segments.length; index += 1) {
+        const segment = segments[index];
         const probe = document.createElementNS(ns, "path");
         probe.setAttribute("d", segment);
         const segmentLength = probe.getTotalLength();
         if (Number.isFinite(segmentLength) && segmentLength > 1) {
-          strokes.push({ from: cursor, to: cursor + segmentLength });
+          strokes.push({ from: cursor, to: cursor + segmentLength, index });
         }
         cursor += segmentLength;
       }
@@ -304,7 +323,7 @@ export function HeldArtistDrawing({
       // Measurement is an enhancement — fall back to one continuous stroke.
     }
     if (strokes.length === 0) {
-      strokes.push({ from: 0, to: totalLength });
+      strokes.push({ from: 0, to: totalLength, index: 0 });
     }
 
     // ── Pen hand model ─────────────────────────────────────────────────────
@@ -370,7 +389,7 @@ export function HeldArtistDrawing({
     const easeHop = (t: number) => 1 - Math.pow(1 - t, 3);
 
     type Beat =
-      | { kind: "draw"; from: number; to: number; ms: number }
+      | { kind: "draw"; from: number; to: number; index: number; ms: number }
       | { kind: "hop"; from: number; to: number; ms: number };
     const beats: Beat[] = [];
     strokes.forEach((stroke, index) => {
@@ -379,6 +398,7 @@ export function HeldArtistDrawing({
         kind: "draw",
         from: stroke.from,
         to: stroke.to,
+        index: stroke.index,
         ms: Math.max(220, drawBudget * share),
       });
       const nextStroke = strokes[index + 1];
@@ -445,7 +465,12 @@ export function HeldArtistDrawing({
           // clamped just inside this stroke — at the exact boundary length the
           // SVG API returns the PREVIOUS subpath's endpoint, which would snap
           // the pen back for one frame right after each hop.
-          svgPath.style.strokeDashoffset = `${totalLength - currentLength}`;
+          const activeVisiblePath = visiblePaths[beat.index];
+          if (activeVisiblePath) {
+            const strokeLength = beat.to - beat.from;
+            const localLength = currentLength - beat.from;
+            activeVisiblePath.style.strokeDashoffset = `${Math.max(0, strokeLength - localLength)}`;
+          }
           applyPen(
             penPoseAt(
               Math.max(currentLength, beat.from + 0.15),
@@ -570,12 +595,25 @@ export function HeldArtistDrawing({
               ref={pathRef}
               d={path}
               fill="none"
-              opacity="0.92"
-              stroke="#1A1A1A"
+              opacity="0"
+              stroke="transparent"
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth="2"
             />
+            {traceSegments.map((segment, index) => (
+              <path
+                data-held-trace-stroke={index}
+                d={segment}
+                fill="none"
+                key={`${drawing.id}-${index}`}
+                opacity="0.92"
+                stroke="#1A1A1A"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
+            ))}
           </svg>
           <img
             alt=""
