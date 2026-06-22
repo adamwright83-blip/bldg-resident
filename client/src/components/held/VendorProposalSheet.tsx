@@ -1,4 +1,5 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { trpc } from "@/lib/trpc";
 import { PROPOSAL_COPY } from "@/lib/proposalCopy";
 import { isProposalExpired } from "./vendorProposalCardLogic";
 import type { VendorProposalCardData } from "./vendorProposalTypes";
@@ -11,12 +12,14 @@ interface VendorProposalSheetProps {
 }
 
 /**
- * Full-detail proposal sheet. No CTA button renders here -- the approval
- * mutation does not exist in this slice, and a disabled button would imply
- * a real action is available but blocked. Quiet helper copy stands in for
- * the CTA until the approval-mutation slice ships.
+ * Full-detail proposal sheet. This is the only place the real consent CTA
+ * renders -- the compact VendorProposalCard stays passive on purpose, since
+ * it lives in a scrollable list and a deliberate detail view is the safer
+ * place for a resident-triggered write.
  */
 export default function VendorProposalSheet({ open, onOpenChange, proposal, notFound }: VendorProposalSheetProps) {
+  const approveMutation = trpc.proposals.approve.useMutation();
+
   if (notFound) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
@@ -31,6 +34,12 @@ export default function VendorProposalSheet({ open, onOpenChange, proposal, notF
   }
   if (!proposal) return null;
   const isExpired = isProposalExpired(proposal.proposal_expiry);
+
+  const hasApprovedThisProposal = approveMutation.isSuccess
+    && approveMutation.data?.versionId === proposal.proposal_version_id;
+  const approveFailedThisProposal = approveMutation.isError
+    && approveMutation.variables?.versionId === proposal.proposal_version_id;
+  const approveNotAllowed = approveFailedThisProposal && approveMutation.error?.data?.code === "NOT_FOUND";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -61,8 +70,23 @@ export default function VendorProposalSheet({ open, onOpenChange, proposal, notF
 
           {isExpired ? (
             <div className="vpc-expired-label">This offer has expired</div>
+          ) : hasApprovedThisProposal ? (
+            <div className="vpc-cta-reassurance">{PROPOSAL_COPY.consentRecordedNotice}</div>
+          ) : approveNotAllowed ? (
+            <div className="vpc-expired-label">{PROPOSAL_COPY.consentUnavailableNotice}</div>
+          ) : approveFailedThisProposal ? (
+            <div className="vpc-expired-label">{PROPOSAL_COPY.consentFailedNotice}</div>
           ) : proposal.cta.visible ? (
-            <div className="vpc-cta-reassurance">{PROPOSAL_COPY.helperPending}</div>
+            <>
+              <button
+                className="vpc-cta"
+                disabled={approveMutation.isPending}
+                onClick={() => approveMutation.mutate({ versionId: proposal.proposal_version_id })}
+              >
+                {PROPOSAL_COPY.ctaPrimary}
+              </button>
+              <div className="vpc-cta-reassurance">{PROPOSAL_COPY.ctaReassurance}</div>
+            </>
           ) : null}
 
           <div className="vpc-disclaimer">{proposal.truth_language.disclaimer}.</div>

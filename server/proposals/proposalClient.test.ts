@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchResidentProposalDetail, fetchResidentProposalList } from "./proposalClient";
+import {
+  fetchResidentProposalDetail, fetchResidentProposalList, submitResidentProposalConsent,
+} from "./proposalClient";
 
 describe("proposalClient", () => {
   afterEach(() => {
@@ -86,5 +88,75 @@ describe("proposalClient", () => {
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.method).toBe("GET");
     }
+  });
+});
+
+describe("submitResidentProposalConsent", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("sends a POST to the correct encoded consent path with all four headers", async () => {
+    vi.stubEnv("APP_SHARED_API_SECRET", "s3cr3t");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 201, json: async () => ({ status: "consent_recorded", consentedAt: "2026-06-22T12:00:00.000Z" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitResidentProposalConsent(42, "version/with space");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://bldg-admin-api-production.up.railway.app/api/resident/proposals/version%2Fwith%20space/consent");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({
+      "x-app-shared-secret": "s3cr3t", "x-resident-session-verified": "true",
+      "x-bldg-user-id": "42", "x-tenant-id": "default",
+    });
+  });
+
+  it("maps 201 to consent_recorded and 200 to consent_already_recorded", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true, status: 201, json: async () => ({ status: "consent_recorded", consentedAt: "2026-06-22T12:00:00.000Z" }),
+    }));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({
+      ok: true, status: "consent_recorded", consentedAt: "2026-06-22T12:00:00.000Z",
+    });
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ status: "consent_already_recorded", consentedAt: "2026-06-21T00:00:00.000Z" }),
+    }));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({
+      ok: true, status: "consent_already_recorded", consentedAt: "2026-06-21T00:00:00.000Z",
+    });
+  });
+
+  it("maps 400/401/403/404/network errors to the correct refusal reasons", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: "Invalid request" }) }));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({ ok: false, reason: "invalid_request" });
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "Unauthorized" }) }));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({ ok: false, reason: "unauthorized" });
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: "Unauthorized" }) }));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({ ok: false, reason: "unauthorized" });
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: "Proposal not found" }) }));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({ ok: false, reason: "not_allowed" });
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    await expect(submitResidentProposalConsent(1, "v1")).resolves.toEqual({ ok: false, reason: "network_error" });
+  });
+
+  it("has no parameter or code path that reads inbound request headers -- bldgUserId/tenantId are server-derived only", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ status: "consent_recorded" }) }));
+    // submitResidentProposalConsent's signature is (bldgUserId: number, versionId: string) -- there is
+    // no way to pass a tenantId or forged headers through it even if a caller tried to.
+    await submitResidentProposalConsent(999, "v1");
+    const fetchMock = vi.mocked(fetch);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers["x-tenant-id"]).toBe("default");
+    expect(init.headers["x-bldg-user-id"]).toBe("999");
   });
 });

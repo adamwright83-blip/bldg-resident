@@ -22,9 +22,24 @@ describe("proposal feature source isolation", () => {
     }
   });
 
-  it("the proposals router contains no mutation procedures", () => {
+  it("the proposals router contains exactly one mutation -- approve -- and it accepts no tenantId/bldgUserId input", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "server/routers/proposals.ts"), "utf8");
-    expect(source).not.toMatch(/\.mutation\(/);
+    const mutationCalls = source.match(/\.mutation\(/g) ?? [];
+    expect(mutationCalls).toHaveLength(1);
+    expect(source).toMatch(/approve:\s*publicProcedure/);
+    expect(source).not.toMatch(/z\.object\(\{[^}]*tenantId/);
+    expect(source).not.toMatch(/z\.object\(\{[^}]*bldgUserId/);
+  });
+
+  it("the approve mutation's only outbound call is submitResidentProposalConsent -- no Stripe/LLM identifiers introduced", () => {
+    const routerSource = fs.readFileSync(path.join(process.cwd(), "server/routers/proposals.ts"), "utf8");
+    const proxySource = fs.readFileSync(path.join(process.cwd(), "server/proposals/proposalClient.ts"), "utf8");
+    for (const source of [routerSource, proxySource]) {
+      expect(source).not.toMatch(/\bstripe\b/i);
+      expect(source).not.toMatch(/openai|anthropic|chatgpt/i);
+    }
+    const postCalls = proxySource.match(/method:\s*["']POST["']/g) ?? [];
+    expect(postCalls).toHaveLength(1);
   });
 
   it("the proposal client never reads APP_SHARED_API_SECRET from anywhere but process.env", () => {

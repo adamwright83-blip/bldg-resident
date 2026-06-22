@@ -33,6 +33,10 @@ export type ResidentProposalGetResult =
   | { ok: true; card: ResidentProposalCard }
   | { ok: false; reason: "not_found" | "unauthorized" | "network_error" };
 
+export type ResidentProposalConsentResult =
+  | { ok: true; status: "consent_recorded" | "consent_already_recorded"; consentedAt: string | null }
+  | { ok: false; reason: "invalid_request" | "unauthorized" | "not_allowed" | "network_error" };
+
 function baseUrl(): string {
   const configured = process.env.RESIDENT_PROPOSALS_API_BASE_URL;
   return (configured || DEFAULT_ADMIN_API_BASE_URL).replace(/\/$/, "");
@@ -87,6 +91,26 @@ export async function fetchResidentProposalDetail(
     if (!res.ok) return { ok: false, reason: "network_error" };
     const card = await res.json();
     return { ok: true, card };
+  } catch {
+    return { ok: false, reason: "network_error" };
+  }
+}
+
+export async function submitResidentProposalConsent(
+  bldgUserId: number,
+  versionId: string,
+): Promise<ResidentProposalConsentResult> {
+  const url = `${baseUrl()}/api/resident/proposals/${encodeURIComponent(versionId)}/consent`;
+
+  try {
+    const res = await fetch(url, { method: "POST", headers: authHeaders(bldgUserId) });
+    if (res.status === 401 || res.status === 403) return { ok: false, reason: "unauthorized" };
+    if (res.status === 404) return { ok: false, reason: "not_allowed" };
+    if (res.status === 400) return { ok: false, reason: "invalid_request" };
+    if (!res.ok) return { ok: false, reason: "network_error" };
+    const body = await res.json();
+    const status = body?.status === "consent_already_recorded" ? "consent_already_recorded" : "consent_recorded";
+    return { ok: true, status, consentedAt: body?.consentedAt ?? null };
   } catch {
     return { ok: false, reason: "network_error" };
   }
