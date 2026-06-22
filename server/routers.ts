@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { chatRouter } from "./routers/chat";
+import { proposalsRouter } from "./routers/proposals";
 import { stripeRouter } from "./routers/stripe";
 
 export const appRouter = router({
@@ -20,6 +21,7 @@ export const appRouter = router({
   }),
 
   chat: chatRouter,
+  proposals: proposalsRouter,
   stripe: stripeRouter,
 });
 

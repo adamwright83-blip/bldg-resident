@@ -230,7 +230,7 @@ async function postToAdminIntakeAndVerify(
 
 // ─── Auth helper ───
 
-async function getBldgUserIdFromRequest(req: any): Promise<number | null> {
+export async function getBldgUserIdFromRequest(req: any): Promise<number | null> {
   const cookieHeader = req.headers?.cookie;
   if (!cookieHeader) return null;
 

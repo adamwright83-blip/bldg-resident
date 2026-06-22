@@ -7,6 +7,7 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Shield, Clock, ChevronRight, Package, Shirt, Car, Dog, SprayCan, X, FileText, CheckCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import VendorProposalSection from "@/components/held/VendorProposalSection";
 
 // ─── Types ───
 
@@ -255,6 +256,8 @@ export default function Vault({ onBack, initialTab = "active" }: VaultProps) {
           <span>{formatBuildingName(user?.buildingSlug)}</span>
         </div>
       </motion.div>
+
+      <VendorProposalSection />
 
       {/* Tabs */}
       <div className="vault-tabs">

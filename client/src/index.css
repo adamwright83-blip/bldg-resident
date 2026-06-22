@@ -1737,6 +1737,125 @@
     letter-spacing: 0.2px;
   }
 
+  /* ═══════════════════════════════════════════
+     VENDOR PROPOSAL CARD
+     Quiet concierge ledger register -- no badges, ratings, or marketplace chrome.
+     ═══════════════════════════════════════════ */
+  .vpc-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--bg-elevated);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-primary);
+  }
+
+  .vpc-eyebrow {
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .vpc-vendor {
+    font-size: 19px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    letter-spacing: 0.2px;
+  }
+
+  .vpc-summary {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 300;
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .vpc-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 6px 0;
+    border-top: 1px solid rgba(245, 240, 232, 0.08);
+  }
+
+  .vpc-row:first-of-type {
+    border-top: none;
+  }
+
+  .vpc-fit,
+  .vpc-reputation {
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+    font-weight: 300;
+    line-height: 1.5;
+    margin-top: 10px;
+  }
+
+  .vpc-disclaimer {
+    color: var(--text-tertiary);
+    font-size: 11.5px;
+    font-weight: 300;
+    margin-top: 16px;
+    line-height: 1.4;
+  }
+
+  .vpc-cta {
+    display: inline-block;
+    margin-top: 18px;
+    padding: 11px 22px;
+    background: transparent;
+    border: 1px solid rgba(201, 169, 110, 0.35);
+    border-radius: 100px;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    text-align: center;
+  }
+
+  .vpc-cta:hover {
+    background: rgba(201, 169, 110, 0.1);
+  }
+
+  .vpc-cta-reassurance {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 300;
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  .vpc-expired-label {
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+    font-weight: 400;
+    margin-top: 18px;
+    font-style: italic;
+  }
+
+  .vpc-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .vpc-section-loading {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+    color: var(--text-tertiary);
+  }
+
   /* Empty state with centered logo */
   .chat-empty {
     height: 100%;
