@@ -1856,6 +1856,34 @@
     color: var(--text-tertiary);
   }
 
+  /* Parchment/ledger skin for the live Receipts Archive surface in
+     PenPullPrototype.tsx -- same structure as .vpc-card, recolored to match
+     the warm cream cards already used there instead of the dark Vault palette. */
+  .vpc-section--light .vpc-card {
+    background: linear-gradient(180deg, #fff8ec 0%, #f7edd8 100%);
+    box-shadow: 0 1px 0 rgba(255, 252, 242, 0.9) inset, 0 -1px 0 rgba(100, 72, 30, 0.12) inset,
+      0 4px 12px rgba(18, 10, 3, 0.24);
+    color: #2f261b;
+  }
+
+  .vpc-section--light .vpc-eyebrow {
+    color: #8a6c3c;
+  }
+
+  .vpc-section--light .vpc-summary,
+  .vpc-section--light .vpc-row,
+  .vpc-section--light .vpc-fit,
+  .vpc-section--light .vpc-reputation,
+  .vpc-section--light .vpc-disclaimer,
+  .vpc-section--light .vpc-cta-reassurance,
+  .vpc-section--light .vpc-expired-label {
+    color: #6b5e4c;
+  }
+
+  .vpc-section--light .vpc-row {
+    border-top-color: rgba(100, 72, 30, 0.12);
+  }
+
   /* Empty state with centered logo */
   .chat-empty {
     height: 100%;

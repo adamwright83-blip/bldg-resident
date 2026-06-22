@@ -38,6 +38,7 @@ import {
 } from "./HeldArtistDrawing";
 import { HeldVoiceCaptureTray } from "./HeldVoiceCaptureTray";
 import { PenChain } from "./PenChain";
+import VendorProposalSection from "./VendorProposalSection";
 import { PenCharm } from "./PenCharm";
 import { PenPhysicsDebugPanel } from "./PenPhysicsDebugPanel";
 import { HELD_LARGE_PEN_TUNING } from "./heldPenTuning";
@@ -2127,6 +2128,9 @@ function HeldLabyrinthReceiptsLayer({ onClose }: { onClose: () => void }) {
             </ul>
           </div>
         )}
+
+        {/* ── VENDOR PROPOSALS ── passive; renders nothing when none exist */}
+        <VendorProposalSection variant="light" />
 
         {/* ── RECEIPTS ── */}
         <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-[#7a6a52]">

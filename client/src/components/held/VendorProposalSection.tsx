@@ -5,6 +5,11 @@ import VendorProposalCard from "./VendorProposalCard";
 import VendorProposalSheet from "./VendorProposalSheet";
 import type { VendorProposalCardData } from "./vendorProposalTypes";
 
+interface VendorProposalSectionProps {
+  /** "light" matches the parchment/ledger receipts-archive surface; "dark" matches the original Vault palette. */
+  variant?: "dark" | "light";
+}
+
 /**
  * Passive proposal surface. Renders nothing when there are no proposals --
  * no empty-state chrome for a passive banner. Loading is a brief spinner
@@ -12,7 +17,7 @@ import type { VendorProposalCardData } from "./vendorProposalTypes";
  * here (no internal error detail surfaced) since this is a passive banner,
  * not a primary navigation destination.
  */
-export default function VendorProposalSection() {
+export default function VendorProposalSection({ variant = "dark" }: VendorProposalSectionProps) {
   const { data, isLoading } = trpc.proposals.list.useQuery(undefined, { retry: false });
   const [openVersionId, setOpenVersionId] = useState<string | null>(null);
 
@@ -20,6 +25,8 @@ export default function VendorProposalSection() {
     { versionId: openVersionId ?? "" },
     { enabled: Boolean(openVersionId), retry: false },
   );
+
+  const sectionClassName = variant === "light" ? "vpc-section vpc-section--light" : "vpc-section";
 
   if (isLoading) {
     return (
@@ -38,7 +45,7 @@ export default function VendorProposalSection() {
   const notFound = Boolean(openVersionId) && Boolean(detailQuery.error) && !detailQuery.isLoading;
 
   return (
-    <div className="vpc-section">
+    <div className={sectionClassName}>
       {items.map(item => (
         <VendorProposalCard
           key={item.proposal_version_id}
