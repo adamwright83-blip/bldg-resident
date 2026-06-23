@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CardCvcElement,
   CardExpiryElement,
@@ -32,6 +32,8 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
   const [cardholderName, setCardholderName] = useState(defaultCardholderName);
   const [postalCode, setPostalCode] = useState("");
   const [initError, setInitError] = useState<string | null>(null);
+  const [cardFocused, setCardFocused] = useState(false);
+  const submitButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const savePaymentMethod = trpc.stripe.savePaymentMethod.useMutation({
     onSuccess: (data) => {
@@ -62,6 +64,22 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
     }, 5000);
     return () => clearTimeout(timer);
   }, [elements, publishableKey, stripe]);
+
+  useEffect(() => {
+    if (!cardFocused) return;
+
+    const revealSubmit = () => {
+      window.setTimeout(() => {
+        submitButtonRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }, 80);
+    };
+
+    revealSubmit();
+    window.visualViewport?.addEventListener("resize", revealSubmit);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", revealSubmit);
+    };
+  }, [cardFocused]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,7 +177,7 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
     : "mb-4 w-full border border-gray-300 rounded-lg px-4 py-3 text-base text-black placeholder:text-gray-400 bg-white";
   const btnCls = dark
     ? "bldg-pay-btn"
-    : "w-full bg-black text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed";
+    : "bldg-pay-btn bldg-pay-btn-light";
   const confirmCls = dark
     ? "bldg-pay-confirm"
     : "flex items-center gap-2.5 bg-white border border-gray-200 rounded-lg p-4 my-3 w-full";
@@ -206,25 +224,41 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
                 <input
                   value={cardholderName}
                   onChange={(e) => setCardholderName(e.target.value)}
+                  onBlur={() => setCardFocused(false)}
+                  onFocus={() => setCardFocused(true)}
                   placeholder="Name on card"
                   className={dark ? "bldg-pay-zip" : zipCls}
                   style={{ marginBottom: "12px" }}
                   autoComplete="cc-name"
                 />
                 <div className={`mb-3 w-full ${fieldCls}`} style={{ minHeight: "48px" }}>
-                  <CardNumberElement options={{ style: stripeStyle }} />
+                  <CardNumberElement
+                    onBlur={() => setCardFocused(false)}
+                    onFocus={() => setCardFocused(true)}
+                    options={{ style: stripeStyle }}
+                  />
                 </div>
                 <div className="mb-3 grid grid-cols-2 gap-3">
                   <div className={fieldCls} style={{ minHeight: "48px" }}>
-                    <CardExpiryElement options={{ style: stripeStyle }} />
+                    <CardExpiryElement
+                      onBlur={() => setCardFocused(false)}
+                      onFocus={() => setCardFocused(true)}
+                      options={{ style: stripeStyle }}
+                    />
                   </div>
                   <div className={fieldCls} style={{ minHeight: "48px" }}>
-                    <CardCvcElement options={{ style: stripeStyle }} />
+                    <CardCvcElement
+                      onBlur={() => setCardFocused(false)}
+                      onFocus={() => setCardFocused(true)}
+                      options={{ style: stripeStyle }}
+                    />
                   </div>
                 </div>
                 <input
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
+                  onBlur={() => setCardFocused(false)}
+                  onFocus={() => setCardFocused(true)}
                   placeholder="ZIP"
                   className={zipCls}
                   autoComplete="postal-code"
@@ -233,12 +267,12 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
               </>
             )}
             <button
+              ref={submitButtonRef}
               type="submit"
               disabled={(!isResidentAppTestMode && (!stripe || !elements)) || loading}
               className={btnCls}
-              style={dark ? undefined : { height: '48px' }}
             >
-              {loading ? "Saving..." : "Save card"}
+              {loading ? "Saving..." : "Save card and continue"}
             </button>
             {dark && (
               <div style={{
