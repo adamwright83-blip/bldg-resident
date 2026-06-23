@@ -5009,12 +5009,40 @@ function HeldServiceVitrine({
   onClose: () => void;
   token: HeldTokenAsset;
 }) {
+  const swipeStartYRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
+    swipeStartYRef.current = event.clientY;
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLElement>) => {
+    if (swipeStartYRef.current === null) return;
+    const dy = event.clientY - swipeStartYRef.current;
+    swipeStartYRef.current = null;
+    if (dy > 100) {
+      onClose();
+    }
+  };
+
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
       className="absolute inset-0 z-[140] overflow-hidden bg-[#f4ecdf] text-[#2d251d]"
       exit={{ opacity: 0, y: 18 }}
       initial={{ opacity: 0, y: 18 }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
     >
       <div
@@ -5026,13 +5054,16 @@ function HeldServiceVitrine({
           backgroundSize: "cover, 420px 420px",
         }}
       />
+      <div className="absolute inset-x-0 top-2 z-[210] flex justify-center">
+        <div className="h-1.5 w-12 rounded-full bg-[#b78a35]/40" />
+      </div>
       <button
         aria-label="Close service vitrine"
-        className="absolute right-[7%] top-[7%] z-20 grid h-10 w-10 place-items-center rounded-full border border-[#b78a35]/70 bg-[#fff8ec]/74 font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.12)]"
+        className="absolute right-[7%] top-[7%] z-[210] grid h-11 w-11 place-items-center rounded-full border border-[#b78a35]/70 bg-[#fff8ec] font-serif text-[22px] text-[#9b6f23] shadow-[0_8px_18px_rgba(68,45,20,0.18)]"
         onClick={onClose}
         type="button"
       >
-        H
+        ×
       </button>
       <div className="relative z-10 flex h-full flex-col px-[8%] pb-8 pt-[8%]">
         <img alt="HELD" className="h-10 w-10 object-contain" src={HELD_ASSETS.logoMark} />
