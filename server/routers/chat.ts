@@ -296,11 +296,57 @@ const COORDINATED_SERVICES = [
   { category: "other", label: "Other", patterns: [] },
 ] as const;
 
-function extractCoordinatedServiceRequest(text: string): {
+const EXPLICIT_DATE_MONTHS: Record<string, number> = {
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+};
+
+/**
+ * Parses only fully explicit "Requested date:" values. Never infers a date
+ * from vague phrasing like "soon" or a bare weekday name with no calendar date.
+ */
+export function parseExplicitRequestedDate(value: string): string | null {
+  const trimmed = value.trim();
+
+  let match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+
+  match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) {
+    const month = match[1].padStart(2, "0");
+    const day = match[2].padStart(2, "0");
+    return `${match[3]}-${month}-${day}`;
+  }
+
+  match = trimmed.match(/^(?:[A-Za-z]+,?\s+)?([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (match) {
+    const month = EXPLICIT_DATE_MONTHS[match[1].toLowerCase()];
+    if (!month) return null;
+    const day = match[2].padStart(2, "0");
+    return `${match[3]}-${String(month).padStart(2, "0")}-${day}`;
+  }
+
+  return null;
+}
+
+/** Extracts the raw value of an explicit "Requested date:" label, if present. */
+function extractRequestedDateLabel(source: string): string | null {
+  const match = /(?:^|[.;\n])\s*requested date\s*:\s*([^.;\n]*)/i.exec(source);
+  const value = match?.[1]?.trim();
+  return value || null;
+}
+
+/** A leading sentence is the service-trigger phrase only if it carries no labeled fact. */
+function isLabeledFactSentence(sentence: string): boolean {
+  return /^[^:]{2,40}:\s*\S/.test(sentence);
+}
+
+export function extractCoordinatedServiceRequest(text: string): {
   serviceCategory: string;
   serviceLabel: string;
   timing: string;
   notes: string;
+  explicitRequestedDate: string | null;
 } | null {
   const raw = text.trim();
   if (!raw) return null;
@@ -326,13 +372,26 @@ function extractCoordinatedServiceRequest(text: string): {
       .map((part) => part.trim())
       .filter(Boolean);
 
-    const notes = sentenceParts.slice(1).join(". ").trim();
+    // Drop a leading sentence only when it's the bare service-trigger phrase
+    // (e.g. "Dog grooming") rather than a resident-provided labeled fact.
+    const notesParts =
+      sentenceParts.length && !isLabeledFactSentence(sentenceParts[0])
+        ? sentenceParts.slice(1)
+        : sentenceParts;
+
+    const notes = notesParts.join(". ").trim();
+
+    const requestedDateLabel = extractRequestedDateLabel(normalized);
+    const explicitRequestedDate = requestedDateLabel
+      ? parseExplicitRequestedDate(requestedDateLabel)
+      : null;
 
     return {
       serviceCategory: svc.category,
       serviceLabel: svc.label,
       timing,
       notes,
+      explicitRequestedDate,
     };
   }
 
@@ -1819,7 +1878,7 @@ export const chatRouter = router({
             serviceType: coordRequest.serviceCategory as any,
             status: "new" as any,
             requestSummary: `${coordRequest.serviceLabel} — ${coordRequest.timing}${coordRequest.notes ? ". " + coordRequest.notes : ""}`,
-            scheduledDate: null,
+            scheduledDate: coordRequest.explicitRequestedDate ?? null,
             scheduledWindow: coordRequest.timing !== "Requested timing not specified" ? coordRequest.timing : null,
             requestJson: { notes: coordRequest.notes || null },
             buildingId: buildingKey || null,
