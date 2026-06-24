@@ -24,8 +24,10 @@ export async function createStripeCustomer(params: {
   email?: string;
   name?: string;
   phone?: string;
+  logContext?: { reqId: string; bldgUserId: number };
 }): Promise<{ customerId: string; last4: string }> {
-  const { paymentMethodId, email, name, phone } = params;
+  const { paymentMethodId, email, name, phone, logContext } = params;
+  const logPrefix = logContext ? `[Stripe][${logContext.reqId}]` : "[Stripe]";
 
   // Get payment method details to extract last4
   const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
@@ -46,7 +48,15 @@ export async function createStripeCustomer(params: {
     },
   });
 
-  console.log("[Stripe] Customer created:", customer.id, "card ending in", last4);
+  console.log(
+    logPrefix,
+    "Customer created:",
+    customer.id,
+    "for user",
+    logContext?.bldgUserId,
+    "card ending in",
+    last4
+  );
   return { customerId: customer.id, last4 };
 }
 
@@ -58,8 +68,10 @@ export async function replacePaymentMethod(params: {
   customerId: string;
   newPaymentMethodId: string;
   oldPaymentMethodId?: string | null;
+  logContext?: { reqId: string; bldgUserId: number };
 }): Promise<{ last4: string }> {
-  const { customerId, newPaymentMethodId, oldPaymentMethodId } = params;
+  const { customerId, newPaymentMethodId, oldPaymentMethodId, logContext } = params;
+  const logPrefix = logContext ? `[Stripe][${logContext.reqId}]` : "[Stripe]";
 
   await stripe.paymentMethods.attach(newPaymentMethodId, { customer: customerId });
 
@@ -73,12 +85,20 @@ export async function replacePaymentMethod(params: {
   if (oldPaymentMethodId) {
     try {
       await stripe.paymentMethods.detach(oldPaymentMethodId);
-      console.log("[Stripe] Detached old PM:", oldPaymentMethodId);
+      console.log(logPrefix, "Detached old PM for user", logContext?.bldgUserId);
     } catch (err) {
-      console.warn("[Stripe] Failed to detach old PM:", err);
+      console.warn(logPrefix, "Failed to detach old PM for user", logContext?.bldgUserId, err);
     }
   }
 
-  console.log("[Stripe] Replaced PM on customer", customerId, "→ ending in", last4);
+  console.log(
+    logPrefix,
+    "Replaced PM on customer",
+    customerId,
+    "for user",
+    logContext?.bldgUserId,
+    "→ ending in",
+    last4
+  );
   return { last4 };
 }

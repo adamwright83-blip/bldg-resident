@@ -13,7 +13,7 @@ import { CheckCircle2, Lock } from "lucide-react";
 import { TEST_PAYMENT_METHOD_ID, isResidentAppTestMode } from "@/lib/residentTestMode";
 
 interface PaymentMethodFormProps {
-  onSuccess: () => void;
+  onSuccess: (info?: { hasPendingOrder?: boolean }) => void;
   dark?: boolean;
   defaultCardholderName?: string;
 }
@@ -42,10 +42,10 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
       if (data.last4) {
         setLast4(data.last4);
       }
-      onSuccess();
+      onSuccess({ hasPendingOrder: data.hasPendingOrder });
     },
     onError: (error) => {
-      toast.error(`Failed to save payment method: ${error.message}`);
+      toast.error(error.message || "Failed to save payment method.");
       setLoading(false);
     },
   });

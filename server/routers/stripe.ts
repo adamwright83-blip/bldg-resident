@@ -10,6 +10,7 @@ import { getDb } from "../db";
 import { bldgUsers } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { parse as parseCookieHeader } from "cookie";
+import { randomUUID } from "node:crypto";
 import { jwtVerify } from "jose";
 import { resolveIntakeBuildingKey, getAddressForIntakeKey } from "../../shared/intakeBuilding";
 import {
@@ -90,6 +91,9 @@ export const stripeRouter = router({
         });
       }
 
+      // Per-request id for correlating retry/duplicate-submit attempts in logs.
+      const reqId = randomUUID().slice(0, 8);
+
       let customerId: string;
       let last4: string;
       const savedPaymentMethodId = isResidentAppTestMode()
@@ -106,6 +110,7 @@ export const stripeRouter = router({
               customerId: user.stripeCustomerId,
               newPaymentMethodId: paymentMethodId,
               oldPaymentMethodId: user.stripePaymentMethodId,
+              logContext: { reqId, bldgUserId },
             });
             customerId = user.stripeCustomerId;
             last4 = result.last4;
@@ -117,12 +122,33 @@ export const stripeRouter = router({
                 ? `${user.firstName} ${user.lastName}`
                 : undefined,
               phone: user.phoneE164,
+              logContext: { reqId, bldgUserId },
             });
             customerId = customer.customerId;
             last4 = customer.last4;
           }
         } catch (error: any) {
-          console.error("[Stripe] savePaymentMethod failed:", error);
+          const isCardDecline =
+            error?.type === "StripeCardError" || error?.code === "card_declined";
+
+          // Log a sanitized summary only — never the raw Stripe error object,
+          // which can carry payment-method/card metadata.
+          console.error(
+            `[Stripe][${reqId}] savePaymentMethod failed for user ${bldgUserId}:`,
+            JSON.stringify({
+              type: error?.type,
+              code: error?.code,
+              declineCode: error?.decline_code,
+            })
+          );
+
+          if (isCardDecline) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Your card was declined. Please try another card or contact your bank.",
+            });
+          }
+
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Stripe customer setup failed. Please verify backend Stripe configuration.",
@@ -148,7 +174,7 @@ export const stripeRouter = router({
         })
         .where(eq(bldgUsers.id, bldgUserId));
 
-      console.log("[Stripe] Payment method saved for user", bldgUserId, "→", customerId, "ending in", last4);
+      console.log(`[Stripe][${reqId}] Payment method saved for user`, bldgUserId, "→", customerId, "ending in", last4);
 
       // ─── POST-PAYMENT: Complete onboarding + show instructional images ───
       // Now that payment is saved, advance onboarding to COMPLETE and
@@ -215,6 +241,19 @@ export const stripeRouter = router({
         } catch (err) {
           console.error("[TUTORIAL] Failed to create deferred booking:", err);
         }
+      }
+
+      // ─── ORDER CONTEXT CHECK — does this user actually have a real order in flight? ───
+      // Used by the client to avoid implying an order was placed when the resident
+      // only saved a card with no booking/pending intent attached.
+      let hasPendingOrder = false;
+      try {
+        const requestsAfterPayment = await getServiceRequests(bldgUserId);
+        hasPendingOrder = requestsAfterPayment.some(
+          (r: any) => r.status === "pending" || r.status === "confirmed"
+        );
+      } catch (err) {
+        console.error(`[Stripe][${reqId}] Failed to check pending orders for user`, bldgUserId, err);
       }
 
       // ─── INTAKE FORWARD — send complete order to admin API after payment ───
@@ -326,6 +365,7 @@ export const stripeRouter = router({
         success: true,
         stripeCustomerId: customerId,
         last4,
+        hasPendingOrder,
       };
     }),
 });

@@ -48,6 +48,7 @@ const stripeInitError = stripePublishableKey ? null : "Stripe publishable key is
 const stripePromise =
   stripeInitError || isResidentAppTestMode ? null : loadStripe(stripePublishableKey);
 const PAYMENT_SAVED_MESSAGE = "Card saved. You're all set.";
+const PAYMENT_SAVED_NO_ORDER_MESSAGE = "Card saved. Tell HELD what you need to schedule your order.";
 
 // ─── Service tile definitions ───
 
@@ -1168,7 +1169,7 @@ export default function Home() {
   const showTiles = !isSending && messages.length === 0 && onboardingComplete === true;
   const showEmptyState = messages.length === 0 && !isSending;
 
-  const handlePaymentSaved = useCallback(() => {
+  const handlePaymentSaved = useCallback((info?: { hasPendingOrder?: boolean }) => {
     const isPostBooking = postBookingPhase === "payment";
 
     const stripPaymentPrompts = (msgs: ChatMsg[]) =>
@@ -1238,15 +1239,24 @@ export default function Home() {
         7700
       );
     } else {
+      // No active post-booking gate locally — confirm with the server-reported
+      // order state so we never imply an order was placed when the resident
+      // only saved a card with no booking/pending intent attached.
+      const messageText = info?.hasPendingOrder
+        ? PAYMENT_SAVED_MESSAGE
+        : PAYMENT_SAVED_NO_ORDER_MESSAGE;
       const successMsg: ChatMsg = {
         role: "assistant",
-        content: PAYMENT_SAVED_MESSAGE,
+        content: messageText,
         createdAt: new Date(),
       };
       setMessages((prev) => {
         const cleaned = stripPaymentPrompts(prev);
         const last = cleaned[cleaned.length - 1];
-        if (last?.role === "assistant" && last.content === PAYMENT_SAVED_MESSAGE) {
+        if (
+          last?.role === "assistant" &&
+          (last.content === PAYMENT_SAVED_MESSAGE || last.content === PAYMENT_SAVED_NO_ORDER_MESSAGE)
+        ) {
           return cleaned;
         }
         return [...cleaned, successMsg];
