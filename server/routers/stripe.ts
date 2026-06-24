@@ -214,14 +214,46 @@ export const stripeRouter = router({
       }
 
       // ─── DEFERRED BOOKING: execute tutorial pending intent if any ───
+      // pendingBookingIntentJson can hold two incompatible shapes: a
+      // single-service intent (serviceType/date/timeWindow) or a
+      // `{ type: "multi_service_plan", intents: [...] }` plan built by the
+      // resident agent's coordinated-booking planner. Only the single-service
+      // shape is safe to execute here — reading a multi-service plan as if it
+      // were single-service would mangle it into a bogus laundry request and
+      // then clear the real plan. The resident agent already owns executing
+      // multi-service plans (see runResidentAgent's pendingPlan check), which
+      // fires on the resident's next chat turn, so we leave that shape
+      // completely untouched here and never clear it ourselves.
       const completedUser = await getBldgUserById(bldgUserId);
       const pendingIntent = (completedUser as any)?.pendingBookingIntentJson;
-      if (pendingIntent && typeof pendingIntent === "object") {
+      const isMultiServicePlan =
+        Boolean(pendingIntent) &&
+        typeof pendingIntent === "object" &&
+        (pendingIntent as any).type === "multi_service_plan";
+
+      // Signals the client uses to decide whether it's safe to resend the
+      // original message (retryPendingOrder). If the deferred booking already
+      // ran here, the client must NOT resend — that would risk fulfilling the
+      // same pending intent twice (a second local service_request and/or a
+      // second admin-intake POST).
+      let deferredBookingExecuted = false;
+      let deferredServiceRequestId: number | null = null;
+      let deferredServiceType: string | null = null;
+      let deferredStatus: string | null = null;
+
+      if (isMultiServicePlan) {
+        console.log(
+          `[TUTORIAL][${reqId}] deferring multi-service plan execution for user`,
+          bldgUserId,
+          "— will run on the resident's next chat turn"
+        );
+      } else if (pendingIntent && typeof pendingIntent === "object") {
         console.log("[TUTORIAL] executing deferred booking");
         try {
+          const serviceType = pendingIntent.serviceType === "dry-cleaning" ? "dry-cleaning" : "laundry";
           const sr = await createServiceRequest({
             bldgUserId,
-            serviceType: (pendingIntent.serviceType === "dry-cleaning" ? "dry-cleaning" : "laundry") as any,
+            serviceType: serviceType as any,
             status: "pending",
             requestSummary: `${pendingIntent.serviceType} — ${pendingIntent.date} ${pendingIntent.timeWindow}`,
             scheduledDate: pendingIntent.date,
@@ -238,6 +270,10 @@ export const stripeRouter = router({
           });
           await updateBldgUser(bldgUserId, { pendingBookingIntentJson: null } as any);
           console.log(`[TUTORIAL] created service_request #${sr.id} from pending intent`);
+          deferredBookingExecuted = true;
+          deferredServiceRequestId = sr.id;
+          deferredServiceType = serviceType;
+          deferredStatus = "pending";
         } catch (err) {
           console.error("[TUTORIAL] Failed to create deferred booking:", err);
         }
@@ -245,13 +281,17 @@ export const stripeRouter = router({
 
       // ─── ORDER CONTEXT CHECK — does this user actually have a real order in flight? ───
       // Used by the client to avoid implying an order was placed when the resident
-      // only saved a card with no booking/pending intent attached.
-      let hasPendingOrder = false;
+      // only saved a card with no booking/pending intent attached. A deferred
+      // multi-service plan counts as a real pending order even though it has no
+      // service_request row yet — it will materialize on the next chat turn.
+      let hasPendingOrder = isMultiServicePlan;
       try {
         const requestsAfterPayment = await getServiceRequests(bldgUserId);
-        hasPendingOrder = requestsAfterPayment.some(
-          (r: any) => r.status === "pending" || r.status === "confirmed"
-        );
+        if (
+          requestsAfterPayment.some((r: any) => r.status === "pending" || r.status === "confirmed")
+        ) {
+          hasPendingOrder = true;
+        }
       } catch (err) {
         console.error(`[Stripe][${reqId}] Failed to check pending orders for user`, bldgUserId, err);
       }
@@ -366,6 +406,13 @@ export const stripeRouter = router({
         stripeCustomerId: customerId,
         last4,
         hasPendingOrder,
+        deferredBookingExecuted,
+        serviceRequestId: deferredServiceRequestId,
+        // Not known synchronously — admin-intake forwarding happens
+        // fire-and-forget after this response is sent.
+        orderId: null as number | null,
+        status: deferredStatus,
+        serviceType: deferredServiceType,
       };
     }),
 });

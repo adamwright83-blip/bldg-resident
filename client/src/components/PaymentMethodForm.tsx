@@ -12,8 +12,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Lock } from "lucide-react";
 import { TEST_PAYMENT_METHOD_ID, isResidentAppTestMode } from "@/lib/residentTestMode";
 
+export interface PaymentMethodSavedInfo {
+  hasPendingOrder?: boolean;
+  /** True when the server already executed the single-service deferred
+   * booking inside this same request — the caller must not resend the
+   * original message, or it risks creating a duplicate order. */
+  deferredBookingExecuted?: boolean;
+  serviceRequestId?: number | null;
+  serviceType?: string | null;
+  status?: string | null;
+}
+
 interface PaymentMethodFormProps {
-  onSuccess: (info?: { hasPendingOrder?: boolean }) => void;
+  onSuccess: (info?: PaymentMethodSavedInfo) => void;
   dark?: boolean;
   defaultCardholderName?: string;
 }
@@ -42,7 +53,13 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
       if (data.last4) {
         setLast4(data.last4);
       }
-      onSuccess({ hasPendingOrder: data.hasPendingOrder });
+      onSuccess({
+        hasPendingOrder: data.hasPendingOrder,
+        deferredBookingExecuted: data.deferredBookingExecuted,
+        serviceRequestId: data.serviceRequestId,
+        serviceType: data.serviceType,
+        status: data.status,
+      });
     },
     onError: (error) => {
       toast.error(error.message || "Failed to save payment method.");

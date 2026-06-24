@@ -202,7 +202,9 @@ type PrototypeMode =
   | "drawing"
   | "transforming"
   | "held"
-  | "orderError";
+  | "orderError"
+  | "cardSavedNoOrder"
+  | "orderConfirmed";
 type HeldTextCommandResponse = {
   displayRequest: string;
   parsedIntent?: {
@@ -598,7 +600,9 @@ export default function PenPullPrototype({
     mode === "collectName" ||
     mode === "collectPayment" ||
     mode === "takingCustody" ||
-    mode === "orderError";
+    mode === "orderError" ||
+    mode === "cardSavedNoOrder" ||
+    mode === "orderConfirmed";
   const showPenGesture = showHomeWorld && mode !== "speech";
   const microphoneClassName =
     mode === "speech"
@@ -896,6 +900,26 @@ export default function PenPullPrototype({
         : inferServicesFromRequest(request);
     void beginSetInMotion(request, services);
   };
+  // Card save after a real pending booking intent. If the server already
+  // executed the deferred booking inside savePaymentMethod, the resident's
+  // original message must NOT be resent — retryPendingOrder() would risk
+  // creating a second local service_request and/or a second admin-intake POST
+  // for the same pending intent. Only resend when the server reports it did
+  // not execute anything (e.g. a multi-service plan, deferred to the next
+  // chat turn).
+  const handleCheckoutPaymentSaved = (info?: { deferredBookingExecuted?: boolean }) => {
+    if (info?.deferredBookingExecuted) {
+      console.debug("[HELD] deferred booking already executed server-side — not resending");
+      setHeldAgentStatus("idle");
+      setHeldAgentMessage("Card saved. Your order is set in motion.");
+      setMode("orderConfirmed");
+      window.setTimeout(() => {
+        setMode((current) => (current === "orderConfirmed" ? "rest" : current));
+      }, 3000);
+      return;
+    }
+    retryPendingOrder();
+  };
   const submitHeldName = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const firstName = nameFirst.trim();
@@ -923,13 +947,28 @@ export default function PenPullPrototype({
       setMode("orderError");
     }
   };
-  const finishProfileOnboarding = async () => {
+  const finishProfileOnboarding = async (info?: { hasPendingOrder?: boolean }) => {
     sessionStorage.removeItem(POST_OTP_PROFILE_ONBOARDING_KEY);
     setProfileOnboardingActive(false);
-    setHeldAgentStatus("idle");
-    setHeldAgentMessage("");
-    setMode("rest");
     await profileQuery.refetch();
+
+    if (info?.hasPendingOrder) {
+      // A real order (e.g. a deferred multi-service plan) is already pending —
+      // go idle as before and let the normal chat/resend flow surface it.
+      setHeldAgentStatus("idle");
+      setHeldAgentMessage("");
+      setMode("rest");
+      return;
+    }
+
+    // No pending order exists — saving a card here is pure account setup.
+    // Say so explicitly instead of implying an order was placed.
+    setHeldAgentStatus("idle");
+    setHeldAgentMessage("Card saved. Tell HELD what you need to schedule your order.");
+    setMode("cardSavedNoOrder");
+    window.setTimeout(() => {
+      setMode((current) => (current === "cardSavedNoOrder" ? "rest" : current));
+    }, 3000);
   };
   const physicsTuning = useMemo(
     () => ({
@@ -1498,7 +1537,7 @@ export default function PenPullPrototype({
                   <PaymentMethodForm
                     dark
                     defaultCardholderName={[nameFirst, nameLast].filter(Boolean).join(" ")}
-                    onSuccess={profileOnboardingActive ? finishProfileOnboarding : retryPendingOrder}
+                    onSuccess={profileOnboardingActive ? finishProfileOnboarding : handleCheckoutPaymentSaved}
                   />
                 </Elements>
               </div>
@@ -1513,6 +1552,14 @@ export default function PenPullPrototype({
               onRetry={retryPendingOrder}
               title="Almost"
             />
+          )}
+
+          {mode === "cardSavedNoOrder" && (
+            <HeldLaunchRecoveryCard message={heldAgentMessage} title="Held" />
+          )}
+
+          {mode === "orderConfirmed" && (
+            <HeldLaunchRecoveryCard message={heldAgentMessage} title="Held" />
           )}
 
           {mode === "editingRequest" && (
