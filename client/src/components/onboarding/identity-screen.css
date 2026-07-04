@@ -18,7 +18,7 @@
 .identity-form button:disabled { cursor:wait; opacity:.58; transform:none; }
 .identity-microcopy { margin:-7px 0 0; color:#aaa49b; font-size:12px; text-align:center; }
 .consent-card { padding:24px; box-sizing:border-box; border:1px solid #d8c7aa; border-radius:16px; background:rgba(255,255,255,.9); box-shadow:0 14px 40px rgba(74,56,32,.09); gap:18px; }
-.consent-disclosure { margin:0; color:#4d463d; font-size:14px; line-height:1.65; }
+.consent-disclosure { margin:0; color:#3f3932; font-size:16px; line-height:1.65; }
 .consent-links { display:flex; gap:22px; margin:0; font-size:14px; }
 .consent-links a { color:#765b2e; text-decoration:underline; text-underline-offset:3px; }
 .identity-form .consent-decline { height:48px; margin:0; background:transparent; color:#5f584e; border:1px solid #d8d0c4; }
@@ -42,6 +42,16 @@
   .identity-error { margin:-10px 0; font-size:14px; }
   .identity-screen footer { position:absolute; bottom:24px; font-size:12px; }
   .identity-orbit { opacity:.8; }
+  .identity-screen--consent .identity-content { width:min(100% - 24px,520px); padding:20px 0 96px; }
+  .identity-screen--consent .identity-logo { width:48px; height:48px; margin-bottom:14px; }
+  .identity-screen--consent .identity-building-name { margin:0 0 12px; }
+  .identity-screen--consent .identity-content h1 { font-size:38px; line-height:1.08; }
+  .identity-screen--consent .identity-intro { margin:12px auto 20px; max-width:350px; font-size:17px; line-height:1.45; }
+  .identity-screen--consent .consent-card { padding:22px 20px; border-width:2px; border-radius:18px; gap:18px; }
+  .identity-screen--consent .consent-disclosure { font-size:17px; line-height:1.58; }
+  .identity-screen--consent .consent-links { justify-content:space-between; gap:16px; font-size:16px; font-weight:600; }
+  .identity-screen--consent .identity-form button { min-height:60px; height:auto; padding:14px 18px; font-size:18px; }
+  .identity-screen--consent footer { position:absolute; }
 }
 @media (max-width:370px) {
   .identity-content { width:calc(100% - 24px); }

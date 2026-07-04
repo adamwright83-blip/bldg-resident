@@ -15,7 +15,7 @@ import {
   resolveBuildingFromHostname,
 } from "@shared/buildingHostMap";
 import IdentityScreen from "./IdentityScreen";
-import OTPScreen from "./OTPScreen";
+import OTPScreen, { VerificationCompleteScreen } from "./OTPScreen";
 import { POST_OTP_PROFILE_ONBOARDING_KEY } from "@/components/held/heldProfileOnboarding";
 
 const ONBOARDING_KEY = "bldg_onboarding_complete";
@@ -28,7 +28,7 @@ const BUILDING_NAMES: Record<string, string> = {
   "cpe-south": "2170 Century Park East",
 };
 
-type OnboardingStep = "identity" | "consent" | "otp" | "done";
+type OnboardingStep = "identity" | "consent" | "otp" | "verified" | "done";
 
 function isOnboardingComplete(): boolean {
   try {
@@ -180,8 +180,11 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
         }
         sessionStorage.setItem(POST_OTP_PROFILE_ONBOARDING_KEY, "true");
         markOnboardingComplete();
-        setStep("done");
-        setLocation("/");
+        setStep("verified");
+        window.setTimeout(() => {
+          setStep("done");
+          setLocation("/");
+        }, 1800);
       } catch {
         setOtpError("Network error. Try again.");
       } finally {
@@ -240,6 +243,7 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
       />
     );
   }
+  if (step === "verified") return <VerificationCompleteScreen />;
 
   if (step === "consent") {
     return <IdentityScreen mode="consent" onSubmit={handleIdentitySubmit} onConsent={handleConsent}

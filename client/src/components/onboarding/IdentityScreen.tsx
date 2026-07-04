@@ -36,7 +36,7 @@ export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmit
   const displayError = error || localError;
 
   return (
-    <main className="identity-screen">
+    <main className={`identity-screen${mode === "consent" ? " identity-screen--consent" : ""}`}>
       <div className="identity-orbit identity-orbit-left" aria-hidden="true" />
       <div className="identity-orbit identity-orbit-right" aria-hidden="true" />
 
@@ -44,13 +44,13 @@ export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmit
         <img className="identity-logo" src="/held/held-logo-mark.png" alt="HELD" />
         {preselectedBuilding && <p className="identity-building-name">{preselectedBuilding.displayName}</p>}
         <h1>{mode === "consent" ? <>Before we text you.</> : <>Your concierge<br />is ready.</>}</h1>
-        <p className="identity-intro">Tell us where you live and we’ll<br />connect you to your building.</p>
+        <p className="identity-intro">{mode === "consent" ? "Review the full disclosure before choosing whether HELD may text you." : <>Tell us where you live and we’ll<br />connect you to your building.</>}</p>
 
-        {mode === "consent" ? <div className="identity-form consent-card">
+        {mode === "consent" ? <div className="identity-form consent-card" data-testid="sms-consent-card">
           <p className="consent-disclosure">By selecting ‘Agree &amp; send code,’ you agree to receive transactional text messages from HELD by BLDG.chat at the number provided. Messages may include verification codes, account and security notices, service confirmations, appointment reminders, provider coordination, pickup and delivery updates, payment notices, and customer support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</p>
           <p className="consent-links"><a href="https://www.bldg.chat/termsofuse" target="_blank" rel="noreferrer">Terms of Use</a><a href="https://www.bldg.chat/privacypolicy" target="_blank" rel="noreferrer">Privacy Policy</a></p>
           {displayError && <p className="identity-error" role="alert">{displayError}</p>}
-          <button onClick={onConsent} disabled={isSubmitting}>{isSubmitting ? "Sending code..." : "Agree & send code"}</button>
+          <button data-testid="sms-consent-agree" onClick={onConsent} disabled={isSubmitting}>{isSubmitting ? "Sending code..." : "Agree & send code"}</button>
           <button className="consent-decline" onClick={onDecline} disabled={isSubmitting}>Not now</button>
         </div> : <div className="identity-form">
           {!preselectedBuilding && (

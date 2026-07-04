@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import "./otp-screen.css";
 
 interface OTPScreenProps {
   maskedPhone: string;
@@ -96,42 +97,19 @@ export default function OTPScreen({
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9998,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#FAF7F2",
-        padding: "0 32px",
-      }}
-    >
-      {/* Headline */}
-      <h1
-        style={{
-          fontSize: 22,
-          fontWeight: 600,
-          color: "#2C2824",
-          letterSpacing: "-0.02em",
-          marginBottom: 8,
-        }}
-      >
+    <main className="otp-screen">
+      <section className="otp-card">
+      <h1>
         Thanks — HELD may now text this number for account and service updates.
       </h1>
 
       {/* Subhead */}
-      <p style={{ fontSize: 14, color: "#8A7D6B", marginBottom: 32 }}>
+      <p className="otp-confirmation">
         {previewBypass ? `SMS preview mode for ${maskedPhone}. Enter 000000 to continue.` : `We sent your security code to ${maskedPhone}.`}
       </p>
 
       {/* 6-digit input */}
-      <div
-        style={{ display: "flex", gap: 8, marginBottom: 16 }}
-        onPaste={handlePaste}
-      >
+      <div className="otp-digits" onPaste={handlePaste}>
         {digits.map((d, i) => (
           <input
             key={i}
@@ -143,64 +121,43 @@ export default function OTPScreen({
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(i, e)}
             disabled={isVerifying}
-            style={{
-              width: 44,
-              height: 52,
-              borderRadius: 10,
-              border: error ? "1.5px solid #C25B4A" : "1px solid #E0D9CE",
-              background: "#FFFFFF",
-              fontSize: 22,
-              fontWeight: 600,
-              textAlign: "center" as const,
-              color: "#2C2824",
-              fontFamily: "inherit",
-              outline: "none",
-              caretColor: "#C9A96E",
-            }}
+            className={`otp-digit${error ? " otp-digit--error" : ""}`}
           />
         ))}
       </div>
 
       {/* Error */}
       {error && (
-        <p style={{ fontSize: 13, color: "#C25B4A", marginBottom: 12 }}>{error}</p>
+        <p className="otp-status otp-error">{error}</p>
       )}
 
       {/* Verifying indicator */}
       {isVerifying && (
-        <p style={{ fontSize: 13, color: "#8A7D6B", marginBottom: 12 }}>Verifying...</p>
+        <p className="otp-status">Verifying...</p>
       )}
 
       {/* Resend */}
       <button
         onClick={handleResend}
         disabled={resendTimer > 0 || resending || isVerifying}
-        style={{
-          background: "none",
-          border: "none",
-          fontSize: 13,
-          color: resendTimer > 0 ? "#B0A89C" : "#2C2824",
-          cursor: resendTimer > 0 ? "default" : "pointer",
-          fontFamily: "inherit",
-          textDecoration: resendTimer > 0 ? "none" : "underline",
-          padding: 0,
-        }}
+        className="otp-resend"
       >
         {resendTimer > 0 ? `Resend code (${resendTimer}s)` : resending ? "Sending..." : "Resend code"}
       </button>
+      </section>
 
       {/* Footer */}
-      <p
-        style={{
-          position: "absolute",
-          bottom: 40,
-          fontSize: 11,
-          color: "#B0A89C",
-          letterSpacing: "0.04em",
-        }}
-      >
+      <p className="otp-footer">
         Powered by BLDG.chat
       </p>
-    </div>
+    </main>
   );
+}
+
+export function VerificationCompleteScreen() {
+  return <main className="otp-screen"><section className="otp-card">
+    <div className="verified-mark" aria-hidden="true">✓</div>
+    <h1>Your number is verified.</h1>
+    <p className="otp-confirmation">HELD will use it for the account and service updates you approved.</p>
+  </section><p className="otp-footer">Powered by BLDG.chat</p></main>;
 }
