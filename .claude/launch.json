@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bldg-admin-dev",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "STRIPE_SECRET_KEY=sk_test_local_dummy_not_real_0000",
+        "ADMIN_PASSWORD=local-preview-only",
+        "JWT_SECRET=local-preview-only-jwt-secret-not-production",
+        "OAUTH_SERVER_URL=http://localhost:3000",
+        "DOTENV_CONFIG_PATH=/Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api/.env.local",
+        "pnpm",
+        "-C",
+        "/Users/adamwrightpfi/Desktop/Cursor_bldg-admin-api",
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

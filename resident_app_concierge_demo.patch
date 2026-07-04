@@ -1,0 +1,629 @@
+diff --git a/client/src/components/held/PenPullPrototype.tsx b/client/src/components/held/PenPullPrototype.tsx
+index 9fd4b34..171f3e3 100644
+--- a/client/src/components/held/PenPullPrototype.tsx
++++ b/client/src/components/held/PenPullPrototype.tsx
+@@ -48,6 +48,7 @@ const HELD_ASSETS = {
+   requestCard: "/held/your-request-card.png",
+   tokenCarDetail: "/held/token-cardetail.png",
+   tokenDogGroom: "/held/token-doggroom.png",
++  tokenHaircut: "/held/token-haircut.png",
+   tokenLaundry: "/held/token-laundry.png",
+   tokenRide: "/held/token-uber_waymo.png",
+   trayEmptyHeld: "/held/nursery-heldscreen.png",
+@@ -1595,27 +1596,27 @@ function HeldTransformingState({
+           <PlanLine
+             className="font-serif text-[26px] italic leading-[1.15] text-[#2d251d]"
+             delay={900}
+-            text="I've taken the whole Sunday picture — one small thing I may come back to you on, but I'm already moving on all fronts."
++            text="I've taken in the whole Sunday picture — I'm already moving on everything. One small detail I may circle back on, but nothing for you to worry about."
+           />
+           <PlanLine
+             className="mt-2 font-serif text-[13px] italic leading-[1.6] text-[#55493d]"
+-            delay={2920}
++            delay={3420}
+             text="Here's where each piece sits — I'll only come back to you when something needs a yes."
+           />
+           <PlanServiceRow
+-            delay={7200}
++            delay={7900}
+             label="Laundry"
+-            text=" — picking up Saturday morning so it's back the day before she arrives. Same time window as your usual."
++            text=" — I'm picking it up tomorrow morning and making sure it's back before she arrives."
+           />
+           <PlanServiceRow
+-            delay={12200}
++            delay={13200}
+             label="Theo's grooming"
+-            text=" — Maria has Saturday at 11 open. Booking her now unless you want Jordan, who's tied up until Sunday afternoon."
++            text=" — I'm reaching out to Theo's groomer now. I'll have a Saturday window locked in time for her visit, without needing you again."
+           />
+           <PlanLine
+             className="mt-4 font-serif text-[12px] italic leading-[1.6] text-[#a06a2b]"
+-            delay={17450}
+-            text="I'll only reach back if Jordan is non-negotiable. Otherwise, consider it handled."
++            delay={18700}
++            text="Leave the rest to me. Everything is held."
+           />
+         </section>
+       )}
+@@ -2210,6 +2211,7 @@ function getTokenAssets(services: HeldParsedService[], request: string): HeldTok
+   if (/dog|groom/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenDogGroom, type: "dog_grooming" });
+   if (/car|detail|wash/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenCarDetail, type: "car_detail" });
+   if (/airport|ride|uber|waymo|lax/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenRide, type: "ride_airport" });
++  if (/haircut|hair cut|barber|blowout/.test(haystack)) assets.push({ src: HELD_ASSETS.tokenHaircut, type: "haircut" });
+ 
+   return assets.length ? assets : [{ src: HELD_ASSETS.tokenLaundry, type: "laundry_pickup" }];
+ }
+@@ -2231,6 +2233,7 @@ function inferServicesFromRequest(request: string): HeldParsedService[] {
+   if (/dog|groom/.test(lower)) services.push({ type: "dog_grooming" });
+   if (/car|detail|wash/.test(lower)) services.push({ type: "car_detail" });
+   if (/airport|ride|uber|waymo|lax/.test(lower)) services.push({ type: "ride_airport" });
++  if (/haircut|hair cut|barber|blowout/.test(lower)) services.push({ type: "haircut" });
+ 
+   return services.length ? services : [{ type: "other" }];
+ }
+diff --git a/server/agents/residentAgent.multi.test.ts b/server/agents/residentAgent.multi.test.ts
+index a3d9c58..74c4bd8 100644
+--- a/server/agents/residentAgent.multi.test.ts
++++ b/server/agents/residentAgent.multi.test.ts
+@@ -83,7 +83,8 @@ describe("runResidentAgent multi-intent orchestration", () => {
+       1,
+       "laundry",
+       "Sunday, May 17",
+-      "7–10 AM"
++      "7–10 AM",
++      "2026-05-17"
+     );
+   });
+ 
+@@ -196,12 +197,13 @@ describe("runResidentAgent multi-intent orchestration", () => {
+     expect(toolCalls.some((call) => call.toolName === "createLaundryOrderTool" && call.input.serviceCategory)).toBe(false);
+     expect(toolCalls[5].input.planStatus).toBe("partially_confirmed");
+ 
+-    expect(result.content).toContain("Handled.");
+     expect(result.content).toContain("Laundry is booked");
+-    expect(result.content).toContain("I also queued grooming, car detail, and LAX pickup for confirmation");
++    expect(result.content).toContain("I'm lining up grooming, car detail, and LAX pickup");
++    expect(result.content).toContain("without needing you again");
+     expect(result.content).toContain("Confirmed:");
+     expect(result.content).toContain("Queued:");
+     expect(result.content).not.toContain("Request received");
++    expect(result.content).not.toMatch(/grooming.*\bbooked\b|grooming.*\bconfirmed\b/i);
+     expect(result.metadata).toMatchObject({
+       type: "multi_service_plan",
+       planId: "plan_1",
+@@ -230,6 +232,55 @@ describe("runResidentAgent multi-intent orchestration", () => {
+     });
+   });
+ 
++  it("handles the TechCrunch demo sentence: laundry booked + Theo grooming coordinated, never booked", async () => {
++    vi.useFakeTimers();
++    vi.setSystemTime(new Date("2026-06-06T19:00:00.000Z"));
++    const { runResidentAgent } = await import("./residentAgent");
++    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
++      const body = JSON.parse(String(init.body));
++      if (body.toolName === "createResidentAgentPlanTool") return response({ planId: "plan_demo" });
++      if (body.toolName === "createLaundryOrderTool") return response({ orderId: 777 });
++      if (body.toolName === "createResidentCoordinatedRequestTool") {
++        return response({
++          requestId: `req_${body.input.serviceCategory}`,
++          status: "pending_provider_confirmation",
++          residentVisibleStatus: "pending_provider_confirmation",
++          nextAction: "provider_confirmation",
++        });
++      }
++      if (body.toolName === "updateResidentAgentPlanTool") return response({ planId: body.input.planId });
++      throw new Error(`unexpected tool ${body.toolName}`);
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    const result = await runResidentAgent({
++      bldgUserId: 1,
++      content:
++        "My wife's mother is coming over Sunday. I need my laundry done before she gets here and Theo groomed.",
++      user: completeUser as any,
++    });
++
++    const toolCalls = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body));
++    expect(toolCalls.filter((c) => c.toolName === "createResidentCoordinatedRequestTool").map((c) => c.input.serviceCategory)).toEqual([
++      "dog_grooming",
++    ]);
++    const grooming = toolCalls.find((c) => c.input?.serviceCategory === "dog_grooming");
++    expect(grooming.input).toMatchObject({ dogName: "Theo", guestRelation: "wife's mother" });
++
++    expect(result.content).toContain("Laundry is booked");
++    expect(result.content).toMatch(/lining up grooming/i);
++    // Truth rule: grooming is never "booked" or "confirmed" in resident copy.
++    expect(result.content).not.toMatch(/grooming[^.]*\b(booked|confirmed)\b/i);
++
++    const items = (result.metadata as any).items;
++    expect(items.find((i: any) => i.serviceCategory === "laundry")).toMatchObject({ status: "confirmed", orderId: 777 });
++    expect(items.find((i: any) => i.serviceCategory === "dog_grooming")).toMatchObject({
++      status: "pending_provider_confirmation",
++      requestId: "req_dog_grooming",
++      deadlineReason: "wife's mother visit",
++    });
++  });
++
+   it("multi-intent laundry sends the same admin-visible payload fields as single laundry", async () => {
+     const { runResidentAgent } = await import("./residentAgent");
+     const fetchMock = vi.fn().mockResolvedValue(response({ orderId: 456 }));
+@@ -365,7 +416,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
+     });
+ 
+     expect(result.content).not.toContain("Laundry is booked");
+-    expect(result.content).toContain("I queued car detail for confirmation");
++    expect(result.content).toContain("I'm lining up car detail");
+     expect(result.content).toContain("Laundry needs operator review");
+     expect((result.metadata as any).items).toEqual(
+       expect.arrayContaining([
+@@ -447,7 +498,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
+       "updateResidentAgentPlanTool",
+     ]);
+     expect(result.collectStep).toBe("payment");
+-    expect(result.content).toContain("I queued grooming, car detail, and LAX pickup for confirmation");
++    expect(result.content).toContain("I'm lining up grooming, car detail, and LAX pickup");
+     expect(result.content).toContain("Laundry needs payment details");
+     expect(dbMocks.updateBldgUser).toHaveBeenCalledWith(
+       1,
+@@ -551,7 +602,7 @@ describe("runResidentAgent multi-intent orchestration", () => {
+       "updateResidentAgentPlanTool",
+     ]);
+     expect(result.content).toContain("Laundry is booked");
+-    expect(result.content).toContain("I also queued grooming, car detail, and LAX pickup");
++    expect(result.content).toContain("I'm lining up grooming, car detail, and LAX pickup");
+   });
+ });
+ 
+diff --git a/server/agents/residentAgent.ts b/server/agents/residentAgent.ts
+index 31ba7c7..a482eb2 100644
+--- a/server/agents/residentAgent.ts
++++ b/server/agents/residentAgent.ts
+@@ -706,6 +706,39 @@ async function executeMultiIntentPlan(input: {
+       continue;
+     }
+ 
++    // Local record first (same pattern as laundry): a coordinated service is
++    // tracked at provider-confirmation, never "confirmed" until a provider
++    // accepts. Failures here must not block the admin coordination call.
++    let coordinatedServiceRequestId: number | null = null;
++    try {
++      const localRecord = await createServiceRequest({
++        bldgUserId: input.bldgUserId,
++        serviceType: intent.type,
++        status: "pending_provider_confirmation",
++        requestSummary: buildCoordinatedSummary(intent),
++        scheduledDate: intent.requestedDate ?? null,
++        scheduledWindow: intent.requestedWindow ?? null,
++        requestJson: {
++          serviceCategory: intent.type,
++          deadlineDate: intent.deadlineDate ?? null,
++          deadlineReason: intent.deadlineReason ?? null,
++          dogName: intent.dogName ?? null,
++          guestRelation: intent.guestRelation ?? null,
++          preferredVendor: intent.preferredVendor ?? null,
++          notes: intent.notes ?? null,
++        },
++      } as any);
++      coordinatedServiceRequestId = localRecord.id;
++      console.log(
++        `[ResidentAgent] local coordinated service_request created #${localRecord.id}: ${intent.type}`
++      );
++    } catch (error) {
++      console.warn("[ResidentAgent] could not create local coordinated record", {
++        serviceCategory: intent.type,
++        error: error instanceof Error ? error.message : String(error),
++      });
++    }
++
+     const coordinatedResult = await adminAgentClient.runCreateResidentCoordinatedRequestTool(
+       {
+         bldgUserId: input.bldgUserId,
+@@ -723,6 +756,10 @@ async function executeMultiIntentPlan(input: {
+         deadlineReason: intent.deadlineReason ?? null,
+         origin: intent.origin ?? null,
+         destination: intent.destination ?? null,
++        dogName: intent.dogName ?? null,
++        guestRelation: intent.guestRelation ?? null,
++        preferredVendor: intent.preferredVendor ?? null,
++        localServiceRequestId: coordinatedServiceRequestId,
+         notes: intent.notes ?? null,
+         sourceConversationId: input.session.conversationId,
+         sourceSessionId: input.session.sessionId,
+@@ -731,6 +768,26 @@ async function executeMultiIntentPlan(input: {
+       input.session
+     );
+ 
++    if (coordinatedServiceRequestId != null && coordinatedResult.success) {
++      const requestId = coordinatedResult.requestId;
++      await updateServiceRequest(coordinatedServiceRequestId, {
++        requestJson: {
++          serviceCategory: intent.type,
++          coordinatedRequestId: requestId ?? null,
++          parentPlanId: String(planId),
++          deadlineDate: intent.deadlineDate ?? null,
++          deadlineReason: intent.deadlineReason ?? null,
++          dogName: intent.dogName ?? null,
++          guestRelation: intent.guestRelation ?? null,
++        },
++      } as any).catch((error) => {
++        console.warn("[ResidentAgent] could not store coordinated requestId locally", {
++          serviceCategory: intent.type,
++          error: error instanceof Error ? error.message : String(error),
++        });
++      });
++    }
++
+     logChildAction({
+       serviceCategory: intent.type,
+       toolName: "createResidentCoordinatedRequestTool",
+@@ -950,9 +1007,9 @@ function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
+   if (confirmed.length > 0) {
+     const laundry = confirmed.find((item) => item.serviceCategory === "laundry");
+     if (laundry) {
+-      parts.push(`Handled. Laundry is booked${laundry.date ? ` for ${laundry.date}` : ""}${laundry.window ? `, ${laundry.window}` : ""}.`);
++      parts.push(`I've got the whole picture, and I'm already moving on it. Laundry is booked${laundry.date ? ` for ${laundry.date}` : ""}${laundry.window ? `, ${laundry.window}` : ""} — back to you before she arrives.`);
+     } else {
+-      parts.push(`Handled. ${capitalize(joinLabels(confirmed.map((item) => item.title.toLowerCase())))} ${confirmed.length === 1 ? "is" : "are"} confirmed.`);
++      parts.push(`I've got the whole picture, and I'm already moving on it. ${capitalize(joinLabels(confirmed.map((item) => item.title.toLowerCase())))} ${confirmed.length === 1 ? "is" : "are"} confirmed.`);
+     }
+   }
+ 
+@@ -960,17 +1017,17 @@ function buildResidentPlanSummary(items: PlanItemMetadata[]): string {
+     const deadline = pending.find((item) => item.deadlineReason || item.deadlineDate);
+     const label = joinLabels(pending.map((item) => shortServiceLabel(item)));
+     const deadlineText = deadline?.deadlineReason
+-      ? ` before your ${deadline.deadlineReason.replace(/ visit$/, " arrives")}`
++      ? ` in time for your ${deadline.deadlineReason.replace(/ visit$/, "'s visit")}`
+       : deadline?.deadlineDate
+-        ? ` before ${deadline.deadlineDate}`
++        ? ` in time for ${deadline.deadlineDate}`
+         : "";
+-    const prefix = parts.length > 0 ? "I also queued" : "Handled. I queued";
+-    parts.push(`${prefix} ${label} for confirmation${deadlineText}.`);
++    const prefix = parts.length > 0 ? "I'm lining up" : "I've got the whole picture. I'm lining up";
++    parts.push(`${prefix} ${label} now${deadlineText} — I'll have a window locked without needing you again.`);
+   }
+ 
+   if (failed.length > 0) {
+     const label = joinLabels(failed.map((item) => shortServiceLabel(item)));
+-    parts.push(`${capitalize(label)} ${failed.length === 1 ? "needs" : "need"} operator review, so I flagged ${failed.length === 1 ? "it" : "them"} instead of pretending ${failed.length === 1 ? "it was" : "they were"} booked.`);
++    parts.push(`${capitalize(label)} needs operator review, so I flagged ${failed.length === 1 ? "it" : "them"} rather than tell you ${failed.length === 1 ? "it was" : "they were"} set when ${failed.length === 1 ? "it isn't" : "they aren't"}.`);
+   }
+ 
+   if (profilePending.length > 0) {
+@@ -1031,6 +1088,15 @@ function shortServiceLabel(item: PlanItemMetadata): string {
+   return item.title.toLowerCase();
+ }
+ 
++function buildCoordinatedSummary(intent: ResidentPlannedIntent): string {
++  const parts: string[] = [getServiceTitle(intent.type).toLowerCase()];
++  if (intent.dogName) parts.push(`for ${intent.dogName}`);
++  if (intent.requestedDate) parts.push(`— ${intent.requestedDate}`);
++  if (intent.requestedWindow) parts.push(intent.requestedWindow);
++  if (intent.deadlineReason) parts.push(`(ahead of ${intent.deadlineReason})`);
++  return parts.join(" ");
++}
++
+ function getServiceTitle(type: ResidentMultiIntentType): string {
+   const titles: Record<ResidentMultiIntentType, string> = {
+     laundry: "Laundry",
+@@ -1039,6 +1105,7 @@ function getServiceTitle(type: ResidentMultiIntentType): string {
+     car_detail: "Car detail",
+     airport_transport: "LAX pickup",
+     apartment_cleaning: "Apartment cleaning",
++    haircut: "Haircut",
+     other: "Request",
+   };
+   return titles[type];
+diff --git a/server/agents/residentAgentClient.ts b/server/agents/residentAgentClient.ts
+index 5b8f4c5..3313a10 100644
+--- a/server/agents/residentAgentClient.ts
++++ b/server/agents/residentAgentClient.ts
+@@ -88,18 +88,21 @@ export function createAdminAgentClient(): AdminAgentClient {
+ 
+   return {
+     canRunLaundryOrderTool() {
+-      if (isResidentAppTestMode()) return false;
++      // In test mode the admin agent tools are synthesized locally (see
++      // makeTestModeToolResult), so the full multi-intent orchestration —
++      // parent plan + coordinated requests — runs end to end without a live
++      // admin endpoint. Outside test mode a real S2S endpoint is required.
++      if (isResidentAppTestMode()) return true;
+       return Boolean(process.env.ADMIN_AGENT_S2S_URL && sharedSecret);
+     },
+ 
+     async runAdminTool(toolName, input, session) {
+       if (isResidentAppTestMode()) {
+-        console.log(`[ResidentTestMode] Skipping admin agent tool=${toolName}`);
+-        return {
+-          success: false,
+-          reason: "resident_test_mode",
+-          path: "agent-tool",
+-        };
++        const synthetic = makeTestModeToolResult(toolName, input);
++        console.log(
++          `[ResidentTestMode] Synthesizing admin agent tool=${toolName} result=${JSON.stringify(synthetic)}`
++        );
++        return synthetic;
+       }
+ 
+       const targets = getAdminAgentS2SRunToolUrlCandidates();
+@@ -223,6 +226,43 @@ export function createAdminAgentClient(): AdminAgentClient {
+   };
+ }
+ 
++// Synthesize the admin agent tool responses in test mode so the resident
++// multi-intent flow can be exercised end to end without a live admin endpoint.
++// Mirrors the real tool contracts: laundry yields a finite orderId, plans yield
++// a planId, and coordinated services yield a requestId held at
++// provider-confirmation — never "confirmed", preserving the truth rule.
++function makeTestModeToolResult(
++  toolName: string,
++  input: Record<string, unknown>
++): AdminExecutionResult {
++  if (toolName === "createLaundryOrderTool") {
++    const sourceId =
++      typeof input.bldgUserId === "number"
++        ? input.bldgUserId
++        : Number(String(input.externalId ?? "").match(/\d+/)?.[0] ?? 0);
++    return { success: true, orderId: makeTestOrderId(sourceId), path: "agent-tool" };
++  }
++  if (toolName === "createResidentAgentPlanTool" || toolName === "updateResidentAgentPlanTool") {
++    const planId =
++      typeof input.planId === "string" && input.planId
++        ? input.planId
++        : `plan_test_${Date.now()}`;
++    return { success: true, planId, path: "agent-tool" };
++  }
++  if (toolName === "createResidentCoordinatedRequestTool") {
++    const category = String(input.serviceCategory ?? "service");
++    return {
++      success: true,
++      requestId: `req_test_${category}_${Date.now()}`,
++      status: "pending_provider_confirmation",
++      residentVisibleStatus: "pending_provider_confirmation",
++      nextAction: "provider_confirmation",
++      path: "agent-tool",
++    };
++  }
++  return { success: true, path: "agent-tool" };
++}
++
+ function normalizeRunToolOutput(body: any): Record<string, unknown> {
+   const output = {
+     ...asPlainObject(body),
+diff --git a/server/agents/residentMultiIntentPlanner.ts b/server/agents/residentMultiIntentPlanner.ts
+index 4994907..8cc8f42 100644
+--- a/server/agents/residentMultiIntentPlanner.ts
++++ b/server/agents/residentMultiIntentPlanner.ts
+@@ -7,6 +7,7 @@ export type ResidentMultiIntentType =
+   | "car_detail"
+   | "airport_transport"
+   | "apartment_cleaning"
++  | "haircut"
+   | "other";
+ 
+ export interface ResidentMultiIntentPlannerInput {
+@@ -28,6 +29,9 @@ export interface ResidentPlannedIntent {
+   deadlineReason?: string | null;
+   origin?: string | null;
+   destination?: string | null;
++  dogName?: string | null;
++  guestRelation?: string | null;
++  preferredVendor?: string | null;
+   notes?: string | null;
+ }
+ 
+@@ -59,12 +63,22 @@ const SERVICE_PATTERNS: Array<{
+       /\bpet grooming\b/i,
+       /\bgroom my dog\b/i,
+       /\bgrooming appointment\b/i,
++      /\b[A-Z][a-z]+\s+groomed\b/,
++      /\bgroom(?:ed|ing)?\s+[A-Z][a-z]+\b/,
++      /\bgroomed\b/i,
+     ],
+   },
+   {
+     type: "car_detail",
+     confidence: 0.88,
+-    patterns: [/\bcar detail\b/i, /\bauto detail\b/i, /\bdetailing\b/i, /\bcar wash\b/i, /\bwash my car\b/i],
++    patterns: [
++      /\bcar detail(?:ed|ing)?\b/i,
++      /\bauto detail(?:ed|ing)?\b/i,
++      /\bdetail(?:ed|ing)?\s+(?:my|the)\s+car\b/i,
++      /\bdetailing\b/i,
++      /\bcar wash\b/i,
++      /\bwash my car\b/i,
++    ],
+   },
+   {
+     type: "airport_transport",
+@@ -90,26 +104,72 @@ const SERVICE_PATTERNS: Array<{
+       /\bcleaning service\b/i,
+     ],
+   },
++  {
++    type: "haircut",
++    confidence: 0.87,
++    patterns: [
++      /\bhaircut\b/i,
++      /\bhair cut\b/i,
++      /\bbarber\b/i,
++      /\btrim\b/i,
++      /\bblowout\b/i,
++      /\bhair appointment\b/i,
++    ],
++  },
+ ];
+ 
++// Default scheduling for coordinated (non-laundry) services when the resident
++// did not name a specific time. The chief of staff proposes a concrete window
++// rather than leaving it open.
++const COORDINATED_DEFAULTS: Partial<
++  Record<ResidentMultiIntentType, { requestedDate?: string; requestedWindow: string }>
++> = {
++  dog_grooming: { requestedWindow: "10am–1pm" },
++  car_detail: { requestedWindow: "8am–11am" },
++  haircut: { requestedWindow: "11am–1pm" },
++};
++
++// Default day-of-week offered for coordinated services when no date is parsed.
++const COORDINATED_DEFAULT_DAY: Partial<Record<ResidentMultiIntentType, string>> = {
++  dog_grooming: "Saturday",
++  car_detail: "Wednesday",
++  haircut: "Saturday",
++};
++
+ const GUEST_PREP_PATTERNS = [
+   /\bmother-in-law\b/i,
++  /\bwife'?s mother\b/i,
++  /\bstepmother\b/i,
++  /\bgrandmother\b/i,
++  /\bgrandma\b/i,
++  /\b(?:my )?mother\b/i,
++  /\b(?:my )?mom\b/i,
++  /\b(?:my )?father\b/i,
++  /\b(?:my )?dad\b/i,
+   /\bparents visiting\b/i,
+   /\bguest coming\b/i,
+-  /\bguests arrive\b/i,
+-  /\bbefore she visits\b/i,
+-  /\bbefore he visits\b/i,
+-  /\bbefore they visit\b/i,
++  /\bguest arrives?\b/i,
++  /\bguests? (?:coming|arrive)\b/i,
++  /\bcoming over\b/i,
++  /\barrives?\s+(?:on\s+)?(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i,
++  /\bbefore she (?:gets here|visits|arrives)\b/i,
++  /\bbefore he (?:gets here|visits|arrives)\b/i,
++  /\bbefore they (?:get here|visit|arrive)\b/i,
+ ];
+ 
+ export function planResidentMultiIntents(
+   input: ResidentMultiIntentPlannerInput
+ ): ResidentMultiIntentPlan {
+-  const normalized = input.content.replace(/\s+/g, " ").trim();
++  const normalized = input.content
++    .replace(/[‘’]/g, "'")
++    .replace(/\s+/g, " ")
++    .trim();
+   if (!normalized) return { intents: [] };
+ 
+   const globalDeadlineDate = extractGuestPrepDeadline(normalized, input.currentDate);
+   const deadlineReason = extractDeadlineReason(normalized);
++  const guestRelation = extractGuestRelation(normalized);
++  const dogName = extractDogName(normalized);
+   const clauses = splitIntoClauses(normalized);
+   const intents: ResidentPlannedIntent[] = [];
+ 
+@@ -119,14 +179,25 @@ export function planResidentMultiIntents(
+ 
+     const span = match.span;
+     const spanDate = parseRelativeDateToISO(span, input.currentDate);
+-    const requestedWindow = parseRequestedWindow(span);
++    const spanWindow = parseRequestedWindow(span);
+     const isGuestPrepService =
+       service.type === "dog_grooming" ||
+       service.type === "car_detail" ||
+       service.type === "airport_transport" ||
+-      service.type === "apartment_cleaning";
++      service.type === "apartment_cleaning" ||
++      service.type === "haircut";
+     const deadlineDate = isGuestPrepService && globalDeadlineDate ? globalDeadlineDate : null;
+ 
++    const defaults = COORDINATED_DEFAULTS[service.type];
++    const defaultDay = COORDINATED_DEFAULT_DAY[service.type];
++    const requestedWindow = spanWindow ?? defaults?.requestedWindow ?? null;
++    // When no explicit date is given, offer the service's default day so the
++    // resident sees a concrete proposed window instead of an open item. The
++    // shared guest-arrival deadline still rides on deadlineDate.
++    const requestedDate = deadlineDate
++      ? null
++      : spanDate ?? (defaultDay ? parseRelativeDateToISO(defaultDay, input.currentDate) : null);
++
+     const airportRoute =
+       service.type === "airport_transport" ? extractAirportRoute(normalized, input) : {};
+ 
+@@ -135,13 +206,16 @@ export function planResidentMultiIntents(
+       type: service.type,
+       confidence: service.confidence,
+       originalTextSpan: span,
+-      requestedDate: deadlineDate ? null : spanDate,
++      requestedDate,
+       requestedWindow,
+       deadlineDate,
+       deadlineReason: deadlineDate ? deadlineReason : null,
+       origin: airportRoute.origin ?? null,
+       destination: airportRoute.destination ?? null,
+-      notes: buildNotes(service.type, normalized, deadlineReason),
++      dogName: service.type === "dog_grooming" ? dogName : null,
++      guestRelation: isGuestPrepService ? guestRelation : null,
++      preferredVendor: null,
++      notes: buildNotes(service.type, normalized, deadlineReason, dogName, guestRelation),
+     });
+   }
+ 
+@@ -185,10 +259,34 @@ function extractGuestPrepDeadline(text: string, currentDate: string): string | n
+ }
+ 
+ function extractDeadlineReason(text: string): string | null {
+-  if (/\bmother-in-law\b/i.test(text)) return "mother-in-law visit";
++  const relation = extractGuestRelation(text);
++  if (relation) return `${relation} visit`;
+   if (/\bparents visiting\b/i.test(text)) return "parents visiting";
+-  if (/\bguest coming\b|\bguests arrive\b/i.test(text)) return "guest arrival";
+-  if (/\bbefore (?:she|he|they) visits?\b/i.test(text)) return "guest visit";
++  if (/\bguest coming\b|\bguests? (?:coming|arrive)\b|\bcoming over\b/i.test(text)) return "guest arrival";
++  if (/\bbefore (?:she|he|they) (?:gets? here|visits?|arrives?)\b/i.test(text)) return "guest visit";
++  return null;
++}
++
++// The visitor's relation to the resident, in resident-facing words. Reflects
++// how the resident referred to them so downstream copy can echo it back.
++function extractGuestRelation(text: string): string | null {
++  if (/\bwife'?s mother\b/i.test(text)) return "wife's mother";
++  if (/\bmother-in-law\b/i.test(text)) return "mother-in-law";
++  if (/\bstepmother\b/i.test(text)) return "stepmother";
++  if (/\bgrandmother\b|\bgrandma\b/i.test(text)) return "grandmother";
++  if (/\bparents visiting\b/i.test(text)) return "parents";
++  if (/\b(?:my )?mother\b|\b(?:my )?mom\b/i.test(text)) return "mother";
++  if (/\b(?:my )?father\b|\b(?:my )?dad\b/i.test(text)) return "father";
++  return null;
++}
++
++// Pull a dog's name from phrases like "Theo groomed" or "groom Theo". Only a
++// capitalized token adjacent to a grooming cue is treated as a name.
++function extractDogName(text: string): string | null {
++  const beforeGroom = text.match(/\b([A-Z][a-z]+)\s+(?:groomed|grooming|the dog)\b/);
++  if (beforeGroom?.[1]) return beforeGroom[1];
++  const afterGroom = text.match(/\bgroom(?:ing|ed)?\s+([A-Z][a-z]+)\b/);
++  if (afterGroom?.[1]) return afterGroom[1];
+   return null;
+ }
+ 
+@@ -218,13 +316,20 @@ function normalizeDestination(value: string | null | undefined): string | null {
+ function buildNotes(
+   type: ResidentMultiIntentType,
+   text: string,
+-  deadlineReason: string | null
++  deadlineReason: string | null,
++  dogName: string | null,
++  guestRelation: string | null
+ ): string | null {
+   const notes: string[] = [];
+-  if (type === "airport_transport" && /\bmother-in-law\b/i.test(text)) {
+-    notes.push("Passenger appears to be resident's mother-in-law.");
++  if (type === "dog_grooming" && dogName) {
++    notes.push(`Dog name: ${dogName}.`);
++  }
++  if (type === "airport_transport" && guestRelation) {
++    notes.push(`Passenger appears to be resident's ${guestRelation}.`);
+   }
+-  if (deadlineReason && type !== "laundry") {
++  if (guestRelation && type !== "laundry") {
++    notes.push(`Ahead of ${guestRelation}'s arrival.`);
++  } else if (deadlineReason && type !== "laundry") {
+     notes.push(`Related to ${deadlineReason}.`);
+   }
+   return notes.length > 0 ? notes.join(" ") : null;
