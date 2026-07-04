@@ -19,6 +19,10 @@ const RATE_LIMIT_MAX_SENDS = 5;
 const OTP_BYPASS_CODE = process.env.OTP_BYPASS_CODE || "000000";
 const OTP_PREVIEW_BYPASS_ENABLED = process.env.OTP_PREVIEW_BYPASS !== "false";
 
+export function isOtpPreviewBypassEnabled(): boolean {
+  return OTP_PREVIEW_BYPASS_ENABLED;
+}
+
 // ─── Dev Test Phone ───────────────────────────────────────────────────────────
 // Typing "5550000000" as the phone number always creates a brand-new user and
 // auto-accepts the OTP bypass code ("000000"). Useful for testing the new-user
@@ -73,6 +77,26 @@ export type SendOTPResult =
 export type VerifyOTPResult =
   | { ok: true; userId: number }
   | { ok: false; error: string };
+
+/** Prepare the existing 000000 preview login without sending any SMS. */
+export async function prepareOtpPreviewBypass(
+  rawPhone: string,
+  buildingSlug: string,
+  unit: string
+): Promise<SendOTPResult> {
+  if (!OTP_PREVIEW_BYPASS_ENABLED) {
+    return { ok: false, error: "Preview bypass is disabled." };
+  }
+  const phone = normalizePhone(rawPhone);
+  const user = await upsertBldgUser({ phoneE164: phone, buildingSlug, unit });
+  await updateBldgUser(user.id, {
+    otpCode: OTP_BYPASS_CODE,
+    otpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+    otpAttempts: 0,
+  } as any);
+  console.log(`[OTP] Preview bypass prepared for ${maskPhone(phone)}; no SMS sent`);
+  return { ok: true, maskedPhone: maskPhone(phone) };
+}
 
 export async function sendOTP(
   rawPhone: string,

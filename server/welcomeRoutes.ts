@@ -254,19 +254,27 @@ export function registerWelcomeRoutes(app: Router): void {
         return res.status(400).json({ error: "Phone, unit, and the current disclosure are required." });
       }
       const { createSmsConsent } = await import("./db");
-      const { normalizePhone, sendOTP } = await import("./otp");
+      const { isOtpPreviewBypassEnabled, normalizePhone, prepareOtpPreviewBypass, sendOTP } = await import("./otp");
       const phoneE164 = normalizePhone(phone);
       if (!/^\+1[2-9]\d{9}$/.test(phoneE164)) {
         return res.status(400).json({ error: "Enter a valid U.S. mobile number." });
       }
       const user = await upsertBldgUser({ phoneE164, buildingSlug: buildingSlug || "unknown", unit });
-      await createSmsConsent({
-        bldgUserId: user.id, phoneE164, status: "granted", consentedAt: new Date(),
-        source: "held_resident_onboarding", method: "in_app_affirmative_action",
-        disclosureVersion: "sms_transactional_v1", disclosureText: SMS_DISCLOSURE,
-        termsUrl: "https://www.bldg.chat/termsofuse", privacyUrl: "https://www.bldg.chat/privacypolicy",
-        requestIp: req.ip || null, userAgent: req.get("user-agent") || null,
-      });
+      try {
+        await createSmsConsent({
+          bldgUserId: user.id, phoneE164, status: "granted", consentedAt: new Date(),
+          source: "held_resident_onboarding", method: "in_app_affirmative_action",
+          disclosureVersion: "sms_transactional_v1", disclosureText: SMS_DISCLOSURE,
+          termsUrl: "https://www.bldg.chat/termsofuse", privacyUrl: "https://www.bldg.chat/privacypolicy",
+          requestIp: req.ip || null, userAgent: req.get("user-agent") || null,
+        });
+      } catch (consentError) {
+        if (!isOtpPreviewBypassEnabled()) throw consentError;
+        console.warn("[OTP Consent] Consent storage unavailable; using no-SMS preview bypass", consentError);
+        const preview = await prepareOtpPreviewBypass(phoneE164, buildingSlug || "unknown", unit);
+        if (!preview.ok) throw consentError;
+        return res.json({ ok: true, maskedPhone: preview.maskedPhone, previewBypass: true });
+      }
       const result = await sendOTP(phoneE164, buildingSlug || "unknown", unit);
       if (!result.ok) return res.status(429).json({ error: result.error });
       return res.json({ ok: true, maskedPhone: result.maskedPhone });

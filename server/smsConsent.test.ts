@@ -17,6 +17,13 @@ describe("transactional SMS consent guard", () => {
     const { sendOTP } = await import("./otp"); const result = await sendOTP("3105551234", "opus-south", "12");
     expect(result.ok).toBe(true); expect(mocks.twilioCreate).toHaveBeenCalledWith(expect.objectContaining({body:expect.stringContaining("HELD by BLDG.chat")}));
   });
+  it("prepares 000000 preview access without calling Twilio", async () => {
+    mocks.upsert.mockResolvedValue({id:2}); mocks.update.mockResolvedValue(undefined);
+    const { prepareOtpPreviewBypass } = await import("./otp");
+    await expect(prepareOtpPreviewBypass("3105559876", "opus-south", "12")).resolves.toEqual({ok:true, maskedPhone:"(310) ***-**76"});
+    expect(mocks.update).toHaveBeenCalledWith(2, expect.objectContaining({otpCode:"000000"}));
+    expect(mocks.twilioCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe("consent disclosure surfaces", () => {

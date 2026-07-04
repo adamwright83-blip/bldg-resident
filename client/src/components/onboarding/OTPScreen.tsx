@@ -6,6 +6,7 @@ interface OTPScreenProps {
   onResend: () => Promise<void>;
   isVerifying: boolean;
   error: string;
+  previewBypass?: boolean;
 }
 
 const RESEND_COOLDOWN_S = 30;
@@ -16,6 +17,7 @@ export default function OTPScreen({
   onResend,
   isVerifying,
   error,
+  previewBypass = false,
 }: OTPScreenProps) {
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [resendTimer, setResendTimer] = useState(RESEND_COOLDOWN_S);
@@ -122,7 +124,7 @@ export default function OTPScreen({
 
       {/* Subhead */}
       <p style={{ fontSize: 14, color: "#8A7D6B", marginBottom: 32 }}>
-        We sent your security code to {maskedPhone}.
+        {previewBypass ? `SMS preview mode for ${maskedPhone}. Enter 000000 to continue.` : `We sent your security code to ${maskedPhone}.`}
       </p>
 
       {/* 6-digit input */}

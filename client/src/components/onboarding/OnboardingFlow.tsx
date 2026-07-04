@@ -94,6 +94,7 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
   const [unit, setUnit] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [otpError, setOtpError] = useState("");
+  const [previewBypass, setPreviewBypass] = useState(false);
 
   const hostnameBuilding = getHostnameBuilding();
 
@@ -152,6 +153,7 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
           return;
         }
         setMaskedPhone(json.maskedPhone);
+        setPreviewBypass(Boolean(json.previewBypass));
         setStep("otp");
       } catch {
         setIdentityError("Network error. Try again.");
@@ -234,6 +236,7 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
         onResend={handleResend}
         isVerifying={isVerifying}
         error={otpError}
+        previewBypass={previewBypass}
       />
     );
   }
