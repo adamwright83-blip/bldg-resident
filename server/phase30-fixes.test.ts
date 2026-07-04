@@ -15,7 +15,7 @@ describe("Phase 3.0 (v2): Identity + OTP onboarding", () => {
   );
 
   it("uses identity/otp/done step model", () => {
-    expect(onboardingFlow).toContain("type OnboardingStep = \"identity\" | \"otp\" | \"done\"");
+    expect(onboardingFlow).toContain("type OnboardingStep = \"identity\" | \"consent\" | \"otp\" | \"done\"");
     expect(onboardingFlow).toContain("setStep(\"otp\")");
     expect(onboardingFlow).toContain("setStep(\"done\")");
   });

@@ -1,5 +1,5 @@
 import twilio from "twilio";
-import { getBldgUserByPhone, upsertBldgUser, updateBldgUser } from "./db";
+import { getBldgUserByPhone, hasActiveSmsConsent, upsertBldgUser, updateBldgUser } from "./db";
 import type { BldgUser } from "../drizzle/schema";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -48,7 +48,7 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function normalizePhone(raw: string): string {
+export function normalizePhone(raw: string): string {
   let digits = raw.replace(/\D/g, "");
   if (digits.length === 10) digits = "1" + digits;
   if (!digits.startsWith("1")) digits = "1" + digits;
@@ -80,6 +80,10 @@ export async function sendOTP(
   unit: string
 ): Promise<SendOTPResult> {
   const phone = normalizePhone(rawPhone);
+
+  if (!(await hasActiveSmsConsent(phone))) {
+    return { ok: false, error: "SMS consent is required before sending a verification code." };
+  }
 
   // ── Dev test phone: always create a fresh user, bypass OTP ──────────────
   if (phone === DEV_TEST_PHONE_NORMALIZED) {
@@ -138,7 +142,7 @@ export async function sendOTP(
   if (twilioClient && fromPhone) {
     try {
       await twilioClient.messages.create({
-        body: `BLDG.chat code: ${code}`,
+        body: `HELD by BLDG.chat: Your verification code is ${code}. It expires in 10 minutes. Reply HELP for help or STOP to opt out.`,
         from: fromPhone,
         to: phone,
       });

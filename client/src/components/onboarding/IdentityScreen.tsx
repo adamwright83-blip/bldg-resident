@@ -13,9 +13,12 @@ interface IdentityScreenProps {
   preselectedBuilding?: { slug: string; displayName: string };
   isSubmitting: boolean;
   error: string;
+  mode?: "identity" | "consent";
+  onConsent?: () => Promise<void>;
+  onDecline?: () => void;
 }
 
-export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmitting, error }: IdentityScreenProps) {
+export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmitting, error, mode = "identity", onConsent, onDecline }: IdentityScreenProps) {
   const [building, setBuilding] = useState(preselectedBuilding?.slug ?? "");
   const [unit, setUnit] = useState("");
   const [phone, setPhone] = useState("");
@@ -40,10 +43,16 @@ export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmit
       <section className="identity-content">
         <img className="identity-logo" src="/held/held-logo-mark.png" alt="HELD" />
         {preselectedBuilding && <p className="identity-building-name">{preselectedBuilding.displayName}</p>}
-        <h1>Your concierge<br />is ready.</h1>
+        <h1>{mode === "consent" ? <>Before we text you.</> : <>Your concierge<br />is ready.</>}</h1>
         <p className="identity-intro">Tell us where you live and we’ll<br />connect you to your building.</p>
 
-        <div className="identity-form">
+        {mode === "consent" ? <div className="identity-form consent-card">
+          <p className="consent-disclosure">By selecting ‘Agree &amp; send code,’ you agree to receive transactional text messages from HELD by BLDG.chat at the number provided. Messages may include verification codes, account and security notices, service confirmations, appointment reminders, provider coordination, pickup and delivery updates, payment notices, and customer support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.</p>
+          <p className="consent-links"><a href="https://www.bldg.chat/termsofuse" target="_blank" rel="noreferrer">Terms of Use</a><a href="https://www.bldg.chat/privacypolicy" target="_blank" rel="noreferrer">Privacy Policy</a></p>
+          {displayError && <p className="identity-error" role="alert">{displayError}</p>}
+          <button onClick={onConsent} disabled={isSubmitting}>{isSubmitting ? "Sending code..." : "Agree & send code"}</button>
+          <button className="consent-decline" onClick={onDecline} disabled={isSubmitting}>Not now</button>
+        </div> : <div className="identity-form">
           {!preselectedBuilding && (
             <label className="identity-field">
               <span>Building</span>
@@ -58,13 +67,13 @@ export default function IdentityScreen({ onSubmit, preselectedBuilding, isSubmit
             <input value={unit} onChange={(e) => { setUnit(e.target.value); setLocalError(""); }} placeholder="e.g. 1204" />
           </label>
           <label className="identity-field">
-            <span>Mobile</span>
+            <span>What mobile number should HELD use for your account and service updates?</span>
             <input type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setLocalError(""); }} placeholder="(310) 555-0100" autoComplete="tel" onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }} />
           </label>
           {displayError && <p className="identity-error" role="alert">{displayError}</p>}
-          <button onClick={handleSubmit} disabled={isSubmitting}>{isSubmitting ? "Sending code..." : "Enter"}</button>
-          <p className="identity-microcopy">One-time code sent to your phone.</p>
-        </div>
+          <button onClick={handleSubmit} disabled={isSubmitting}>Continue</button>
+          <p className="identity-microcopy">No text will be sent until you review and agree.</p>
+        </div>}
       </section>
 
       <footer><span />Powered by BLDG.chat</footer>

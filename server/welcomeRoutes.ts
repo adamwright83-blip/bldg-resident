@@ -33,6 +33,8 @@ import {
 } from "./db";
 import { mergeWelcomeHandoffIdentity } from "./lib/welcomeHandoffMerge";
 import { getSessionCookieOptions } from "./_core/cookies";
+
+export const SMS_DISCLOSURE = "By selecting ‘Agree & send code,’ you agree to receive transactional text messages from HELD by BLDG.chat at the number provided. Messages may include verification codes, account and security notices, service confirmations, appointment reminders, provider coordination, pickup and delivery updates, payment notices, and customer support. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.";
 import { BUILDING_HOST_MAP, resolveBuildingFromHostname } from "@shared/buildingHostMap";
 import { normalizePortalBuildingSlugForWelcome } from "@shared/intakeBuilding";
 import { RECEIPT_VENDOR_IDS } from "@shared/receipt/types";
@@ -244,6 +246,35 @@ export function registerWelcomeRoutes(app: Router): void {
   });
 
   // ─── OTP Endpoints (v2 onboarding) ───
+
+  app.post("/api/otp/consent", async (req: Request, res: Response) => {
+    try {
+      const { phone, buildingSlug, unit, disclosureVersion } = req.body || {};
+      if (!phone || !unit || disclosureVersion !== "sms_transactional_v1") {
+        return res.status(400).json({ error: "Phone, unit, and the current disclosure are required." });
+      }
+      const { createSmsConsent } = await import("./db");
+      const { normalizePhone, sendOTP } = await import("./otp");
+      const phoneE164 = normalizePhone(phone);
+      if (!/^\+1[2-9]\d{9}$/.test(phoneE164)) {
+        return res.status(400).json({ error: "Enter a valid U.S. mobile number." });
+      }
+      const user = await upsertBldgUser({ phoneE164, buildingSlug: buildingSlug || "unknown", unit });
+      await createSmsConsent({
+        bldgUserId: user.id, phoneE164, status: "granted", consentedAt: new Date(),
+        source: "held_resident_onboarding", method: "in_app_affirmative_action",
+        disclosureVersion: "sms_transactional_v1", disclosureText: SMS_DISCLOSURE,
+        termsUrl: "https://www.bldg.chat/termsofuse", privacyUrl: "https://www.bldg.chat/privacypolicy",
+        requestIp: req.ip || null, userAgent: req.get("user-agent") || null,
+      });
+      const result = await sendOTP(phoneE164, buildingSlug || "unknown", unit);
+      if (!result.ok) return res.status(429).json({ error: result.error });
+      return res.json({ ok: true, maskedPhone: result.maskedPhone });
+    } catch (err) {
+      console.error("[OTP Consent] Error:", err);
+      return res.status(500).json({ error: "Consent could not be recorded. No code was sent." });
+    }
+  });
 
   app.post("/api/otp/send", async (req: Request, res: Response) => {
     try {

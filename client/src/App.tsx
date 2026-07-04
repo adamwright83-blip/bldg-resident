@@ -17,6 +17,7 @@ import Receipt from "./pages/Receipt";
 import ManusLanding from "./pages/ManusLanding";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
+import SmsConsent from "./pages/SmsConsent";
 import PenPullPrototype from "./components/held/PenPullPrototype";
 import {
   extractNumericHostToken,
@@ -39,6 +40,7 @@ function PageSwitch() {
   if (location === "/privacy") {
     return <Privacy />;
   }
+  if (location === "/sms-consent") return <SmsConsent />;
 
   if (
     location === "/" ||
@@ -80,6 +82,7 @@ function App() {
   /** Public product tour — sales/demo; no session or OTP required */
   const isPublicTour =
     location === "/tour" || location.startsWith("/tour/");
+  const isPublicConsent = location === "/sms-consent";
   const isHeldPrototype = location === "/held-pen-prototype";
   const isHeldExperience =
     location === "/" ||
@@ -116,7 +119,7 @@ function App() {
           />
           {shouldShowNeutralFallback ? (
             <NeutralBuildingFallback />
-          ) : isPublicTour || isHeldPrototype ? (
+          ) : isPublicTour || isPublicConsent || isHeldPrototype ? (
             <PageSwitch />
           ) : (
             <OnboardingFlow>

@@ -59,6 +59,26 @@ export const bldgUsers = mysqlTable("bldg_users", {
 export type BldgUser = typeof bldgUsers.$inferSelect;
 export type InsertBldgUser = typeof bldgUsers.$inferInsert;
 
+export const smsConsents = mysqlTable("sms_consents", {
+  id: int("id").autoincrement().primaryKey(),
+  bldgUserId: int("bldgUserId"),
+  phoneE164: varchar("phoneE164", { length: 20 }).notNull(),
+  status: mysqlEnum("status", ["granted", "withdrawn"]).notNull(),
+  consentedAt: timestamp("consentedAt").notNull(),
+  source: varchar("source", { length: 64 }).notNull(),
+  method: varchar("method", { length: 64 }).notNull(),
+  disclosureVersion: varchar("disclosureVersion", { length: 64 }).notNull(),
+  disclosureText: text("disclosureText").notNull(),
+  termsUrl: varchar("termsUrl", { length: 512 }).notNull(),
+  privacyUrl: varchar("privacyUrl", { length: 512 }).notNull(),
+  requestIp: varchar("requestIp", { length: 64 }),
+  userAgent: text("userAgent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  withdrawnAt: timestamp("withdrawnAt"),
+});
+
+export type SmsConsent = typeof smsConsents.$inferSelect;
+
 /**
  * Chat messages — stores the conversation between a BLDG resident and the AI concierge.
  * Each message has a role (user or assistant) and content.

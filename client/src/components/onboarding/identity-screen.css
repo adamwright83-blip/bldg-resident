@@ -17,6 +17,11 @@
 .identity-form button:hover { background:#151310; transform:translateY(-1px); }
 .identity-form button:disabled { cursor:wait; opacity:.58; transform:none; }
 .identity-microcopy { margin:-7px 0 0; color:#aaa49b; font-size:12px; text-align:center; }
+.consent-card { padding:24px; box-sizing:border-box; border:1px solid #d8c7aa; border-radius:16px; background:rgba(255,255,255,.9); box-shadow:0 14px 40px rgba(74,56,32,.09); gap:18px; }
+.consent-disclosure { margin:0; color:#4d463d; font-size:14px; line-height:1.65; }
+.consent-links { display:flex; gap:22px; margin:0; font-size:14px; }
+.consent-links a { color:#765b2e; text-decoration:underline; text-underline-offset:3px; }
+.identity-form .consent-decline { height:48px; margin:0; background:transparent; color:#5f584e; border:1px solid #d8d0c4; }
 .identity-orbit { position:fixed; z-index:0; width:230px; height:130%; top:-13%; border:1px solid rgba(195,155,85,.22); border-radius:50%; pointer-events:none; }
 .identity-orbit-left { left:-170px; } .identity-orbit-right { right:-170px; }
 .identity-screen footer { position:fixed; z-index:2; bottom:27px; left:50%; display:flex; flex-direction:column; align-items:center; gap:14px; transform:translateX(-50%); color:#aaa49b; font-size:11px; letter-spacing:.02em; }

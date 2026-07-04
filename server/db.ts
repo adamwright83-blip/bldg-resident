@@ -18,6 +18,7 @@ import {
   onboardingFlags,
   InsertOnboardingFlag,
   OnboardingFlag,
+  smsConsents,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -311,6 +312,22 @@ export async function getBldgUserByPhone(
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createSmsConsent(data: typeof smsConsents.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("[Database] Cannot record SMS consent: database not available");
+  const result = await db.insert(smsConsents).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function hasActiveSmsConsent(phoneE164: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select({ status: smsConsents.status }).from(smsConsents)
+    .where(eq(smsConsents.phoneE164, phoneE164))
+    .orderBy(desc(smsConsents.consentedAt)).limit(1);
+  return result[0]?.status === "granted";
 }
 
 /**

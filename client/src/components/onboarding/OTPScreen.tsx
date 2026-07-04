@@ -117,12 +117,12 @@ export default function OTPScreen({
           marginBottom: 8,
         }}
       >
-        Enter your code.
+        Thanks — HELD may now text this number for account and service updates.
       </h1>
 
       {/* Subhead */}
       <p style={{ fontSize: 14, color: "#8A7D6B", marginBottom: 32 }}>
-        Sent to {maskedPhone}
+        We sent your security code to {maskedPhone}.
       </p>
 
       {/* 6-digit input */}

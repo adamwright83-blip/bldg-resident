@@ -120,6 +120,13 @@
       "when": 1781712000000,
       "tag": "0016_welcome_handoff",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1783124580000,
+      "tag": "0018_sms_consent",
+      "breakpoints": true
     }
   ]
 }

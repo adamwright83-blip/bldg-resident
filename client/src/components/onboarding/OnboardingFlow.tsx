@@ -28,7 +28,7 @@ const BUILDING_NAMES: Record<string, string> = {
   "cpe-south": "2170 Century Park East",
 };
 
-type OnboardingStep = "identity" | "otp" | "done";
+type OnboardingStep = "identity" | "consent" | "otp" | "done";
 
 function isOnboardingComplete(): boolean {
   try {
@@ -68,6 +68,7 @@ function isExemptFromSetup(path: string): boolean {
   if (path.startsWith("/orders/")) return true;
   if (path.startsWith("/receipt/")) return true;
   if (path === "/terms" || path === "/privacy") return true;
+  if (path === "/sms-consent") return true;
   return false;
 }
 
@@ -128,17 +129,21 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
 
   const handleIdentitySubmit = useCallback(
     async (data: { phone: string; unit: string; buildingSlug: string }) => {
-      setIsSubmitting(true);
       setIdentityError("");
+      setPhone(data.phone); setBuildingSlug(data.buildingSlug); setUnit(data.unit);
+      setStep("consent");
+    }, []
+  );
+
+  const handleConsent = useCallback(async () => {
+      setIsSubmitting(true); setIdentityError("");
       try {
-        const res = await fetch(`${API_BASE}/api/otp/send`, {
+        const res = await fetch(`${API_BASE}/api/otp/consent`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            phone: data.phone,
-            buildingSlug: data.buildingSlug,
-            unit: data.unit,
+            phone, buildingSlug, unit, disclosureVersion: "sms_transactional_v1",
           }),
         });
         const json = await res.json();
@@ -147,18 +152,13 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
           return;
         }
         setMaskedPhone(json.maskedPhone);
-        setPhone(data.phone);
-        setBuildingSlug(data.buildingSlug);
-        setUnit(data.unit);
         setStep("otp");
       } catch {
         setIdentityError("Network error. Try again.");
       } finally {
         setIsSubmitting(false);
       }
-    },
-    []
-  );
+    }, [phone, buildingSlug, unit]);
 
   const handleVerify = useCallback(
     async (code: string) => {
@@ -236,6 +236,12 @@ export default function OnboardingFlow({ children }: OnboardingFlowProps) {
         error={otpError}
       />
     );
+  }
+
+  if (step === "consent") {
+    return <IdentityScreen mode="consent" onSubmit={handleIdentitySubmit} onConsent={handleConsent}
+      onDecline={() => { setStep("identity"); setIdentityError(""); }} preselectedBuilding={hostnameBuilding ?? undefined}
+      isSubmitting={isSubmitting} error={identityError} />;
   }
 
   return (
