@@ -105,7 +105,7 @@ export default function OTPScreen({
 
       {/* Subhead */}
       <p className="otp-confirmation">
-        {previewBypass ? `SMS preview mode for ${maskedPhone}. Enter 000000 to continue.` : `We sent your security code to ${maskedPhone}.`}
+        {previewBypass ? `Enter your security code for ${maskedPhone} to continue.` : `We sent your security code to ${maskedPhone}.`}
       </p>
 
       {/* 6-digit input */}

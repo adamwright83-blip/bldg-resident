@@ -32,4 +32,11 @@ describe("consent disclosure surfaces", () => {
     for (const text of ["HELD by BLDG.chat","Message frequency varies","Message and data rates may apply","Reply STOP","HELP for help","https://www.bldg.chat/termsofuse","https://www.bldg.chat/privacypolicy"]) expect(ui).toContain(text);
   });
   it("keeps the proof route public", async () => { const fs=await import("node:fs"); const app=fs.readFileSync("client/src/App.tsx","utf8"); expect(app).toContain('location === "/sms-consent"'); expect(app).toContain("isPublicConsent"); });
+  it("does not expose preview-mode language in the OTP screenshot state", async () => {
+    const fs = await import("node:fs");
+    const otp = fs.readFileSync("client/src/components/onboarding/OTPScreen.tsx", "utf8");
+    expect(otp).not.toContain("SMS preview mode");
+    expect(otp).not.toContain("Enter 000000");
+    expect(otp).toContain("Enter your security code for");
+  });
 });

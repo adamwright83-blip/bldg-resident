@@ -40,7 +40,7 @@
   .identity-form button { height:60px; margin-top:4px; border-radius:10px; font-size:17px; }
   .identity-microcopy { margin:-6px 0 0; font-size:12px; }
   .identity-error { margin:-10px 0; font-size:14px; }
-  .identity-screen footer { position:absolute; bottom:24px; font-size:12px; }
+  .identity-screen footer { display:none; }
   .identity-orbit { opacity:.8; }
   .identity-screen--consent .identity-content { width:min(100% - 24px,520px); padding:20px 0 32px; }
   .identity-screen--consent .identity-logo { width:48px; height:48px; margin-bottom:14px; }
