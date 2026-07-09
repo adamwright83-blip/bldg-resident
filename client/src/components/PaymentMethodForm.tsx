@@ -11,6 +11,10 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Lock } from "lucide-react";
 import { TEST_PAYMENT_METHOD_ID, isResidentAppTestMode } from "@/lib/residentTestMode";
+import {
+  POST_OTP_PROFILE_ONBOARDING_KEY,
+  PROFILE_PAYMENT_SETUP_SKIPPED_KEY,
+} from "@/components/held/heldProfileOnboarding";
 
 export interface PaymentMethodSavedInfo {
   hasPendingOrder?: boolean;
@@ -44,10 +48,23 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
   const [postalCode, setPostalCode] = useState("");
   const [initError, setInitError] = useState<string | null>(null);
   const [cardFocused, setCardFocused] = useState(false);
+  const [showFinishLater] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.sessionStorage.getItem(POST_OTP_PROFILE_ONBOARDING_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const submitButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const savePaymentMethod = trpc.stripe.savePaymentMethod.useMutation({
     onSuccess: (data) => {
+      try {
+        window.localStorage.removeItem(PROFILE_PAYMENT_SETUP_SKIPPED_KEY);
+      } catch {
+        // Storage can be unavailable in private contexts; saved card still wins.
+      }
       setLoading(false);
       setSaved(true);
       if (data.last4) {
@@ -66,6 +83,31 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
       setLoading(false);
     },
   });
+
+  useEffect(() => {
+    if (!dark || typeof document === "undefined") return;
+
+    const styleId = "bldg-payment-entry-layer-fix";
+    if (document.getElementById(styleId)) return;
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      .held-app-frame:has(.bldg-pay-card) section:has(.bldg-pay-card) {
+        z-index: 170 !important;
+      }
+      .held-app-frame:has(.bldg-pay-card) [aria-label="Open labyrinth drawer"],
+      .held-app-frame:has(.bldg-pay-card) [aria-label="Close labyrinth drawer"],
+      .held-app-frame:has(.bldg-pay-card) [aria-label="Close labyrinth"] {
+        pointer-events: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      style.remove();
+    };
+  }, [dark]);
 
   useEffect(() => {
     if (stripe && elements) {
@@ -97,6 +139,16 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
       window.visualViewport?.removeEventListener("resize", revealSubmit);
     };
   }, [cardFocused]);
+
+  const finishProfilePaymentLater = () => {
+    try {
+      window.localStorage.setItem(PROFILE_PAYMENT_SETUP_SKIPPED_KEY, "true");
+      window.sessionStorage.removeItem(POST_OTP_PROFILE_ONBOARDING_KEY);
+    } catch {
+      // If storage is unavailable, still let the resident leave the stuck card screen.
+    }
+    window.location.assign("/");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -291,6 +343,16 @@ export function PaymentMethodForm({ onSuccess, dark = false, defaultCardholderNa
             >
               {loading ? "Saving..." : "Save card and continue"}
             </button>
+            {showFinishLater && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={finishProfilePaymentLater}
+                className={dark ? "mt-3 min-h-10 w-full font-serif text-[13px] italic text-[#7a6d5f] underline decoration-[#b78a38]/30 underline-offset-4 disabled:opacity-50" : "mt-3 min-h-10 w-full text-sm text-gray-500 underline disabled:opacity-50"}
+              >
+                Finish setup later
+              </button>
+            )}
             {dark && (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
