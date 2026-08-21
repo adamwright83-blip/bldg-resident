@@ -245,6 +245,49 @@ export function registerWelcomeRoutes(app: Router): void {
     }
   });
 
+  /**
+   * Minimal white-label account surface for laundrybutler.bldg.chat.
+   * This deliberately reuses the existing resident identity/session and does
+   * not create a second customer system or touch admin/driver operations.
+   */
+  app.get("/api/laundry-butler/account", async (req: Request, res: Response) => {
+    try {
+      const userId = await verifyBldgSession(getBldgSessionCookie(req));
+      if (!userId) return res.status(401).json({ authenticated: false });
+
+      const [user, requests] = await Promise.all([
+        getBldgUserById(userId),
+        getServiceRequests(userId, 20),
+      ]);
+      if (!user) return res.status(401).json({ authenticated: false });
+
+      return res.json({
+        authenticated: true,
+        user: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneE164: user.phoneE164,
+          unit: user.unit,
+        },
+        orders: requests
+          .filter(request => request.source === "laundry-butler-welcome" || request.orderId)
+          .map(request => ({
+            id: request.id,
+            orderId: request.orderId,
+            serviceType: request.serviceType,
+            status: request.status,
+            scheduledDate: request.scheduledDate,
+            scheduledWindow: request.scheduledWindow,
+            createdAt: request.createdAt,
+          })),
+      });
+    } catch (error) {
+      console.error("[LaundryButlerAccount] Error:", error);
+      return res.status(500).json({ authenticated: false });
+    }
+  });
+
   // ─── OTP Endpoints (v2 onboarding) ───
 
   app.post("/api/otp/consent", async (req: Request, res: Response) => {
@@ -535,9 +578,11 @@ export function registerWelcomeRoutes(app: Router): void {
       // on their building's app (e.g. 3545.bldg.chat) — not the API host root.
       // The bldg_session cookie is scoped to .bldg.chat, so it carries across.
       const targetHost =
-        merged.buildingSlug && BUILDING_HOST_MAP[merged.buildingSlug]
-          ? `https://${merged.buildingSlug}.bldg.chat/chat`
-          : "https://app.bldg.chat/chat";
+        req.query.surface === "laundry-butler"
+          ? `https://laundrybutler.bldg.chat/account?confirmed=${encodeURIComponent(String(orderId))}`
+          : merged.buildingSlug && BUILDING_HOST_MAP[merged.buildingSlug]
+            ? `https://${merged.buildingSlug}.bldg.chat/chat`
+            : "https://app.bldg.chat/chat";
       return res.redirect(targetHost);
     } catch (err) {
       console.error("[Welcome] Unexpected error:", err);
