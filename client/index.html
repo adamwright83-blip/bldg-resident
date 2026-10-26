@@ -7,6 +7,19 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>BLDG.chat</title>
+    <!-- app.bldg.chat uses the approved Gumball artwork, without changing building-specific subdomains. -->
+    <script>
+      if (window.location.hostname === "app.bldg.chat") {
+        const iconHref = "/gumball-icon.png?v=1";
+        for (const [rel, type] of [["icon", "image/png"], ["apple-touch-icon", ""]]) {
+          const link = document.createElement("link");
+          link.rel = rel;
+          if (type) link.type = type;
+          link.href = iconHref;
+          document.head.appendChild(link);
+        }
+      }
+    </script>
     <!-- First-paint insurance: the screen must NEVER hit unstyled white — not
          at boot, not between bundle loads. Branded warm cream paints before
          any stylesheet or JS arrives. -->
